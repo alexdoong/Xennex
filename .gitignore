@@ -55,3 +55,8 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Custom rules for Xennex (Direct root compilation)
+*.exe
+config.txt
+team_config.txt

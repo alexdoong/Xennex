@@ -1,0 +1,5 @@
+*.txt text eol=crlf
+*.bat text eol=crlf
+*.cs text eol=crlf
+
+*.exe binary
