@@ -38,6 +38,12 @@ namespace WacomRealController
                     {
                         if (item == "CloseToTray=false") Config.CloseToTray = false;
                         if (item == "AutoStart=true")    Config.AutoStart = true;
+                        if (item.StartsWith("SidebarMonitor="))
+                        {
+                            int val;
+                            if (int.TryParse(item.Substring("SidebarMonitor=".Length), out val))
+                                Config.SidebarMonitorIndex = val;
+                        }
                     }
                 }
                 if (string.IsNullOrEmpty(Config.RealExePath))
@@ -55,9 +61,10 @@ namespace WacomRealController
         {
             try
             {
-                string line2 = string.Format("CloseToTray={0},AutoStart={1}",
+                string line2 = string.Format("CloseToTray={0},AutoStart={1},SidebarMonitor={2}",
                     Config.CloseToTray ? "true" : "false",
-                    Config.AutoStart ? "true" : "false");
+                    Config.AutoStart ? "true" : "false",
+                    Config.SidebarMonitorIndex);
                 File.WriteAllLines(configPath, new[] { Config.RealExePath, line2 });
             }
             catch { }
