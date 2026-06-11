@@ -16,6 +16,8 @@ namespace WacomRealController
         private TextBox txtSettingsPath;
         private Button  btnSettingsBrowse, btnSettingsAutoDetect;
         private CheckBox chkCloseToTray, chkStartRealOnBoot;
+        private Label    lblMonitor;
+        private ComboBox cmbMonitor;
 
         public bool CloseToTray => chkCloseToTray.Checked;
         public bool StartRealOnBoot => chkStartRealOnBoot.Checked;
@@ -63,8 +65,34 @@ namespace WacomRealController
             chkStartRealOnBoot = Chk("Auto-launch REAL engine on dashboard open", false);
             chkStartRealOnBoot.Location = new Point(20, 75);
             chkStartRealOnBoot.CheckedChanged += (s, e) => SaveConfig();
+
+            lblMonitor = new Label
+            {
+                Text = "Sidebar Monitor:",
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = Color.FromArgb(209, 213, 219),
+                Location = new Point(20, 110),
+                AutoSize = true
+            };
+
+            cmbMonitor = new ComboBox
+            {
+                Location = new Point(140, 107),
+                Size = new Size(250, 25),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = Color.FromArgb(22, 28, 42),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9F)
+            };
+            PopulateMonitors();
+            cmbMonitor.SelectedIndexChanged += (s, e) => {
+                configService.Config.SidebarMonitorIndex = cmbMonitor.SelectedIndex;
+                configService.SaveConfig();
+            };
+
             pnlSettingsBehaviorCard.Controls.AddRange(new Control[] {
-                lblSettingsBehaviorTitle, chkCloseToTray, chkStartRealOnBoot });
+                lblSettingsBehaviorTitle, chkCloseToTray, chkStartRealOnBoot, lblMonitor, cmbMonitor });
 
             pnlSettingsInfoCard = Card();
             lblSettingsInfoTitle = TitleLabel("Diagnostics", Color.FromArgb(244, 244, 245));
@@ -84,6 +112,32 @@ namespace WacomRealController
             txtSettingsPath.Text = configService.Config.RealExePath;
             chkCloseToTray.Checked = configService.Config.CloseToTray;
             chkStartRealOnBoot.Checked = configService.Config.AutoStart;
+            PopulateMonitors();
+        }
+
+        private void PopulateMonitors()
+        {
+            if (cmbMonitor == null) return;
+            cmbMonitor.Items.Clear();
+            var screens = Screen.AllScreens;
+            for (int i = 0; i < screens.Length; i++)
+            {
+                var scr = screens[i];
+                string name = string.Format("Monitor {0} ({1}x{2}){3}", 
+                    i + 1, 
+                    scr.Bounds.Width, 
+                    scr.Bounds.Height, 
+                    scr.Primary ? " [Primary]" : "");
+                cmbMonitor.Items.Add(name);
+            }
+            if (configService.Config.SidebarMonitorIndex >= 0 && configService.Config.SidebarMonitorIndex < screens.Length)
+            {
+                cmbMonitor.SelectedIndex = configService.Config.SidebarMonitorIndex;
+            }
+            else
+            {
+                cmbMonitor.SelectedIndex = 0;
+            }
         }
 
         private void SaveConfig()
@@ -111,9 +165,9 @@ namespace WacomRealController
             pnlSettingsPathCard.Location = new Point(20, 20);
             pnlSettingsPathCard.Size     = new Size(w - 40, 100);
             pnlSettingsBehaviorCard.Location = new Point(20, 140);
-            pnlSettingsBehaviorCard.Size     = new Size(w - 40, 120);
-            pnlSettingsInfoCard.Location = new Point(20, 280);
-            pnlSettingsInfoCard.Size     = new Size(w - 40, h - 295);
+            pnlSettingsBehaviorCard.Size     = new Size(w - 40, 150);
+            pnlSettingsInfoCard.Location = new Point(20, 310);
+            pnlSettingsInfoCard.Size     = new Size(w - 40, h - 325);
 
             int pw = pnlSettingsPathCard.Width;
             txtSettingsPath.Width      = pw - 230;
