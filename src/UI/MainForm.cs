@@ -23,6 +23,7 @@ namespace WacomRealController
         private OsuTab      osuTab;
         private WuWaTab     wuWaTab;
         private SettingsTab settingsTab;
+        private PullTab     pullTab;
 
         // ── Tray ──────────────────────────────────────────────────────────────
         private NotifyIcon   notifyIcon;
@@ -35,6 +36,7 @@ namespace WacomRealController
         private bool isSlidOut       = false;
         private bool isFirstMinimize = true;
         private int  currentTab      = 0;
+        private bool ignoreHoverUntilMouseLeave = false;
 
         private bool  formDragging   = false;
         private Point dragStartPoint = Point.Empty;
@@ -93,6 +95,10 @@ namespace WacomRealController
             wuWaTab = new WuWaTab(configService);
             settingsTab = new SettingsTab(configService, osuTab.AppendLog);
 
+            pullTab = new PullTab();
+            pullTab.Visible = false;
+            pullTab.Click += (s, e) => ToggleRevealState();
+
             pnlContent = new Panel
             {
                 Location = new Point(60, 65),
@@ -107,7 +113,7 @@ namespace WacomRealController
 
             pnlContent.Controls.AddRange(new Control[] { osuTab, wuWaTab, settingsTab });
 
-            this.Controls.AddRange(new Control[] { pnlHeader, pnlNavigation, pnlContent });
+            this.Controls.AddRange(new Control[] { pnlHeader, pnlNavigation, pnlContent, pullTab });
             BuildTray();
         }
 
@@ -260,20 +266,29 @@ namespace WacomRealController
         {
             if (pnlHeader == null) return;
             int w = ClientSize.Width, h = ClientSize.Height;
+            int tabW = isSidebarMode ? 26 : 0;
 
-            pnlHeader.Width = w;
+            if (pullTab != null)
+            {
+                pullTab.Visible = isSidebarMode;
+                pullTab.Location = new Point(0, (h - pullTab.Height) / 2);
+            }
 
-            btnClose.Location    = new Point(w - 45, 0);
-            btnMinimize.Location = new Point(w - 90, 0);
+            pnlHeader.Location = new Point(tabW, 0);
+            pnlHeader.Width = w - tabW;
+
+            int hw = pnlHeader.Width;
+            btnClose.Location    = new Point(hw - 45, 0);
+            btnMinimize.Location = new Point(hw - 90, 0);
 
             if (isSidebarMode)
             {
                 lblTitle.Text         = "HUB";
                 lblSubtitle.Visible   = false;
                 btnSidebarToggle.Text = "← Back";
-                btnSidebarToggle.Location = new Point(w - 170, 17);
+                btnSidebarToggle.Location = new Point(hw - 170, 17);
                 btnSidebarToggle.Size     = new Size(70, 30);
-                btnPin.Location = new Point(w - 95, 17);
+                btnPin.Location = new Point(hw - 95, 17);
                 btnPin.Visible  = true;
             }
             else
@@ -286,10 +301,10 @@ namespace WacomRealController
                 btnPin.Visible = false;
             }
 
-            pnlNavigation.Location = new Point(0, 65);
+            pnlNavigation.Location = new Point(tabW, 65);
             pnlNavigation.Height   = h - 65;
-            pnlContent.Location    = new Point(60, 65);
-            pnlContent.Size        = new Size(w - 60, h - 65);
+            pnlContent.Location    = new Point(tabW + 60, 65);
+            pnlContent.Size        = new Size(w - tabW - 60, h - 65);
         }
 
         private void SetActiveTab(int idx)
@@ -320,20 +335,23 @@ namespace WacomRealController
             {
                 previousBounds = this.Bounds;
                 var scr = Screen.FromControl(this);
-                int sw  = Math.Max(340, this.Width < 420 ? this.Width : 340);
+                // sw = content width 340 + tab width 26
+                int sw  = 366;
+                this.ShowInTaskbar = false;
                 this.Width  = sw;
                 this.Height = scr.WorkingArea.Height;
-                this.Left   = scr.WorkingArea.Right - sw;
+                this.Left   = scr.WorkingArea.Right - 26; // start collapsed showing only the tab
                 this.Top    = scr.WorkingArea.Top;
                 isPinned    = false;
-                btnPin.Text = "📌";
-                isSlidOut   = false;
+                isSlidOut   = true;
+                ignoreHoverUntilMouseLeave = false;
+                if (pullTab != null) pullTab.IsCollapsed = true;
             }
             else
             {
                 isSlidOut = false;
+                this.ShowInTaskbar = true;
                 this.Bounds = previousBounds;
-                btnPin.Visible = false;
             }
             LayoutControls();
         }
@@ -353,33 +371,86 @@ namespace WacomRealController
             }
         }
 
+        private void ToggleRevealState()
+        {
+            if (!isSidebarMode) return;
+            isSlidOut = !isSlidOut;
+            if (isSlidOut)
+            {
+                ignoreHoverUntilMouseLeave = true;
+            }
+            else
+            {
+                ignoreHoverUntilMouseLeave = false;
+            }
+        }
+
         private void SlideTimer_Tick(object sender, EventArgs e)
         {
             if (!isSidebarMode) return;
 
+            // Fullscreen application active detection to avoid gaming interference
+            if (Win32.IsForegroundWindowFullScreen())
+            {
+                if (this.Visible)
+                {
+                    this.Visible = false;
+                    this.TopMost = false;
+                }
+                return;
+            }
+            else
+            {
+                if (!this.Visible)
+                {
+                    this.Visible = true;
+                    this.TopMost = true;
+                }
+            }
+
             var   scr       = Screen.FromControl(this);
             int   destShow  = scr.WorkingArea.Right - this.Width;
-            int   destHide  = scr.WorkingArea.Right - 10;
+            int   destHide  = scr.WorkingArea.Right - 26;
             Point mouse     = Cursor.Position;
 
-            bool mouseOver;
-            if (isSlidOut)
-                mouseOver = mouse.X >= scr.WorkingArea.Right - 12;
-            else
-                mouseOver = this.Bounds.Contains(mouse);
+            bool containsMouse = this.Bounds.Contains(mouse);
+            if (!containsMouse)
+            {
+                ignoreHoverUntilMouseLeave = false;
+            }
 
-            int dest = (isPinned || mouseOver) ? destShow : destHide;
+            bool mouseOver = false;
+            if (!ignoreHoverUntilMouseLeave)
+            {
+                if (isSlidOut)
+                {
+                    mouseOver = mouse.X >= scr.WorkingArea.Right - 28;
+                }
+                else
+                {
+                    mouseOver = containsMouse;
+                }
+            }
+
+            int dest = (isPinned || mouseOver || !isSlidOut) ? destShow : destHide;
 
             if (this.Left < dest)
             {
                 this.Left = Math.Min(dest, this.Left + SLIDE_SPEED);
-                if (this.Left == destHide) isSlidOut = true;
+                if (this.Left == destHide)
+                {
+                    isSlidOut = true;
+                    if (pullTab != null) pullTab.IsCollapsed = true;
+                }
             }
             else if (this.Left > dest)
             {
                 this.Left = Math.Max(dest, this.Left - SLIDE_SPEED);
-                if (this.Left == destHide) isSlidOut = true;
-                if (this.Left == destShow) isSlidOut = false;
+                if (this.Left == destShow)
+                {
+                    isSlidOut = false;
+                    if (pullTab != null) pullTab.IsCollapsed = false;
+                }
             }
         }
 
