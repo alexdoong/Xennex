@@ -5,58 +5,12 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
 namespace WacomRealController
 {
-    // ─── Data Models ────────────────────────────────────────────────────────────
-
-    public class WuWaSubstat
-    {
-        public string Name  = "";
-        public string Value = "";
-        public int Quality  = 0; // 0=unrated 1=great 2=good 3=ok 4=bad
-    }
-
-    public class WuWaEcho
-    {
-        public string Name          = "";
-        public string ImagePath     = "";
-        public string MainStatName  = "ATK%";
-        public string MainStatValue = "0%";
-        public WuWaSubstat[] Substats = new WuWaSubstat[5];
-        public WuWaEcho() { for (int i = 0; i < 5; i++) Substats[i] = new WuWaSubstat(); }
-    }
-
-    public class WuWaBuild
-    {
-        public string ResonatorName  = "Resonator Name";
-        public string Level          = "90/90";
-        public string Element        = "Spectro";
-        public int    Sequence       = 0;
-        public string CharImagePath  = "";
-        public int    ImagePanX      = 0;
-        public int    ImagePanY      = 0;
-        public float  ImageScale     = 1.0f;
-        public string WeaponName     = "Weapon Name";
-        public int    WeaponRarity   = 5;
-        public int    WeaponRefinement = 1;
-        public string WeaponLevel    = "90/90";
-        public string WeaponImagePath = "";
-        public string StatHP         = "0";
-        public string StatATK        = "0";
-        public string StatDEF        = "0";
-        public string StatCritRate   = "0.0%";
-        public string StatCritDMG    = "0.0%";
-        public string StatEnergyRegen = "100%";
-        public string StatSklDMG     = "0%";
-        public WuWaEcho[] Echoes     = new WuWaEcho[5];
-        public WuWaBuild() { for (int i = 0; i < 5; i++) Echoes[i] = new WuWaEcho(); }
-    }
-
     // ─── Program Entry ────────────────────────────────────────────────────────
 
     static class Program
@@ -74,26 +28,10 @@ namespace WacomRealController
 
     public class MainForm : Form
     {
-        // ── Win32 Imports ──────────────────────────────────────────────────────
-        [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr h);
-        [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int n);
-        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
-        [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc fn, IntPtr lp);
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int GetClassName(IntPtr hWnd, StringBuilder sb, int n);
-        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lp);
-        private const int SW_HIDE = 0, SW_SHOW = 5;
-
-        // ── Element Colours ────────────────────────────────────────────────────
-        private static readonly Dictionary<string, Color> ElementColors = new Dictionary<string, Color>
-        {
-            { "Glacio",  Color.FromArgb( 56, 189, 248) },
-            { "Fusion",  Color.FromArgb(251, 146,  60) },
-            { "Electro", Color.FromArgb(192, 132, 252) },
-            { "Aero",    Color.FromArgb( 52, 211, 153) },
-            { "Spectro", Color.FromArgb(250, 204,  21) },
-            { "Havoc",   Color.FromArgb(244,  63,  94) },
-        };
+        // ── Services ───────────────────────────────────────────────────────────
+        private readonly ConfigService configService = new ConfigService();
+        private readonly WacomService wacomService = new WacomService();
+        private readonly RealEngineService realEngineService = new RealEngineService();
 
         // ── Core UI ────────────────────────────────────────────────────────────
         private Panel  pnlHeader, pnlNavigation, pnlContent;
@@ -149,12 +87,11 @@ namespace WacomRealController
         private Button[][]   btnEchoQuality = new Button[5][];  // [slot][stat]
         private Button[]     btnEchoUpload = new Button[5];
 
-        // WuWa build state
-        private WuWaBuild wuBuild = new WuWaBuild();
+        // WuWa build state reference
+        private WuWaBuild wuBuild => configService.Build;
         private Image     charImage   = null;
         private Image[]   echoImages  = new Image[5];
         private Image     weaponImage = null;
-        private const string BuildSavePath = "wuwa_build.txt";
 
         // ── Settings Tab ───────────────────────────────────────────────────────
         private Panel   pnlTabSettingsContent;
@@ -171,12 +108,6 @@ namespace WacomRealController
         private Icon         appIcon;
 
         // ── App State ────────────────────────────────────────────────────────
-        private string  configPath   = "config.txt";
-        private string  realExePath  = "";
-        private Process realProcess  = null;
-        private System.Windows.Forms.Timer statusTimer;
-        private System.Windows.Forms.Timer slideTimer;
-
         private bool isRealRunning   = false;
         private bool isWacomActive   = false;
         private bool isSidebarMode   = false;
@@ -185,13 +116,13 @@ namespace WacomRealController
         private bool isFirstMinimize = true;
         private int  currentTab      = 0;
 
-        private IntPtr consoleWindowHandle = IntPtr.Zero;
-        private bool   isConsoleVisible    = false;
-
         private bool  formDragging   = false;
         private Point dragStartPoint = Point.Empty;
         private Rectangle previousBounds = new Rectangle(100, 100, 820, 560);
         private const int SLIDE_SPEED = 22;
+
+        private System.Windows.Forms.Timer statusTimer;
+        private System.Windows.Forms.Timer slideTimer;
 
         // ═════════════════════════════════════════════════════════════════════
         //  CONSTRUCTOR
@@ -199,6 +130,19 @@ namespace WacomRealController
 
         public MainForm()
         {
+            configService.OnLogReceived += AppendLog;
+            wacomService.OnLogReceived += AppendLog;
+            realEngineService.OnLogReceived += AppendLog;
+
+            realEngineService.OnStatusChanged += CheckStatus;
+            wacomService.OnStatusChanged += CheckStatus;
+
+            realEngineService.OnConsoleAvailable += (avail) =>
+            {
+                btnToggleConsole.Enabled = avail;
+                btnToggleConsole.Text = (avail && realEngineService.IsConsoleVisible) ? "Hide Console" : "Show Console";
+            };
+
             this.SuspendLayout();
             BuildUI();
             this.ResumeLayout(false);
@@ -218,7 +162,7 @@ namespace WacomRealController
             slideTimer.Tick += SlideTimer_Tick;
             slideTimer.Start();
 
-            if (chkStartRealOnBoot.Checked && File.Exists(realExePath))
+            if (chkStartRealOnBoot.Checked && File.Exists(configService.Config.RealExePath))
                 StartLatencyReduction();
         }
 
@@ -770,82 +714,17 @@ namespace WacomRealController
             notifyIcon.DoubleClick += (s, e) => RestoreFromTray();
         }
 
-        // ═════════════════════════════════════════════════════════════════════
-        //  FACTORY HELPERS
-        // ═════════════════════════════════════════════════════════════════════
-
-        private Button Btn(string text, Point loc, Size sz, Color back, Color fore)
-        {
-            var b = new Button
-            {
-                Text      = text, Location = loc, Size = sz,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = back, ForeColor = fore,
-                Font      = new Font("Segoe UI", 9F, FontStyle.Bold),
-                Cursor    = Cursors.Hand
-            };
-            b.FlatAppearance.BorderSize = 0;
-            b.FlatAppearance.MouseOverBackColor = LightenColor(back, 18);
-            return b;
-        }
-
-        private Button SmallBtn(string text)
-        {
-            var b = Btn(text, Point.Empty, new Size(18, 18),
-                Color.FromArgb(35, 35, 50), Color.FromArgb(200, 200, 220));
-            b.Font = new Font("Segoe UI", 7.5F, FontStyle.Bold);
-            return b;
-        }
-
-        private Panel Card()
-        {
-            var p = new Panel { BackColor = Color.FromArgb(22, 22, 26) };
-            p.Paint += (s, e) =>
-            {
-                using (var pen = new Pen(Color.FromArgb(39, 39, 42), 1))
-                    e.Graphics.DrawRectangle(pen, 0, 0, p.Width - 1, p.Height - 1);
-            };
-            return p;
-        }
-
-        private Label TitleLabel(string text, Color color)
-            => new Label { Text = text, Font = new Font("Segoe UI", 10.5F, FontStyle.Bold),
-                           ForeColor = color, Location = new Point(20, 15), AutoSize = true };
-
-        private Label InfoLabel(string text, Point loc)
-            => new Label { Text = text, Font = new Font("Segoe UI", 8.5F),
-                           ForeColor = Color.FromArgb(161, 161, 170), Location = loc, AutoSize = true };
-
-        private Panel StatusDotPanel(Func<bool> activeGetter)
-        {
-            var p = new Panel { Location = new Point(20, 50), Size = new Size(16, 16), BackColor = Color.Transparent };
-            p.Paint += (s, e) =>
-            {
-                bool active = activeGetter();
-                Color c = active ? Color.FromArgb(16, 185, 129) : Color.FromArgb(239, 68, 68);
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (var b = new SolidBrush(Color.FromArgb(40, c)))  e.Graphics.FillEllipse(b, 0, 0, 15, 15);
-                using (var b = new SolidBrush(c))                       e.Graphics.FillEllipse(b, 3, 3, 9, 9);
-            };
-            return p;
-        }
-
-        private TextBox EditBox(string text, Point loc, Size sz)
-            => new TextBox
-            {
-                Text = text, Location = loc, Size = sz,
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
-                ForeColor = Color.White, BackColor = Color.FromArgb(22, 28, 42),
-                BorderStyle = BorderStyle.None
-            };
-
-        private CheckBox Chk(string text, bool chkd)
-            => new CheckBox
-            {
-                Text = text, Checked = chkd, AutoSize = true,
-                Font = new Font("Segoe UI", 9F), FlatStyle = FlatStyle.Flat,
-                ForeColor = Color.FromArgb(209, 213, 219)
-            };
+        // ─── UI Factory Wrappers ───────────────────────────────────────────────
+        private Button Btn(string text, Point loc, Size sz, Color back, Color fore) => UIHelpers.Btn(text, loc, sz, back, fore);
+        private Button SmallBtn(string text) => UIHelpers.SmallBtn(text);
+        private Panel Card() => UIHelpers.Card();
+        private Label TitleLabel(string text, Color color) => UIHelpers.TitleLabel(text, color);
+        private Label InfoLabel(string text, Point loc) => UIHelpers.InfoLabel(text, loc);
+        private Panel StatusDotPanel(Func<bool> activeGetter) => UIHelpers.StatusDotPanel(activeGetter);
+        private TextBox EditBox(string text, Point loc, Size sz) => UIHelpers.EditBox(text, loc, sz);
+        private CheckBox Chk(string text, bool chkd) => UIHelpers.Chk(text, chkd);
+        private Color LightenColor(Color c, int amt) => UIHelpers.LightenColor(c, amt);
+        private Color GetElementColor(string element) => UIHelpers.GetElementColor(element);
 
         // ═════════════════════════════════════════════════════════════════════
         //  STYLES & PAINTING
@@ -896,7 +775,7 @@ namespace WacomRealController
                 {
                     var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                     g.DrawString("Drag to reposition  ·  +/- to zoom", font, b,
-                        new RectangleF(0, 45, pnlCharCard.Width, imgBounds.Height), sf);
+                         new RectangleF(0, 45, pnlCharCard.Width, imgBounds.Height), sf);
                 }
             }
             else if (charImage == null)
@@ -1252,7 +1131,7 @@ namespace WacomRealController
 
         private void CheckStatus()
         {
-            bool newWacom = QueryWacomActive();
+            bool newWacom = wacomService.QueryWacomActive();
             if (newWacom != isWacomActive)
             {
                 isWacomActive = newWacom;
@@ -1261,7 +1140,7 @@ namespace WacomRealController
                 AppendLog("[Wacom] " + (isWacomActive ? "ENABLED" : "DISABLED"));
             }
 
-            bool newReal = (realProcess != null && !realProcess.HasExited);
+            bool newReal = realEngineService.IsRunning;
             if (newReal != isRealRunning)
             {
                 isRealRunning = newReal;
@@ -1271,21 +1150,8 @@ namespace WacomRealController
                 {
                     btnToggleConsole.Text    = "Show Console";
                     btnToggleConsole.Enabled = false;
-                    consoleWindowHandle      = IntPtr.Zero;
-                    isConsoleVisible         = false;
                 }
             }
-        }
-
-        private bool QueryWacomActive()
-        {
-            try
-            {
-                foreach (var name in new[] { "Wacom_Tablet", "Pen_Tablet", "WacomTablet" })
-                    if (Process.GetProcessesByName(name).Length > 0) return true;
-            }
-            catch { }
-            return false;
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -1294,131 +1160,39 @@ namespace WacomRealController
 
         private void RunBatchFile(string filename)
         {
-            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, filename);
-            if (!File.Exists(path))
-            {
-                AppendLog("[ERR] Not found: " + filename);
-                MessageBox.Show("Batch file not found:\n" + path, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-            AppendLog("[Wacom] Running " + filename + " (admin)…");
             try
             {
-                var p = Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true, Verb = "runas" });
-                ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    try { p.WaitForExit(); }
-                    catch { }
-                    finally
-                    {
-                        p.Dispose();
-                        this.BeginInvoke(new Action(() => { AppendLog("[Wacom] Done."); CheckStatus(); }));
-                    }
-                });
+                wacomService.RunBatchFile(filename);
             }
-            catch (Exception ex) { AppendLog("[Wacom ERR] " + ex.Message); }
+            catch (Exception ex)
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, filename);
+                MessageBox.Show("Could not execute batch file:\n" + path + "\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void StartLatencyReduction()
         {
-            if (realProcess != null && !realProcess.HasExited) { AppendLog("[REAL] Already running."); return; }
-            if (!File.Exists(realExePath))
-            {
-                AppendLog("[REAL ERR] Path not set.");
-                MessageBox.Show("Set the path to REAL.exe in Settings.", "REAL.exe Required",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
             try
             {
-                realProcess = new Process();
-                realProcess.StartInfo.FileName               = realExePath;
-                realProcess.StartInfo.UseShellExecute        = false;
-                realProcess.StartInfo.CreateNoWindow         = true;
-                realProcess.StartInfo.RedirectStandardOutput = true;
-                realProcess.StartInfo.RedirectStandardError  = true;
-                realProcess.StartInfo.RedirectStandardInput  = true;
-                realProcess.EnableRaisingEvents              = true;
-                realProcess.OutputDataReceived += (s, ev) => { if (ev.Data != null) AppendLog(ev.Data); };
-                realProcess.ErrorDataReceived  += (s, ev) => { if (ev.Data != null) AppendLog("[ERR] " + ev.Data); };
-                realProcess.Exited += (s, ev) => this.BeginInvoke(new Action(() =>
-                {
-                    AppendLog("[REAL] Process ended."); CheckStatus();
-                    if (realProcess != null) { realProcess.Dispose(); realProcess = null; }
-                }));
-
-                realProcess.Start();
-                realProcess.BeginOutputReadLine();
-                realProcess.BeginErrorReadLine();
-                int pid = realProcess.Id;
-                AppendLog(string.Format("[REAL] Started (PID {0}).", pid));
-
-                // Find and hide the AllocConsole window
-                ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    IntPtr hwnd = IntPtr.Zero;
-                    for (int i = 0; i < 30 && hwnd == IntPtr.Zero; i++)
-                    {
-                        Thread.Sleep(100);
-                        hwnd = FindConsoleWindow(pid);
-                    }
-                    if (hwnd != IntPtr.Zero)
-                    {
-                        consoleWindowHandle = hwnd;
-                        ShowWindow(hwnd, SW_HIDE);
-                        isConsoleVisible = false;
-                        this.BeginInvoke(new Action(() =>
-                        {
-                            btnToggleConsole.Text    = "Show Console";
-                            btnToggleConsole.Enabled = true;
-                            AppendLog("[REAL] Console window hidden automatically.");
-                        }));
-                    }
-                });
+                realEngineService.Start(configService.Config.RealExePath);
             }
             catch (Exception ex)
             {
-                AppendLog("[REAL ERR] " + ex.Message);
-                if (realProcess != null) { realProcess.Dispose(); realProcess = null; }
+                MessageBox.Show("Could not start latency reduction engine. Set correct path in Settings.\n\n" + ex.Message, "REAL.exe Required",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
         private void StopRealProcess()
         {
-            if (realProcess == null || realProcess.HasExited) { AppendLog("[REAL] Not running."); return; }
-            AppendLog("[REAL] Sending stop signal…");
-            try
-            {
-                realProcess.StandardInput.WriteLine();
-                realProcess.StandardInput.Flush();
-                if (!realProcess.WaitForExit(2000)) { realProcess.Kill(); AppendLog("[REAL] Force killed."); }
-            }
-            catch (Exception ex) { AppendLog("[REAL ERR] " + ex.Message); try { realProcess.Kill(); } catch { } }
+            realEngineService.Stop();
         }
 
         private void ToggleConsoleWindow()
         {
-            if (consoleWindowHandle == IntPtr.Zero) return;
-            if (isConsoleVisible) { ShowWindow(consoleWindowHandle, SW_HIDE); isConsoleVisible = false; btnToggleConsole.Text = "Show Console"; }
-            else                  { ShowWindow(consoleWindowHandle, SW_SHOW); isConsoleVisible = true;  btnToggleConsole.Text = "Hide Console"; }
-        }
-
-        private IntPtr FindConsoleWindow(int pid)
-        {
-            IntPtr found = IntPtr.Zero;
-            EnumWindows((hWnd, _) =>
-            {
-                uint wpid;
-                GetWindowThreadProcessId(hWnd, out wpid);
-                if (wpid == (uint)pid)
-                {
-                    var sb = new StringBuilder(256);
-                    GetClassName(hWnd, sb, sb.Capacity);
-                    if (sb.ToString() == "ConsoleWindowClass") { found = hWnd; return false; }
-                }
-                return true;
-            }, IntPtr.Zero);
-            return found;
+            realEngineService.ToggleConsoleWindow();
+            btnToggleConsole.Text = realEngineService.IsConsoleVisible ? "Hide Console" : "Show Console";
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -1596,119 +1370,32 @@ namespace WacomRealController
             }
         }
 
-        private Color GetElementColor(string element)
-        {
-            Color c;
-            return ElementColors.TryGetValue(element, out c) ? c : Color.FromArgb(200, 200, 200);
-        }
-
         // ═════════════════════════════════════════════════════════════════════
         //  WuWa BUILD PERSISTENCE
         // ═════════════════════════════════════════════════════════════════════
 
         private void SaveWuWaBuild()
         {
-            try
-            {
-                var lines = new List<string>();
-                lines.Add("Name=" + wuBuild.ResonatorName);
-                lines.Add("Level=" + wuBuild.Level);
-                lines.Add("Element=" + wuBuild.Element);
-                lines.Add("Seq=" + wuBuild.Sequence);
-                lines.Add("CharImage=" + wuBuild.CharImagePath);
-                lines.Add("ImgPanX=" + wuBuild.ImagePanX);
-                lines.Add("ImgPanY=" + wuBuild.ImagePanY);
-                lines.Add("ImgScale=" + wuBuild.ImageScale.ToString("F2"));
-                lines.Add("WeaponName=" + wuBuild.WeaponName);
-                lines.Add("WeaponRarity=" + wuBuild.WeaponRarity);
-                lines.Add("WeaponRef=" + wuBuild.WeaponRefinement);
-                lines.Add("WeaponLevel=" + wuBuild.WeaponLevel);
-                lines.Add("WeaponImage=" + wuBuild.WeaponImagePath);
-                lines.Add("HP=" + wuBuild.StatHP);
-                lines.Add("ATK=" + wuBuild.StatATK);
-                lines.Add("DEF=" + wuBuild.StatDEF);
-                lines.Add("CritRate=" + wuBuild.StatCritRate);
-                lines.Add("CritDMG=" + wuBuild.StatCritDMG);
-                lines.Add("EnergyRegen=" + wuBuild.StatEnergyRegen);
-                lines.Add("SklDMG=" + wuBuild.StatSklDMG);
-                for (int i = 0; i < 5; i++)
-                {
-                    var echo = wuBuild.Echoes[i];
-                    lines.Add(string.Format("E{0}Image={1}", i, echo.ImagePath));
-                    lines.Add(string.Format("E{0}Main={1}|{2}", i, echo.MainStatName, echo.MainStatValue));
-                    for (int j = 0; j < 5; j++)
-                        lines.Add(string.Format("E{0}S{1}={2}|{3}|{4}", i, j,
-                            echo.Substats[j].Name, echo.Substats[j].Value, echo.Substats[j].Quality));
-                }
-                File.WriteAllLines(BuildSavePath, lines);
-            }
-            catch { }
+            configService.SaveWuWaBuild();
         }
 
         private void LoadWuWaBuild()
         {
-            if (!File.Exists(BuildSavePath)) return;
-            try
+            configService.LoadWuWaBuild((charPath, weaponPath, echoPaths) =>
             {
-                foreach (var line in File.ReadAllLines(BuildSavePath))
+                try
                 {
-                    int eq = line.IndexOf('=');
-                    if (eq < 0) continue;
-                    string key = line.Substring(0, eq).Trim();
-                    string val = line.Substring(eq + 1).Trim();
-
-                    switch (key)
+                    if (charPath != null && File.Exists(charPath)) charImage = Image.FromFile(charPath);
+                    if (weaponPath != null && File.Exists(weaponPath)) weaponImage = Image.FromFile(weaponPath);
+                    foreach (var kvp in echoPaths)
                     {
-                        case "Name":         wuBuild.ResonatorName = val; break;
-                        case "Level":        wuBuild.Level = val; break;
-                        case "Element":      wuBuild.Element = val; break;
-                        case "Seq":          int.TryParse(val, out wuBuild.Sequence); break;
-                        case "CharImage":    if (File.Exists(val)) { wuBuild.CharImagePath = val; charImage = Image.FromFile(val); } break;
-                        case "ImgPanX":      int.TryParse(val, out wuBuild.ImagePanX); break;
-                        case "ImgPanY":      int.TryParse(val, out wuBuild.ImagePanY); break;
-                        case "ImgScale":     float.TryParse(val, out wuBuild.ImageScale); break;
-                        case "WeaponName":   wuBuild.WeaponName = val; break;
-                        case "WeaponRarity": int.TryParse(val, out wuBuild.WeaponRarity); break;
-                        case "WeaponRef":    int.TryParse(val, out wuBuild.WeaponRefinement); break;
-                        case "WeaponLevel":  wuBuild.WeaponLevel = val; break;
-                        case "WeaponImage":  if (File.Exists(val)) { wuBuild.WeaponImagePath = val; weaponImage = Image.FromFile(val); } break;
-                        case "HP":           wuBuild.StatHP = val; break;
-                        case "ATK":          wuBuild.StatATK = val; break;
-                        case "DEF":          wuBuild.StatDEF = val; break;
-                        case "CritRate":     wuBuild.StatCritRate = val; break;
-                        case "CritDMG":      wuBuild.StatCritDMG = val; break;
-                        case "EnergyRegen":  wuBuild.StatEnergyRegen = val; break;
-                        case "SklDMG":       wuBuild.StatSklDMG = val; break;
-                        default:
-                            if (key.Length >= 2 && key[0] == 'E' && char.IsDigit(key[1]))
-                            {
-                                int ei = key[1] - '0';
-                                if (ei >= 0 && ei < 5)
-                                {
-                                    string sub = key.Length > 2 ? key.Substring(2) : "";
-                                    if (sub == "Image" && File.Exists(val)) { wuBuild.Echoes[ei].ImagePath = val; echoImages[ei] = Image.FromFile(val); }
-                                    else if (sub == "Main") { var p = val.Split('|'); wuBuild.Echoes[ei].MainStatName = p.Length > 0 ? p[0] : ""; wuBuild.Echoes[ei].MainStatValue = p.Length > 1 ? p[1] : ""; }
-                                    else if (sub.Length >= 2 && sub[0] == 'S' && char.IsDigit(sub[1]))
-                                    {
-                                        int si = sub[1] - '0';
-                                        if (si >= 0 && si < 5)
-                                        {
-                                            var p = val.Split('|');
-                                            wuBuild.Echoes[ei].Substats[si].Name  = p.Length > 0 ? p[0] : "";
-                                            wuBuild.Echoes[ei].Substats[si].Value = p.Length > 1 ? p[1] : "";
-                                            int q = 0; int.TryParse(p.Length > 2 ? p[2] : "0", out q);
-                                            wuBuild.Echoes[ei].Substats[si].Quality = q;
-                                        }
-                                    }
-                                }
-                            }
-                            break;
+                        if (File.Exists(kvp.Value))
+                            echoImages[kvp.Key] = Image.FromFile(kvp.Value);
                     }
                 }
-                // Apply loaded data to UI
-                ApplyWuWaBuildToUI();
-            }
-            catch { }
+                catch { }
+            });
+            ApplyWuWaBuildToUI();
         }
 
         private void ApplyWuWaBuildToUI()
@@ -1753,76 +1440,17 @@ namespace WacomRealController
 
         private void LoadConfig()
         {
-            try
-            {
-                if (!File.Exists(configPath)) { AppendLog("[Controller] No config found."); AutoDetectReal(); return; }
-                var lines = File.ReadAllLines(configPath);
-                if (lines.Length > 0 && File.Exists(lines[0].Trim()))
-                {
-                    realExePath = lines[0].Trim();
-                    txtSettingsPath.Text = realExePath;
-                    AppendLog("[Controller] REAL path: " + Path.GetFileName(realExePath));
-                }
-                if (lines.Length > 1)
-                {
-                    foreach (var item in lines[1].Split(','))
-                    {
-                        if (item == "CloseToTray=false") chkCloseToTray.Checked = false;
-                        if (item == "AutoStart=true")    chkStartRealOnBoot.Checked = true;
-                    }
-                }
-                if (string.IsNullOrEmpty(realExePath)) AutoDetectReal();
-            }
-            catch (Exception ex) { AppendLog("[Config ERR] " + ex.Message); }
-        }
-
-        private void AutoDetectReal()
-        {
-            string found = ScanForReal();
-            if (!string.IsNullOrEmpty(found))
-            {
-                realExePath = found;
-                txtSettingsPath.Text = realExePath;
-                SaveConfig();
-                AppendLog("[Controller] Auto-located: " + realExePath);
-            }
-            else { AppendLog("[Controller] REAL.exe not found – set in Settings."); }
-        }
-
-        private string ScanForReal()
-        {
-            string dir = AppDomain.CurrentDomain.BaseDirectory;
-            string[] paths = {
-                "REAL.exe", "real.exe", "real-app.exe",
-                @"..\REAL-updater-v2\REAL-updater-v2\real-app\build\Debug\real-app.exe",
-                @"..\REAL-updater-v2\REAL-updater-v2\real-app\build\Release\real-app.exe"
-            };
-            foreach (var rel in paths)
-            {
-                try { string f = Path.GetFullPath(Path.Combine(dir, rel)); if (File.Exists(f)) return f; } catch { }
-            }
-            try
-            {
-                foreach (var f in Directory.GetFiles(dir, "*real*.exe", SearchOption.AllDirectories))
-                {
-                    string n = Path.GetFileName(f).ToLower();
-                    if (!n.Contains("controller")) return f;
-                }
-            }
-            catch { }
-            return null;
+            configService.LoadConfig();
+            txtSettingsPath.Text = configService.Config.RealExePath;
+            chkCloseToTray.Checked = configService.Config.CloseToTray;
+            chkStartRealOnBoot.Checked = configService.Config.AutoStart;
         }
 
         private void SaveConfig()
         {
-            try
-            {
-                string line2 = string.Format("CloseToTray={0},AutoStart={1}",
-                    chkCloseToTray.Checked ? "true" : "false",
-                    chkStartRealOnBoot.Checked ? "true" : "false");
-                File.WriteAllLines(configPath, new[] { realExePath, line2 });
-            }
-            catch { }
+            configService.Config.CloseToTray = chkCloseToTray.Checked;
+            configService.Config.AutoStart = chkStartRealOnBoot.Checked;
+            configService.SaveConfig();
         }
 
         private void SelectRealExePath()
@@ -1830,10 +1458,10 @@ namespace WacomRealController
             using (var ofd = new OpenFileDialog { Filter = "Exe|*.exe", Title = "Find REAL.exe" })
             {
                 if (ofd.ShowDialog() != DialogResult.OK) return;
-                realExePath = ofd.FileName;
-                txtSettingsPath.Text = realExePath;
-                SaveConfig();
-                AppendLog("[Controller] Path set: " + realExePath);
+                configService.Config.RealExePath = ofd.FileName;
+                txtSettingsPath.Text = configService.Config.RealExePath;
+                configService.SaveConfig();
+                AppendLog("[Controller] Path set: " + configService.Config.RealExePath);
             }
         }
 
@@ -1874,7 +1502,7 @@ namespace WacomRealController
             this.Activate();
         }
 
-        private void ShutdownApp() { StopRealProcess(); this.Close(); }
+        private void ShutdownApp() { realEngineService.Stop(); this.Close(); }
 
         // ═════════════════════════════════════════════════════════════════════
         //  WINDOW MANAGEMENT
@@ -1912,16 +1540,6 @@ namespace WacomRealController
         private void Header_MouseUp(object sender, MouseEventArgs e)
         { formDragging=false; }
 
-        // ═════════════════════════════════════════════════════════════════════
-        //  HELPERS
-        // ═════════════════════════════════════════════════════════════════════
-
-        private Color LightenColor(Color c, int amt)
-        {
-            if (c == Color.Transparent) return Color.FromArgb(50, 50, 55);
-            return Color.FromArgb(c.A, Math.Min(255,c.R+amt), Math.Min(255,c.G+amt), Math.Min(255,c.B+amt));
-        }
-
         private Icon CreateAppIcon()
         {
             using (var bmp = new Bitmap(32,32))
@@ -1948,14 +1566,14 @@ namespace WacomRealController
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            StopRealProcess();
+            realEngineService.Stop();
             statusTimer?.Stop(); statusTimer?.Dispose();
             slideTimer?.Stop();  slideTimer?.Dispose();
             notifyIcon.Visible = false; notifyIcon.Dispose();
             if (charImage  != null) charImage.Dispose();
             if (weaponImage != null) weaponImage.Dispose();
             for (int i=0;i<5;i++) if (echoImages[i]!=null) echoImages[i].Dispose();
-            if (appIcon != null) { DestroyIcon(appIcon.Handle); appIcon.Dispose(); }
+            if (appIcon != null) { Win32.DestroyIcon(appIcon.Handle); appIcon.Dispose(); }
             base.OnFormClosed(e);
         }
     }
