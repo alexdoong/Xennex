@@ -38,7 +38,7 @@ A interface gráfica direta (C# WinForms) gerencia duas funções essenciais que
 
 1\. Controle dos Drivers Wacom: Dispara os arquivos .bat para ativar/desativar os serviços de hardware direto pela interface (com elevação de Admin).
 
-2\. Esconder o REAL.exe:\*\* Inicializa o motor de redução de latência de áudio em segundo plano, capturando as linhas de texto que ele gera e transmitindo dentro de uma caixinha de log interna. Isso elimina a necessidade de manter janelas pretas de terminal abertas na tela.
+2\. Esconder o REAL.exe: Inicializa o motor de redução de latência de áudio em segundo plano, capturando as linhas de texto que ele gera e transmitindo dentro de uma caixinha de log interna. Isso elimina a necessidade de manter janelas pretas de terminal abertas na tela.
 
 
 
