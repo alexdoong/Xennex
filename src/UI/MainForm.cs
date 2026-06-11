@@ -334,7 +334,7 @@ namespace WacomRealController
             if (isSidebarMode)
             {
                 previousBounds = this.Bounds;
-                var scr = Screen.FromControl(this);
+                var scr = GetTargetSidebarScreen();
                 // sw = content width 340 + tab width 26
                 int sw  = 366;
                 this.ShowInTaskbar = false;
@@ -385,6 +385,17 @@ namespace WacomRealController
             }
         }
 
+        private Screen GetTargetSidebarScreen()
+        {
+            int idx = configService.Config.SidebarMonitorIndex;
+            var screens = Screen.AllScreens;
+            if (idx >= 0 && idx < screens.Length)
+            {
+                return screens[idx];
+            }
+            return Screen.PrimaryScreen;
+        }
+
         private void SlideTimer_Tick(object sender, EventArgs e)
         {
             if (!isSidebarMode) return;
@@ -408,7 +419,7 @@ namespace WacomRealController
                 }
             }
 
-            var   scr       = Screen.FromControl(this);
+            var   scr       = GetTargetSidebarScreen();
             int   destShow  = scr.WorkingArea.Right - this.Width;
             int   destHide  = scr.WorkingArea.Right - 26;
             Point mouse     = Cursor.Position;
@@ -424,7 +435,10 @@ namespace WacomRealController
             {
                 if (isSlidOut)
                 {
-                    mouseOver = mouse.X >= scr.WorkingArea.Right - 28;
+                    // Restrict hover checking precisely to the visible 26px pull-tab region on the targeted monitor.
+                    // This prevents cursor movements on adjacent monitors (to the right) from expanding the sidebar.
+                    var visibleRect = new Rectangle(scr.WorkingArea.Right - 26, scr.WorkingArea.Top, 26, scr.WorkingArea.Height);
+                    mouseOver = visibleRect.Contains(mouse);
                 }
                 else
                 {
