@@ -60,3 +60,4 @@ nunit-*.xml
 *.exe
 config.txt
 team_config.txt
+wuwa_build.txt
