@@ -15,7 +15,7 @@ namespace WacomRealController
         private Label   lblInfoOS, lblInfoNet, lblInfoApp;
         private TextBox txtSettingsPath;
         private Button  btnSettingsBrowse, btnSettingsAutoDetect;
-        private CheckBox chkCloseToTray, chkStartRealOnBoot;
+        private CheckBox chkCloseToTray, chkStartRealOnBoot, chkHideSidebarPullTab;
         private Label    lblMonitor;
         private ComboBox cmbMonitor;
 
@@ -28,6 +28,7 @@ namespace WacomRealController
             this.logAppender = logAppender;
 
             this.BackColor = Color.Transparent;
+            this.AutoScroll = true;
             this.SizeChanged += (s, e) => LayoutTab(this.Width, this.Height);
 
             BuildSettingsTab();
@@ -91,8 +92,12 @@ namespace WacomRealController
                 configService.SaveConfig();
             };
 
+            chkHideSidebarPullTab = Chk("Hide sidebar pull tab (hover screen edge to open)", false);
+            chkHideSidebarPullTab.Location = new Point(20, 145);
+            chkHideSidebarPullTab.CheckedChanged += (s, e) => SaveConfig();
+
             pnlSettingsBehaviorCard.Controls.AddRange(new Control[] {
-                lblSettingsBehaviorTitle, chkCloseToTray, chkStartRealOnBoot, lblMonitor, cmbMonitor });
+                lblSettingsBehaviorTitle, chkCloseToTray, chkStartRealOnBoot, lblMonitor, cmbMonitor, chkHideSidebarPullTab });
 
             pnlSettingsInfoCard = Card();
             lblSettingsInfoTitle = TitleLabel("Diagnostics", Color.FromArgb(244, 244, 245));
@@ -112,6 +117,7 @@ namespace WacomRealController
             txtSettingsPath.Text = configService.Config.RealExePath;
             chkCloseToTray.Checked = configService.Config.CloseToTray;
             chkStartRealOnBoot.Checked = configService.Config.AutoStart;
+            chkHideSidebarPullTab.Checked = configService.Config.HideSidebarPullTab;
             PopulateMonitors();
         }
 
@@ -144,6 +150,7 @@ namespace WacomRealController
         {
             configService.Config.CloseToTray = chkCloseToTray.Checked;
             configService.Config.AutoStart = chkStartRealOnBoot.Checked;
+            configService.Config.HideSidebarPullTab = chkHideSidebarPullTab.Checked;
             configService.SaveConfig();
         }
 
@@ -162,17 +169,53 @@ namespace WacomRealController
         private void LayoutTab(int w, int h)
         {
             if (pnlSettingsPathCard == null) return;
-            pnlSettingsPathCard.Location = new Point(20, 20);
-            pnlSettingsPathCard.Size     = new Size(w - 40, 100);
-            pnlSettingsBehaviorCard.Location = new Point(20, 140);
-            pnlSettingsBehaviorCard.Size     = new Size(w - 40, 150);
-            pnlSettingsInfoCard.Location = new Point(20, 310);
-            pnlSettingsInfoCard.Size     = new Size(w - 40, h - 325);
 
-            int pw = pnlSettingsPathCard.Width;
-            txtSettingsPath.Width      = pw - 230;
-            btnSettingsBrowse.Location = new Point(pw - 200, 48);
-            btnSettingsAutoDetect.Location = new Point(pw - 100, 48);
+            int contentW = w;
+            if (this.VScroll && this.VerticalScroll.Visible) 
+                contentW -= SystemInformation.VerticalScrollBarWidth;
+                
+            int cardW = Math.Max(160, contentW - 40);
+
+            if (contentW < 450)
+            {
+                // Stacked layout
+                pnlSettingsPathCard.Location = new Point(20, 20);
+                pnlSettingsPathCard.Size     = new Size(cardW, 130);
+                pnlSettingsBehaviorCard.Location = new Point(20, 165);
+                pnlSettingsBehaviorCard.Size     = new Size(cardW, 180);
+                pnlSettingsInfoCard.Location = new Point(20, 360);
+                pnlSettingsInfoCard.Size     = new Size(cardW, 140); 
+
+                txtSettingsPath.Width      = cardW - 40;
+                int bw = (cardW - 50) / 2;
+                btnSettingsBrowse.Location = new Point(20, 85);
+                btnSettingsBrowse.Size     = new Size(bw, 26);
+                btnSettingsAutoDetect.Location = new Point(30 + bw, 85);
+                btnSettingsAutoDetect.Size     = new Size(bw, 26);
+                
+                this.AutoScrollMinSize = new Size(0, pnlSettingsInfoCard.Bottom + 20);
+            }
+            else
+            {
+                // Side-by-side layout
+                pnlSettingsPathCard.Location = new Point(20, 20);
+                pnlSettingsPathCard.Size     = new Size(cardW, 100);
+                pnlSettingsBehaviorCard.Location = new Point(20, 140);
+                pnlSettingsBehaviorCard.Size     = new Size(cardW, 180);
+                pnlSettingsInfoCard.Location = new Point(20, 340);
+                pnlSettingsInfoCard.Size     = new Size(cardW, Math.Max(140, h - 355));
+
+                txtSettingsPath.Width      = cardW - 230;
+                btnSettingsBrowse.Location = new Point(cardW - 200, 48);
+                btnSettingsBrowse.Size     = new Size(90, 26);
+                btnSettingsAutoDetect.Location = new Point(cardW - 100, 48);
+                btnSettingsAutoDetect.Size     = new Size(100, 26);
+                
+                this.AutoScrollMinSize = new Size(0, pnlSettingsInfoCard.Bottom + 20);
+            }
+            
+            cmbMonitor.Width = Math.Min(250, cardW - 140);
+            if (cmbMonitor.Width < 50) cmbMonitor.Width = 50;
         }
 
         // Helpers wrapper

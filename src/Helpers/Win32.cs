@@ -12,6 +12,9 @@ namespace WacomRealController
         [DllImport("user32.dll")]
         public static extern bool ShowWindow(IntPtr hWnd, int n);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
         [DllImport("user32.dll")]
         public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
 
@@ -34,6 +37,8 @@ namespace WacomRealController
 
         public const int SW_HIDE = 0;
         public const int SW_SHOW = 5;
+        public const int GWL_STYLE = -16;
+        public const int WS_CAPTION = 0x00C00000;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT
@@ -67,6 +72,11 @@ namespace WacomRealController
                     var scr = System.Windows.Forms.Screen.FromHandle(fg);
                     if (w >= scr.Bounds.Width && h >= scr.Bounds.Height)
                     {
+                        int style = GetWindowLong(fg, GWL_STYLE);
+                        if ((style & WS_CAPTION) != 0)
+                        {
+                            return false; // It's just a maximized window, not borderless fullscreen
+                        }
                         return true;
                     }
                 }

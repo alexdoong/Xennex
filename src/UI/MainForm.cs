@@ -57,6 +57,35 @@ namespace WacomRealController
             // Load configs
             configService.LoadConfig();
 
+            configService.OnConfigChanged += () => {
+                if (isSidebarMode)
+                {
+                    this.BeginInvoke((MethodInvoker)delegate {
+                        var scr = GetTargetSidebarScreen();
+                        int startOffset = configService.Config.HideSidebarPullTab ? 0 : 26;
+                        this.Width = 280 + startOffset;
+                        this.Height = 680;
+                        this.Top = scr.WorkingArea.Top + (scr.WorkingArea.Height - this.Height) / 2;
+
+                        LayoutControls();
+                        if (isSlidOut)
+                        {
+                            this.Left = scr.WorkingArea.Right - startOffset;
+                            
+                            if (configService.Config.HideSidebarPullTab)
+                            {
+                                if (this.Region != null) { this.Region.Dispose(); this.Region = null; }
+                            }
+                            else
+                            {
+                                if (this.Region != null) this.Region.Dispose();
+                                this.Region = new Region(new Rectangle(0, pullTab.Top, pullTab.Width, pullTab.Height));
+                            }
+                        }
+                    });
+                }
+            };
+
             SetActiveTab(0);
             LayoutControls();
 
@@ -77,7 +106,7 @@ namespace WacomRealController
         private void BuildUI()
         {
             this.Name            = "MainForm";
-            this.Text            = "Utility Hub";
+            this.Text            = "Xennex";
             this.Size            = new Size(820, 560);
             this.MinimumSize     = new Size(360, 480);
             this.FormBorderStyle = FormBorderStyle.None;
@@ -131,7 +160,7 @@ namespace WacomRealController
 
             lblTitle = new Label
             {
-                Text      = "UTILITY HUB",
+                Text      = "XENNEX",
                 Font      = new Font("Segoe UI", 11.5F, FontStyle.Bold),
                 ForeColor = Color.FromArgb(244, 244, 245),
                 Location  = new Point(20, 12),
@@ -173,6 +202,11 @@ namespace WacomRealController
             btnClose.FlatAppearance.MouseOverBackColor = Color.FromArgb(196, 43, 28);
             btnClose.Click += (s, e) =>
             {
+                if (isSidebarMode)
+                {
+                    ToggleSidebarMode();
+                }
+
                 if (settingsTab != null && settingsTab.CloseToTray) MinimizeToTray();
                 else ShutdownApp();
             };
@@ -235,7 +269,7 @@ namespace WacomRealController
             {
                 Icon        = this.appIcon,
                 ContextMenu = trayMenu,
-                Text        = "Utility Hub",
+                Text        = "Xennex",
                 Visible     = false
             };
             notifyIcon.DoubleClick += (s, e) => RestoreFromTray();
@@ -244,11 +278,14 @@ namespace WacomRealController
         private void SetupStyles()
         {
             this.DoubleBuffered = true;
-            this.SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+            this.SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
             this.Paint += (s, e) =>
             {
-                using (var pen = new Pen(Color.FromArgb(60, 139, 92, 246), 1))
-                    e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+                if (!isSidebarMode)
+                {
+                    using (var pen = new Pen(Color.FromArgb(60, 139, 92, 246), 1))
+                        e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+                }
             };
         }
 
@@ -266,16 +303,17 @@ namespace WacomRealController
         {
             if (pnlHeader == null) return;
             int w = ClientSize.Width, h = ClientSize.Height;
-            int tabW = isSidebarMode ? 26 : 0;
+            int tabW = (isSidebarMode && !configService.Config.HideSidebarPullTab) ? 26 : 0;
+            int pad = isSidebarMode ? 0 : 4;
 
             if (pullTab != null)
             {
-                pullTab.Visible = isSidebarMode;
+                pullTab.Visible = isSidebarMode && !configService.Config.HideSidebarPullTab;
                 pullTab.Location = new Point(0, (h - pullTab.Height) / 2);
             }
 
-            pnlHeader.Location = new Point(tabW, 0);
-            pnlHeader.Width = w - tabW;
+            pnlHeader.Location = new Point(tabW + pad, pad);
+            pnlHeader.Width = w - tabW - (pad * 2);
 
             int hw = pnlHeader.Width;
             btnClose.Location    = new Point(hw - 45, 0);
@@ -283,28 +321,34 @@ namespace WacomRealController
 
             if (isSidebarMode)
             {
-                lblTitle.Text         = "HUB";
+                lblTitle.Text         = "XENNEX";
                 lblSubtitle.Visible   = false;
                 btnSidebarToggle.Text = "← Back";
-                btnSidebarToggle.Location = new Point(hw - 170, 17);
-                btnSidebarToggle.Size     = new Size(70, 30);
-                btnPin.Location = new Point(hw - 95, 17);
+                
+                int pinx = Math.Max(100, hw - 125);
+                btnPin.Location = new Point(pinx, 17);
                 btnPin.Visible  = true;
+
+                int sbx = Math.Max(70, pinx - 80);
+                btnSidebarToggle.Location = new Point(sbx, 17);
+                btnSidebarToggle.Size     = new Size(70, 30);
             }
             else
             {
-                lblTitle.Text         = "UTILITY HUB";
+                lblTitle.Text         = "XENNEX";
                 lblSubtitle.Visible   = true;
                 btnSidebarToggle.Text = "⬛ Sidebar";
-                btnSidebarToggle.Location = new Point(w - 265, 17);
-                btnSidebarToggle.Size     = new Size(95, 30);
                 btnPin.Visible = false;
+                
+                int sbx = Math.Max(150, hw - 200);
+                btnSidebarToggle.Location = new Point(sbx, 17);
+                btnSidebarToggle.Size     = new Size(95, 30);
             }
 
-            pnlNavigation.Location = new Point(tabW, 65);
-            pnlNavigation.Height   = h - 65;
-            pnlContent.Location    = new Point(tabW + 60, 65);
-            pnlContent.Size        = new Size(w - tabW - 60, h - 65);
+            pnlNavigation.Location = new Point(tabW + pad, 65 + pad);
+            pnlNavigation.Height   = h - 65 - (pad * 2);
+            pnlContent.Location    = new Point(tabW + 60 + pad, 65 + pad);
+            pnlContent.Size        = new Size(w - tabW - 60 - (pad * 2), h - 65 - (pad * 2));
         }
 
         private void SetActiveTab(int idx)
@@ -335,23 +379,37 @@ namespace WacomRealController
             {
                 previousBounds = this.Bounds;
                 var scr = GetTargetSidebarScreen();
-                // sw = content width 340 + tab width 26
-                int sw  = 366;
+                int startOffset = configService.Config.HideSidebarPullTab ? 0 : 26;
+                // sw = content width 280 + tab width (26 or 0)
+                int sw  = 280 + startOffset;
                 this.ShowInTaskbar = false;
                 this.Width  = sw;
-                this.Height = scr.WorkingArea.Height;
-                this.Left   = scr.WorkingArea.Right - 26; // start collapsed showing only the tab
-                this.Top    = scr.WorkingArea.Top;
+                this.Height = 680;
+                this.Left   = scr.WorkingArea.Right - startOffset; // start collapsed
+                this.Top    = scr.WorkingArea.Top + (scr.WorkingArea.Height - this.Height) / 2; // vertically centered
                 isPinned    = false;
                 isSlidOut   = true;
+                this.TopMost = true; // Always on top
                 ignoreHoverUntilMouseLeave = false;
                 if (pullTab != null) pullTab.IsCollapsed = true;
+
+                if (configService.Config.HideSidebarPullTab)
+                {
+                    if (this.Region != null) { this.Region.Dispose(); this.Region = null; }
+                }
+                else
+                {
+                    if (this.Region != null) this.Region.Dispose();
+                    this.Region = GetPullTabRegion();
+                }
             }
             else
             {
                 isSlidOut = false;
                 this.ShowInTaskbar = true;
+                this.TopMost = false;
                 this.Bounds = previousBounds;
+                if (this.Region != null) { this.Region.Dispose(); this.Region = null; }
             }
             LayoutControls();
         }
@@ -396,6 +454,22 @@ namespace WacomRealController
             return Screen.PrimaryScreen;
         }
 
+        private Region GetPullTabRegion()
+        {
+            var path = new GraphicsPath();
+            int r = 8;
+            int w = pullTab.Width;
+            int h = pullTab.Height;
+            int y = pullTab.Top;
+
+            path.AddLine(w, y, w, y);
+            path.AddLine(w, y + h, w, y + h);
+            path.AddArc(0, y + h - 2 * r - 1, 2 * r, 2 * r, 90, 90);
+            path.AddArc(0, y, 2 * r, 2 * r, 180, 90);
+            path.CloseFigure();
+            return new Region(path);
+        }
+
         private void SlideTimer_Tick(object sender, EventArgs e)
         {
             if (!isSidebarMode) return;
@@ -417,11 +491,15 @@ namespace WacomRealController
                     this.Visible = true;
                     this.TopMost = true;
                 }
+                if (!this.TopMost)
+                {
+                    this.TopMost = true;
+                }
             }
 
             var   scr       = GetTargetSidebarScreen();
             int   destShow  = scr.WorkingArea.Right - this.Width;
-            int   destHide  = scr.WorkingArea.Right - 26;
+            int   destHide  = scr.WorkingArea.Right - (configService.Config.HideSidebarPullTab ? 0 : 26);
             Point mouse     = Cursor.Position;
 
             bool containsMouse = this.Bounds.Contains(mouse);
@@ -435,10 +513,23 @@ namespace WacomRealController
             {
                 if (isSlidOut)
                 {
-                    // Restrict hover checking precisely to the visible 26px pull-tab region on the targeted monitor.
-                    // This prevents cursor movements on adjacent monitors (to the right) from expanding the sidebar.
-                    var visibleRect = new Rectangle(scr.WorkingArea.Right - 26, scr.WorkingArea.Top, 26, scr.WorkingArea.Height);
-                    mouseOver = visibleRect.Contains(mouse);
+                    if (configService.Config.HideSidebarPullTab)
+                    {
+                        // Hover checking when pull-tab is hidden: check a narrow 10px strip at the edge of the screen
+                        var edgeRect = new Rectangle(scr.WorkingArea.Right - 10, scr.WorkingArea.Top, 10, scr.WorkingArea.Height);
+                        mouseOver = edgeRect.Contains(mouse);
+                    }
+                    else
+                    {
+                        // Hover checking when pull-tab is visible: check only the pull-tab's screen area
+                        var pullTabScreenRect = new Rectangle(
+                            scr.WorkingArea.Right - 26,
+                            scr.WorkingArea.Top + (scr.WorkingArea.Height - pullTab.Height) / 2,
+                            26,
+                            pullTab.Height
+                        );
+                        mouseOver = pullTabScreenRect.Contains(mouse);
+                    }
                 }
                 else
                 {
@@ -446,19 +537,28 @@ namespace WacomRealController
                 }
             }
 
-            int dest = (isPinned || mouseOver || !isSlidOut) ? destShow : destHide;
+            int dest = (isPinned || mouseOver) ? destShow : destHide;
 
             if (this.Left < dest)
             {
+                if (this.Region != null) { this.Region.Dispose(); this.Region = null; }
+
                 this.Left = Math.Min(dest, this.Left + SLIDE_SPEED);
                 if (this.Left == destHide)
                 {
                     isSlidOut = true;
                     if (pullTab != null) pullTab.IsCollapsed = true;
+
+                    if (!configService.Config.HideSidebarPullTab)
+                    {
+                        this.Region = GetPullTabRegion();
+                    }
                 }
             }
             else if (this.Left > dest)
             {
+                if (this.Region != null) { this.Region.Dispose(); this.Region = null; }
+
                 this.Left = Math.Max(dest, this.Left - SLIDE_SPEED);
                 if (this.Left == destShow)
                 {
@@ -493,16 +593,39 @@ namespace WacomRealController
             this.Close();
         }
 
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED (Prevents flickering and black lines for all child controls)
+                if (!isSidebarMode)
+                {
+                    cp.Style |= 0x00C00000; // WS_CAPTION (Required for Windows native resizing and Aero Snap to work correctly)
+                    cp.Style |= 0x00040000; // WS_THICKFRAME
+                    cp.Style |= 0x00020000; // WS_MINIMIZEBOX
+                }
+                return cp;
+            }
+        }
+
         protected override void WndProc(ref Message m)
         {
             const int WM_NCHITTEST = 0x84;
+            const int WM_NCCALCSIZE = 0x83;
             const int HTLEFT=10, HTRIGHT=11, HTTOP=12, HTTOPLEFT=13, HTTOPRIGHT=14,
                       HTBOTTOM=15, HTBOTTOMLEFT=16, HTBOTTOMRIGHT=17;
+
+            if (m.Msg == WM_NCCALCSIZE && m.WParam.ToInt32() == 1)
+            {
+                m.Result = IntPtr.Zero;
+                return;
+            }
 
             if (m.Msg == WM_NCHITTEST)
             {
                 var pos = this.PointToClient(new Point(m.LParam.ToInt32()));
-                int b = 6;
+                int b = 4;
                 bool L = pos.X <= b, R = pos.X >= Width-b, T = pos.Y <= b, Bo = pos.Y >= Height-b;
                 if (isSidebarMode) { if (L) { m.Result=(IntPtr)HTLEFT; return; } }
                 else
@@ -547,6 +670,7 @@ namespace WacomRealController
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            if (this.Region != null) { this.Region.Dispose(); this.Region = null; }
             realEngineService.Stop();
             statusTimer?.Stop(); statusTimer?.Dispose();
             slideTimer?.Stop();  slideTimer?.Dispose();

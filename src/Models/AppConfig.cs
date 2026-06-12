@@ -6,5 +6,6 @@ namespace WacomRealController
         public bool CloseToTray { get; set; } = true;
         public bool AutoStart { get; set; } = false;
         public int SidebarMonitorIndex { get; set; } = 0;
+        public bool HideSidebarPullTab { get; set; } = false;
     }
 }

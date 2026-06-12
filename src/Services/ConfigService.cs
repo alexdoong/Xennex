@@ -13,6 +13,7 @@ namespace WacomRealController
         public WuWaBuild Build { get; private set; } = new WuWaBuild();
 
         public event Action<string> OnLogReceived;
+        public event Action OnConfigChanged;
 
         private void Log(string msg) => OnLogReceived?.Invoke(msg);
 
@@ -38,6 +39,8 @@ namespace WacomRealController
                     {
                         if (item == "CloseToTray=false") Config.CloseToTray = false;
                         if (item == "AutoStart=true")    Config.AutoStart = true;
+                        if (item == "HideSidebarPullTab=true") Config.HideSidebarPullTab = true;
+                        if (item == "HideSidebarPullTab=false") Config.HideSidebarPullTab = false;
                         if (item.StartsWith("SidebarMonitor="))
                         {
                             int val;
@@ -61,11 +64,13 @@ namespace WacomRealController
         {
             try
             {
-                string line2 = string.Format("CloseToTray={0},AutoStart={1},SidebarMonitor={2}",
+                string line2 = string.Format("CloseToTray={0},AutoStart={1},SidebarMonitor={2},HideSidebarPullTab={3}",
                     Config.CloseToTray ? "true" : "false",
                     Config.AutoStart ? "true" : "false",
-                    Config.SidebarMonitorIndex);
+                    Config.SidebarMonitorIndex,
+                    Config.HideSidebarPullTab ? "true" : "false");
                 File.WriteAllLines(configPath, new[] { Config.RealExePath, line2 });
+                OnConfigChanged?.Invoke();
             }
             catch { }
         }

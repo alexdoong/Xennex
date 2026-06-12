@@ -32,14 +32,14 @@ if not exist %CSC_PATH% (
 echo [WARNING] .NET SDK not found. Attempting direct fallback compilation...
 echo Using compiler: %CSC_PATH%
 echo Compiling source files recursively...
-%CSC_PATH% /target:winexe /out:WacomRealController.exe /r:System.Windows.Forms.dll,System.Drawing.dll,System.dll,System.ServiceProcess.dll,System.Core.dll /recurse:src\*.cs
+%CSC_PATH% /target:winexe /out:Xennex.exe /r:System.Windows.Forms.dll,System.Drawing.dll,System.dll,System.ServiceProcess.dll,System.Core.dll /recurse:src\*.cs
 
 :end_build
 if %ERRORLEVEL% EQU 0 (
     echo.
     echo ===================================================
     echo [SUCCESS] Compilation successful!
-    echo Created WacomRealController.exe
+    echo Created Xennex.exe
     echo ===================================================
 ) else (
     echo.

@@ -3,7 +3,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyName>WacomRealController</AssemblyName>
+    <AssemblyName>Xennex</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <Target Name="CopyExecutableToRoot" AfterTargets="Build">
-    <Copy SourceFiles="$(TargetDir)WacomRealController.exe" DestinationFolder="$(MSBuildProjectDirectory)" />
+    <Copy SourceFiles="$(TargetDir)Xennex.exe" DestinationFolder="$(MSBuildProjectDirectory)" />
   </Target>
 
   <ItemGroup>

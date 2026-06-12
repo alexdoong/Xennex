@@ -56,6 +56,7 @@ namespace WacomRealController
             this.configService = configService;
 
             this.BackColor = Color.Transparent;
+            this.AutoScroll = true;
             this.SizeChanged += (s, e) => LayoutTab(this.Width, this.Height);
 
             BuildWuWaTab();
@@ -566,30 +567,72 @@ namespace WacomRealController
         private void LayoutTab(int w, int h)
         {
             if (pnlCharCard == null) return;
-            // Character card: fixed 280 wide, full height minus echo row
-            int echoH      = 195;
-            int topH       = h - echoH - 15;
-            int charW      = Math.Min(280, (int)(w * 0.34));
-            int rightX     = charW + 20;
-            int rightW     = w - rightX - 15;
-            int weaponH    = 115;
+            
+            int contentW = w;
+            if (this.VScroll && this.VerticalScroll.Visible) 
+                contentW -= SystemInformation.VerticalScrollBarWidth;
 
-            pnlCharCard.Location  = new Point(15, 5);
-            pnlCharCard.Size      = new Size(charW, topH);
+            if (contentW < 600)
+            {
+                // Stacked layout
+                int cardW = Math.Max(160, contentW - 30);
+                int topH = 320; 
+                int weaponH = 115;
+                int statsH = 250;
+                
+                int echoH = 195;
+                if (contentW < 450) echoH = 5 * 205; // Stack echoes vertically
+                
+                pnlCharCard.Location = new Point(15, 5);
+                pnlCharCard.Size = new Size(cardW, topH);
+                
+                pnlWeaponCard.Location = new Point(15, pnlCharCard.Bottom + 10);
+                pnlWeaponCard.Size = new Size(cardW, weaponH);
+                
+                pnlStatsCard.Location = new Point(15, pnlWeaponCard.Bottom + 10);
+                pnlStatsCard.Size = new Size(cardW, statsH);
+                
+                pnlEchoRow.Location = new Point(15, pnlStatsCard.Bottom + 10);
+                pnlEchoRow.Size = new Size(cardW, echoH);
+                
+                LayoutCharCardInternals(cardW, topH);
+                LayoutWeaponCardInternals(cardW, weaponH);
+                LayoutStatsCardInternals(cardW, statsH);
+                LayoutEchoRow(cardW, echoH, true);
+                
+                this.AutoScrollMinSize = new Size(0, pnlEchoRow.Bottom + 15);
+            }
+            else
+            {
+                // Normal side-by-side layout
+                int echoH      = 195;
+                int topH       = h - echoH - 15;
+                if (topH < 300) topH = 300;
+                
+                int charW      = Math.Min(280, (int)(contentW * 0.34));
+                int rightX     = charW + 20;
+                int rightW     = contentW - rightX - 15;
+                int weaponH    = 115;
 
-            pnlWeaponCard.Location = new Point(rightX, 5);
-            pnlWeaponCard.Size     = new Size(rightW, weaponH);
+                pnlCharCard.Location  = new Point(15, 5);
+                pnlCharCard.Size      = new Size(charW, topH);
 
-            pnlStatsCard.Location  = new Point(rightX, 5 + weaponH + 10);
-            pnlStatsCard.Size      = new Size(rightW, topH - weaponH - 10);
+                pnlWeaponCard.Location = new Point(rightX, 5);
+                pnlWeaponCard.Size     = new Size(rightW, weaponH);
 
-            pnlEchoRow.Location    = new Point(15, topH + 10);
-            pnlEchoRow.Size        = new Size(w - 30, echoH);
+                pnlStatsCard.Location  = new Point(rightX, 5 + weaponH + 10);
+                pnlStatsCard.Size      = new Size(rightW, topH - weaponH - 10);
 
-            LayoutCharCardInternals(charW, topH);
-            LayoutWeaponCardInternals(rightW, weaponH);
-            LayoutStatsCardInternals(rightW, pnlStatsCard.Height);
-            LayoutEchoRow(w - 30, echoH);
+                pnlEchoRow.Location    = new Point(15, pnlCharCard.Bottom + 10);
+                pnlEchoRow.Size        = new Size(contentW - 30, echoH);
+
+                LayoutCharCardInternals(charW, topH);
+                LayoutWeaponCardInternals(rightW, weaponH);
+                LayoutStatsCardInternals(rightW, pnlStatsCard.Height);
+                LayoutEchoRow(contentW - 30, echoH, false);
+                
+                this.AutoScrollMinSize = new Size(0, pnlEchoRow.Bottom + 15);
+            }
         }
 
         private void LayoutCharCardInternals(int w, int h)
@@ -644,31 +687,54 @@ namespace WacomRealController
             }
         }
 
-        private void LayoutEchoRow(int w, int h)
+        private void LayoutEchoRow(int w, int h, bool stacked = false)
         {
-            int echoW  = (w - 4 * 8) / 5;
-            int iconSz = Math.Min(56, h - 120);
-
-            for (int i = 0; i < 5; i++)
+            if (stacked && w < 450)
             {
-                pnlEcho[i].Location = new Point(i * (echoW + 8), 0);
-                pnlEcho[i].Size     = new Size(echoW, h);
-
-                pbEchoIcon[i].Location = new Point(8, 8);
-                pbEchoIcon[i].Size     = new Size(iconSz, iconSz);
-
-                txtEchoMain[i].Location = new Point(8 + iconSz + 4, 8);
-                txtEchoMain[i].Width    = echoW - iconSz - 20;
-
-                btnEchoUpload[i].Location = new Point(8, iconSz + 10);
-
-                for (int j = 0; j < 5; j++)
+                // Stack echoes vertically
+                int echoW = w - 10;
+                int echoH = 195;
+                for (int i = 0; i < 5; i++)
                 {
-                    int subY = iconSz + 12 + j * 22 - (j > 0 ? 2 : 0);
-                    btnEchoQuality[i][j].Location = new Point(6, subY + 4);
-                    txtEchoSub[i][j].Location     = new Point(24, subY);
-                    txtEchoSub[i][j].Width        = echoW - 30;
+                    pnlEcho[i].Location = new Point(5, i * (echoH + 10));
+                    pnlEcho[i].Size     = new Size(echoW, echoH);
+
+                    LayoutSingleEcho(i, echoW, echoH);
                 }
+            }
+            else
+            {
+                // Side-by-side echoes
+                int echoW  = (w - 4 * 8) / 5;
+                for (int i = 0; i < 5; i++)
+                {
+                    pnlEcho[i].Location = new Point(i * (echoW + 8), 0);
+                    pnlEcho[i].Size     = new Size(echoW, h);
+
+                    LayoutSingleEcho(i, echoW, h);
+                }
+            }
+        }
+
+        private void LayoutSingleEcho(int i, int w, int h)
+        {
+            int iconSz = Math.Min(56, h - 120);
+            if (iconSz < 30) iconSz = 30;
+
+            pbEchoIcon[i].Location = new Point(8, 8);
+            pbEchoIcon[i].Size     = new Size(iconSz, iconSz);
+
+            txtEchoMain[i].Location = new Point(8 + iconSz + 4, 8);
+            txtEchoMain[i].Width    = w - iconSz - 20;
+
+            btnEchoUpload[i].Location = new Point(8, iconSz + 10);
+
+            for (int j = 0; j < 5; j++)
+            {
+                int subY = iconSz + 12 + j * 22 - (j > 0 ? 2 : 0);
+                btnEchoQuality[i][j].Location = new Point(6, subY + 4);
+                txtEchoSub[i][j].Location     = new Point(24, subY);
+                txtEchoSub[i][j].Width        = w - 30;
             }
         }
 

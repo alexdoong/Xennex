@@ -185,23 +185,43 @@ namespace WacomRealController
         private void LayoutTab(int w, int h)
         {
             if (pnlWacomCard == null) return;
-            int cardW = (w - 60) / 2;
 
-            pnlWacomCard.Location = new Point(20, 20);
-            pnlWacomCard.Size     = new Size(cardW, 145);
-            pnlRealCard.Location  = new Point(20 + cardW + 20, 20);
-            pnlRealCard.Size      = new Size(cardW, 145);
-            pnlLogsCard.Location  = new Point(20, 185);
-            pnlLogsCard.Size      = new Size(w - 40, h - 185 - 15);
+            if (w < 400)
+            {
+                // Stacked layout (Sidebar Mode)
+                pnlWacomCard.Location = new Point(20, 15);
+                pnlWacomCard.Size     = new Size(w - 40, 130);
+                pnlRealCard.Location  = new Point(20, 160);
+                pnlRealCard.Size      = new Size(w - 40, 130);
+                pnlLogsCard.Location  = new Point(20, 305);
+                pnlLogsCard.Size      = new Size(w - 40, h - 305 - 15);
 
-            // Wacom card internals
-            int bw = (cardW - 50) / 2;
-            btnDisableWacom.Location = new Point(20, 95); btnDisableWacom.Size = new Size(bw, 35);
-            btnEnableWacom.Location  = new Point(20 + bw + 10, 95); btnEnableWacom.Size = new Size(bw, 35);
+                int cardW = w - 40;
+                int bw = (cardW - 50) / 2;
+                btnDisableWacom.Location = new Point(20, 80); btnDisableWacom.Size = new Size(bw, 35);
+                btnEnableWacom.Location  = new Point(20 + bw + 10, 80); btnEnableWacom.Size = new Size(bw, 35);
 
-            // REAL card internals
-            btnStartReal.Location = new Point(20, 95); btnStartReal.Size = new Size(bw, 35);
-            btnStopReal.Location  = new Point(20 + bw + 10, 95); btnStopReal.Size = new Size(bw, 35);
+                btnStartReal.Location = new Point(20, 80); btnStartReal.Size = new Size(bw, 35);
+                btnStopReal.Location  = new Point(20 + bw + 10, 80); btnStopReal.Size = new Size(bw, 35);
+            }
+            else
+            {
+                // Side-by-side layout (Windowed Mode)
+                int cardW = (w - 60) / 2;
+                pnlWacomCard.Location = new Point(20, 20);
+                pnlWacomCard.Size     = new Size(cardW, 145);
+                pnlRealCard.Location  = new Point(20 + cardW + 20, 20);
+                pnlRealCard.Size      = new Size(cardW, 145);
+                pnlLogsCard.Location  = new Point(20, 185);
+                pnlLogsCard.Size      = new Size(w - 40, h - 185 - 15);
+
+                int bw = (cardW - 50) / 2;
+                btnDisableWacom.Location = new Point(20, 95); btnDisableWacom.Size = new Size(bw, 35);
+                btnEnableWacom.Location  = new Point(20 + bw + 10, 95); btnEnableWacom.Size = new Size(bw, 35);
+
+                btnStartReal.Location = new Point(20, 95); btnStartReal.Size = new Size(bw, 35);
+                btnStopReal.Location  = new Point(20 + bw + 10, 95); btnStopReal.Size = new Size(bw, 35);
+            }
 
             // Logs card internals
             int lw = pnlLogsCard.Width, lh = pnlLogsCard.Height;
