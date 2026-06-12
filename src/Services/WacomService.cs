@@ -23,18 +23,31 @@ namespace WacomRealController
             return false;
         }
 
-        public void RunBatchFile(string filename)
+        public void DisableDrivers()
         {
-            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, filename);
-            if (!File.Exists(path))
-            {
-                Log("[ERR] Not found: " + filename);
-                throw new FileNotFoundException("Batch file not found: " + path);
-            }
-            Log("[Wacom] Running " + filename + " (admin)…");
+            string cmds = "taskkill /F /IM Wacom_Tablet.exe >nul 2>&1 & taskkill /F /IM Pen_Tablet.exe >nul 2>&1 & net stop WTabletServicePro & net start WTabletServicePro & net stop WTabletServiceCon & timeout /t 1 /nobreak >nul & net start WTabletServiceCon & taskkill /F /IM WacomDesktopCenter.exe >nul 2>&1 & timeout /t 10 /nobreak >nul & taskkill /F /IM Wacom_Tablet.exe >nul 2>&1 & taskkill /F /IM Pen_Tablet.exe >nul 2>&1";
+            RunElevatedCommand(cmds, "Disabling");
+        }
+
+        public void EnableDrivers()
+        {
+            string cmds = "net stop WTabletServicePro & net start WTabletServicePro & net stop WTabletServiceCon & net start WTabletServiceCon & taskkill /F /IM WacomDesktopCenter.exe >nul 2>&1 & timeout /t 5 /nobreak >nul";
+            RunElevatedCommand(cmds, "Enabling");
+        }
+
+        private void RunElevatedCommand(string commandArgs, string logPrefix)
+        {
+            Log($"[Wacom] {logPrefix} drivers (admin)…");
             try
             {
-                var p = Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true, Verb = "runas" });
+                var p = Process.Start(new ProcessStartInfo 
+                { 
+                    FileName = "cmd.exe", 
+                    Arguments = $"/c {commandArgs}", 
+                    UseShellExecute = true, 
+                    Verb = "runas",
+                    WindowStyle = ProcessWindowStyle.Hidden 
+                });
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
                     try { p.WaitForExit(); }
@@ -50,7 +63,6 @@ namespace WacomRealController
             catch (Exception ex)
             {
                 Log("[Wacom ERR] " + ex.Message);
-                throw;
             }
         }
     }

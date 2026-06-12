@@ -60,10 +60,10 @@ namespace WacomRealController
             lblWacomStatus = InfoLabel("Status: Checking...", new Point(44, 50));
             btnDisableWacom = Btn("Disable Drivers", Point.Empty, new Size(10, 35),
                 Color.FromArgb(39, 39, 42), Color.FromArgb(244, 244, 245));
-            btnDisableWacom.Click += (s, e) => RunBatchFile("DisableWacomDrivers.bat");
+            btnDisableWacom.Click += (s, e) => wacomService.DisableDrivers();
             btnEnableWacom = Btn("Enable Drivers", Point.Empty, new Size(10, 35),
                 Color.FromArgb(139, 92, 246), Color.White);
-            btnEnableWacom.Click += (s, e) => RunBatchFile("EnableWacomDrivers.bat");
+            btnEnableWacom.Click += (s, e) => wacomService.EnableDrivers();
             pnlWacomCard.Controls.AddRange(new Control[] {
                 lblWacomTitle, pnlWacomStatusDot, lblWacomStatus, btnDisableWacom, btnEnableWacom });
 
@@ -132,19 +132,6 @@ namespace WacomRealController
                     btnToggleConsole.Text    = "Show Console";
                     btnToggleConsole.Enabled = false;
                 }
-            }
-        }
-
-        private void RunBatchFile(string filename)
-        {
-            try
-            {
-                wacomService.RunBatchFile(filename);
-            }
-            catch (Exception ex)
-            {
-                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, filename);
-                MessageBox.Show("Could not execute batch file:\n" + path + "\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

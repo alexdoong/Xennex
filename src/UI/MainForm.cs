@@ -260,8 +260,8 @@ namespace WacomRealController
             trayMenu.MenuItems.Add("Start REAL", (s, e) => realEngineService.Start(configService.Config.RealExePath));
             trayMenu.MenuItems.Add("Stop REAL",  (s, e) => realEngineService.Stop());
             trayMenu.MenuItems.Add("-");
-            trayMenu.MenuItems.Add("Enable Wacom",  (s, e) => wacomService.RunBatchFile("EnableWacomDrivers.bat"));
-            trayMenu.MenuItems.Add("Disable Wacom", (s, e) => wacomService.RunBatchFile("DisableWacomDrivers.bat"));
+            trayMenu.MenuItems.Add("Enable Wacom",  (s, e) => wacomService.EnableDrivers());
+            trayMenu.MenuItems.Add("Disable Wacom", (s, e) => wacomService.DisableDrivers());
             trayMenu.MenuItems.Add("-");
             trayMenu.MenuItems.Add("Exit", (s, e) => ShutdownApp());
 
@@ -664,6 +664,14 @@ namespace WacomRealController
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            if (e.CloseReason == CloseReason.UserClosing && settingsTab != null && settingsTab.CloseToTray)
+            {
+                e.Cancel = true;
+                if (isSidebarMode) ToggleSidebarMode();
+                MinimizeToTray();
+                return;
+            }
+
             if (wuWaTab != null) wuWaTab.SaveBuild();
             base.OnFormClosing(e);
         }

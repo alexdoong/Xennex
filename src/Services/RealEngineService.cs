@@ -49,15 +49,7 @@ namespace WacomRealController
                 realProcess.Exited += (s, ev) =>
                 {
                     Log("[REAL] Process ended.");
-                    if (realProcess != null)
-                    {
-                        realProcess.Dispose();
-                        realProcess = null;
-                    }
-                    consoleWindowHandle = IntPtr.Zero;
-                    isConsoleVisible = false;
-                    OnStatusChanged?.Invoke();
-                    OnConsoleAvailable?.Invoke(false);
+                    CleanupProcess();
                 };
 
                 realProcess.Start();
@@ -89,37 +81,54 @@ namespace WacomRealController
             catch (Exception ex)
             {
                 Log("[REAL ERR] " + ex.Message);
-                if (realProcess != null)
-                {
-                    realProcess.Dispose();
-                    realProcess = null;
-                }
+                CleanupProcess();
                 throw;
             }
         }
 
+        private void CleanupProcess()
+        {
+            if (realProcess != null)
+            {
+                try { realProcess.Dispose(); } catch { }
+                realProcess = null;
+            }
+            consoleWindowHandle = IntPtr.Zero;
+            isConsoleVisible = false;
+            OnStatusChanged?.Invoke();
+            OnConsoleAvailable?.Invoke(false);
+        }
+
         public void Stop()
         {
-            if (realProcess == null || realProcess.HasExited)
+            if (realProcess == null)
             {
                 Log("[REAL] Not running.");
                 return;
             }
+
             Log("[REAL] Sending stop signal…");
             try
             {
-                realProcess.StandardInput.WriteLine();
-                realProcess.StandardInput.Flush();
-                if (!realProcess.WaitForExit(2000))
+                if (!realProcess.HasExited)
                 {
-                    realProcess.Kill();
-                    Log("[REAL] Force killed.");
+                    realProcess.StandardInput.WriteLine();
+                    realProcess.StandardInput.Flush();
+                    if (!realProcess.WaitForExit(2000))
+                    {
+                        realProcess.Kill();
+                        Log("[REAL] Force killed.");
+                    }
                 }
             }
             catch (Exception ex)
             {
                 Log("[REAL ERR] " + ex.Message);
-                try { realProcess.Kill(); } catch { }
+                try { if (realProcess != null && !realProcess.HasExited) realProcess.Kill(); } catch { }
+            }
+            finally
+            {
+                CleanupProcess();
             }
         }
 
