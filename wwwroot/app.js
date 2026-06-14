@@ -8,7 +8,7 @@ const btnEnableWacom = document.getElementById('btn-enable-wacom');
 const btnDisableWacom = document.getElementById('btn-disable-wacom');
 const btnStartReal = document.getElementById('btn-start-real');
 const btnStopReal = document.getElementById('btn-stop-real');
-const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+const chkToggleSidebar = document.getElementById('chk-toggle-sidebar');
 const btnMinimize = document.getElementById('btn-minimize');
 const btnClose = document.getElementById('btn-close');
 const realStatusDot = document.getElementById('real-status-dot');
@@ -44,7 +44,7 @@ window.onload = async () => {
         btnDisableWacom.addEventListener('click', () => api.DisableWacom());
         btnStartReal.addEventListener('click', () => api.StartReal());
         btnStopReal.addEventListener('click', () => api.StopReal());
-        btnToggleSidebar.addEventListener('click', () => api.ToggleSidebar());
+        chkToggleSidebar.addEventListener('change', () => api.ToggleSidebar());
 
         // Init Settings
         const closeToTray = await api.GetCloseToTray();
@@ -84,10 +84,12 @@ window.updateSidebarMode = (isSidebar) => {
         container.style.borderBottom = 'none';
         titlebar.style.display = 'none';
         pullTab.style.display = 'flex';
+        if(chkToggleSidebar) chkToggleSidebar.checked = true;
     } else {
         container.style.borderRadius = '8px';
         container.style.border = '1px solid var(--border)';
         titlebar.style.display = 'flex';
         pullTab.style.display = 'none';
+        if(chkToggleSidebar) chkToggleSidebar.checked = false;
     }
 };

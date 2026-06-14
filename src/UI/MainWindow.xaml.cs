@@ -10,6 +10,7 @@ using Xennex.Interop;
 using System.Drawing;
 using System.Windows.Forms;
 using Point = System.Drawing.Point;
+using System.Runtime.InteropServices;
 
 namespace Xennex.UI
 {
@@ -20,6 +21,14 @@ namespace Xennex.UI
         private ConfigService configService;
         private ApiBridge apiBridge;
         private NotifyIcon notifyIcon;
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+
+        public const int WM_NCLBUTTONDOWN = 0xA1;
+        public const int HT_CAPTION = 0x2;
 
         private bool isSidebarMode = false;
         private bool isSlidOut = false;
@@ -71,9 +80,10 @@ namespace Xennex.UI
         {
             if (e.TryGetWebMessageAsString() == "dragWindow")
             {
-                if (!isSidebarMode && Mouse.LeftButton == MouseButtonState.Pressed)
+                if (!isSidebarMode)
                 {
-                    this.DragMove();
+                    ReleaseCapture();
+                    SendMessage(new WindowInteropHelper(this).Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
                 }
             }
         }
@@ -101,15 +111,13 @@ namespace Xennex.UI
             isSidebarMode = !isSidebarMode;
             if (isSidebarMode)
             {
-                this.Height = SystemParameters.WorkArea.Height;
-                this.Top = 0;
+                // Compact: keep normal height, snap to middle-right of screen
                 var scr = Screen.PrimaryScreen;
                 this.Left = scr.WorkingArea.Right - this.Width;
                 this.Topmost = true;
             }
             else
             {
-                this.Height = 600;
                 this.Topmost = false;
                 this.Left = (SystemParameters.WorkArea.Width - this.Width) / 2;
                 this.Top = (SystemParameters.WorkArea.Height - this.Height) / 2;
