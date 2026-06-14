@@ -46,9 +46,24 @@ namespace Xennex.Interop
             _configService.SaveConfig();
         }
         public bool GetHideSidebarPullTab() => _configService.Config.HideSidebarPullTab;
-        public void SetHideSidebarPullTab(bool value)
+        public void SetHideSidebarPullTab(bool val)
         {
-            _configService.Config.HideSidebarPullTab = value;
+            _configService.Config.HideSidebarPullTab = val;
+            _configService.SaveConfig();
+        }
+
+        // Cloud Config
+        public string GetCloudProjectId() => _configService.Config.CloudProjectId;
+        public void SetCloudProjectId(string val)
+        {
+            _configService.Config.CloudProjectId = val;
+            _configService.SaveConfig();
+        }
+
+        public string GetCloudApiKey() => _configService.Config.CloudApiKey;
+        public void SetCloudApiKey(string val)
+        {
+            _configService.Config.CloudApiKey = val;
             _configService.SaveConfig();
         }
     }

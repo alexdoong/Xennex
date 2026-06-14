@@ -22,6 +22,7 @@
                 <button class="tab-btn active" data-tab="osu">osu!</button>
                 <button class="tab-btn" data-tab="wuwa">WuWa</button>
                 <button class="tab-btn" data-tab="settings">Config</button>
+                <button class="tab-btn" data-tab="cloud">Cloud</button>
             </div>
 
             <!-- Osu Tab -->
@@ -67,6 +68,34 @@
                         <span class="slider"></span>
                     </div>
                 </label>
+            </div>
+
+            <!-- Cloud Tab -->
+            <div id="tab-cloud" class="tab-content">
+                <h2>Cloud Sync</h2>
+                <div class="card" style="margin-bottom: 16px;">
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+                        Connect to Firebase / Firestore to backup and synchronize your settings and WuWa builds across devices.
+                    </p>
+                    <div class="input-group">
+                        <label>Project ID</label>
+                        <input type="text" id="inp-cloud-project" placeholder="e.g. my-project-123" class="modern-input">
+                    </div>
+                    <div class="input-group">
+                        <label>API Key</label>
+                        <input type="password" id="inp-cloud-apikey" placeholder="AIzaSyB..." class="modern-input">
+                    </div>
+                </div>
+                
+                <div class="status-indicator">
+                    <div id="cloud-status-dot" class="dot"></div>
+                    <span id="cloud-status-text">Not Connected</span>
+                </div>
+                
+                <div class="button-group">
+                    <button id="btn-cloud-connect" class="btn primary">Connect</button>
+                    <button id="btn-cloud-disconnect" class="btn danger" style="display:none;">Disconnect</button>
+                </div>
             </div>
         </div>
         

@@ -53,8 +53,8 @@ namespace Xennex.UI
         private void InitializeApiBridge()
         {
             apiBridge = new ApiBridge(wacomService, realEngineService, configService);
-            apiBridge.MinimizeToTrayRequested = MinimizeToTray;
-            apiBridge.ShutdownRequested = ShutdownApp;
+            apiBridge.MinimizeToTrayRequested = () => this.WindowState = WindowState.Minimized;
+            apiBridge.ShutdownRequested = CloseRequestedFromWeb;
             apiBridge.ToggleSidebarModeRequested = ToggleSidebarMode;
             apiBridge.IsSidebarModeGetter = () => isSidebarMode;
         }
@@ -90,6 +90,18 @@ namespace Xennex.UI
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            // Restore position if valid
+            if (configService.Config.WindowLeft != -1 && configService.Config.WindowTop != -1)
+            {
+                this.Left = configService.Config.WindowLeft;
+                this.Top = configService.Config.WindowTop;
+            }
+            else
+            {
+                this.Left = (SystemParameters.WorkArea.Width - this.Width) / 2;
+                this.Top = (SystemParameters.WorkArea.Height - this.Height) / 2;
+            }
+
             slideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
             slideTimer.Tick += SlideTimer_Tick;
             slideTimer.Start();
@@ -108,6 +120,14 @@ namespace Xennex.UI
 
         private void ToggleSidebarMode()
         {
+            if (!isSidebarMode)
+            {
+                // Save current position before going into sidebar
+                configService.Config.WindowLeft = this.Left;
+                configService.Config.WindowTop = this.Top;
+                configService.SaveConfig();
+            }
+
             isSidebarMode = !isSidebarMode;
             if (isSidebarMode)
             {
@@ -119,8 +139,17 @@ namespace Xennex.UI
             else
             {
                 this.Topmost = false;
-                this.Left = (SystemParameters.WorkArea.Width - this.Width) / 2;
-                this.Top = (SystemParameters.WorkArea.Height - this.Height) / 2;
+                // Restore position
+                if (configService.Config.WindowLeft != -1 && configService.Config.WindowTop != -1)
+                {
+                    this.Left = configService.Config.WindowLeft;
+                    this.Top = configService.Config.WindowTop;
+                }
+                else
+                {
+                    this.Left = (SystemParameters.WorkArea.Width - this.Width) / 2;
+                    this.Top = (SystemParameters.WorkArea.Height - this.Height) / 2;
+                }
             }
             
             if (webView.CoreWebView2 != null)
@@ -204,8 +233,26 @@ namespace Xennex.UI
             this.Activate();
         }
 
+        private void CloseRequestedFromWeb()
+        {
+            if (configService.Config.CloseToTray)
+            {
+                MinimizeToTray();
+            }
+            else
+            {
+                ShutdownApp();
+            }
+        }
+
         private void ShutdownApp()
         {
+            if (!isSidebarMode)
+            {
+                configService.Config.WindowLeft = this.Left;
+                configService.Config.WindowTop = this.Top;
+                configService.SaveConfig();
+            }
             realEngineService.Stop();
             System.Windows.Application.Current.Shutdown();
         }
