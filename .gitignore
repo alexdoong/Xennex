@@ -58,6 +58,10 @@ nunit-*.xml
 
 # Custom rules for Xennex (Direct root compilation)
 *.exe
+*.dll
+*.deps.json
+*.runtimeconfig.json
+runtimes/
 config.txt
 team_config.txt
 wuwa_build.txt

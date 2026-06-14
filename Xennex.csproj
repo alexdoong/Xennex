@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <AssemblyName>Xennex</AssemblyName>
   </PropertyGroup>
 
@@ -14,9 +15,26 @@
 
   <Target Name="CopyExecutableToRoot" AfterTargets="Build">
     <Copy SourceFiles="$(TargetDir)Xennex.exe" DestinationFolder="$(MSBuildProjectDirectory)" />
+    <Copy SourceFiles="$(TargetDir)Xennex.dll" DestinationFolder="$(MSBuildProjectDirectory)" />
+    <Copy SourceFiles="$(TargetDir)Xennex.runtimeconfig.json" DestinationFolder="$(MSBuildProjectDirectory)" />
+    <Copy SourceFiles="$(TargetDir)Xennex.deps.json" DestinationFolder="$(MSBuildProjectDirectory)" />
+    <ItemGroup>
+      <Wv2Files Include="$(TargetDir)Microsoft.Web.WebView2*.dll" />
+      <Wv2Runtimes Include="$(TargetDir)runtimes\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(Wv2Files)" DestinationFolder="$(MSBuildProjectDirectory)" />
+    <Copy SourceFiles="@(Wv2Runtimes)" DestinationFiles="@(Wv2Runtimes->'$(MSBuildProjectDirectory)\runtimes\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="$(TargetDir)runtimes\win-x64\native\WebView2Loader.dll" DestinationFolder="$(MSBuildProjectDirectory)" Condition="Exists('$(TargetDir)runtimes\win-x64\native\WebView2Loader.dll')" />
   </Target>
 
   <ItemGroup>
-    <Reference Include="System.ServiceProcess" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="wwwroot\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>
