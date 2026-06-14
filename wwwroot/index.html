@@ -19,10 +19,10 @@
         <div id="content">
             <!-- Tabs -->
             <div class="tabs">
-                <button class="tab-btn active" data-tab="osu">osu!</button>
-                <button class="tab-btn" data-tab="wuwa">WuWa</button>
-                <button class="tab-btn" data-tab="settings">Config</button>
+                <button class="tab-btn active" data-tab="osu">Dashboard</button>
+                <button class="tab-btn" data-tab="wuwa-db">WuWa Database</button>
                 <button class="tab-btn" data-tab="cloud">Cloud</button>
+                <button class="tab-btn" data-tab="settings">Config</button>
             </div>
 
             <!-- Osu Tab -->
@@ -39,16 +39,31 @@
                     <span id="real-status-text">Stopped</span>
                 </div>
                 <div class="button-group">
-                    <button id="btn-start-real" class="btn primary">Start REAL</button>
-                    <button id="btn-stop-real" class="btn danger">Stop REAL</button>
+                    <button id="btn-start-real" class="btn primary">Start</button>
+                    <button id="btn-stop-real" class="btn danger">Stop</button>
                 </div>
             </div>
 
-            <!-- WuWa Tab -->
-            <div id="tab-wuwa" class="tab-content">
-                <h2>WuWa Builds</h2>
-                <div class="card">
-                    <p>Coming Soon (Visual UI in progress)</p>
+            <!-- WuWa Database Section -->
+            <div id="tab-wuwa-db" class="tab-content">
+                <div class="header-actions">
+                    <h2>Character Database</h2>
+                    <button class="btn secondary" id="btn-reload-db" style="font-size:12px; padding: 4px 8px;">Reload DB</button>
+                </div>
+                
+                <!-- Character Grid -->
+                <div id="character-grid" class="character-grid">
+                    <!-- Dynamically populated via JS -->
+                </div>
+
+                <!-- Detail Modal (Hidden by default) -->
+                <div id="character-detail-modal" class="modal-overlay" style="display: none;">
+                    <div class="modal-content glass-panel">
+                        <button class="btn-close" id="btn-close-modal">&times;</button>
+                        <div id="character-detail-body">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
                 </div>
             </div>
 

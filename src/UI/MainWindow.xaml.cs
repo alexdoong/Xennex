@@ -66,8 +66,10 @@ namespace Xennex.UI
             
             webView.CoreWebView2.AddHostObjectToScript("api", apiBridge);
             
-            string indexPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "index.html");
-            webView.CoreWebView2.Navigate("file:///" + indexPath.Replace("\\", "/"));
+            string wwwrootDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
+            webView.CoreWebView2.SetVirtualHostNameToFolderMapping("appassets", wwwrootDir, CoreWebView2HostResourceAccessKind.Allow);
+            
+            webView.CoreWebView2.Navigate("http://appassets/index.html");
             
             // Background is solid now to fix input bug
             webView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 14, 14, 16);
@@ -131,7 +133,8 @@ namespace Xennex.UI
             isSidebarMode = !isSidebarMode;
             if (isSidebarMode)
             {
-                // Compact: keep normal height, snap to middle-right of screen
+                // Compact: keep normal height, set width to 320, snap to middle-right of screen
+                this.Width = 320;
                 var scr = Screen.PrimaryScreen;
                 this.Left = scr.WorkingArea.Right - this.Width;
                 this.Topmost = true;
@@ -139,6 +142,8 @@ namespace Xennex.UI
             else
             {
                 this.Topmost = false;
+                this.Width = 800; // Expanded width for normal usage
+                
                 // Restore position
                 if (configService.Config.WindowLeft != -1 && configService.Config.WindowTop != -1)
                 {

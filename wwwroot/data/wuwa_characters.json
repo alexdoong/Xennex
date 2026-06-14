@@ -1,0 +1,58 @@
+[
+    {
+        "id": "rover_havoc",
+        "name": "Rover (Havoc)",
+        "rarity": 5,
+        "element": "Havoc",
+        "weapon": "Sword",
+        "portrait": "https://raw.githubusercontent.com/WutheringTools/wuthering-waves-assets/main/characters/RoverHavoc.png",
+        "stats_lvl90": {
+            "hp": 10825,
+            "atk": 413,
+            "def": 1259,
+            "crit_rate": 5.0,
+            "crit_dmg": 150.0
+        },
+        "build_recommendations": {
+            "best_echo_set": "Sun-sinking Eclipse",
+            "best_echo_main": "Dreamless",
+            "stat_priority": "Crit Rate / Crit DMG > ATK% > Energy Regen",
+            "cost_4_stat": "Crit Rate / Crit DMG",
+            "cost_3_stat": "Havoc DMG / ATK%",
+            "cost_1_stat": "ATK%"
+        },
+        "best_weapons": [
+            "Emerald of Genesis (5★)",
+            "Commando of Conviction (4★)",
+            "Lunar Cutter (4★)"
+        ]
+    },
+    {
+        "id": "yinlin",
+        "name": "Yinlin",
+        "rarity": 5,
+        "element": "Electro",
+        "weapon": "Rectifier",
+        "portrait": "https://raw.githubusercontent.com/WutheringTools/wuthering-waves-assets/main/characters/Yinlin.png",
+        "stats_lvl90": {
+            "hp": 9875,
+            "atk": 450,
+            "def": 1100,
+            "crit_rate": 5.0,
+            "crit_dmg": 150.0
+        },
+        "build_recommendations": {
+            "best_echo_set": "Void Thunder",
+            "best_echo_main": "Tempest Mephis",
+            "stat_priority": "Crit Rate / Crit DMG > ATK% > Resonance Skill DMG",
+            "cost_4_stat": "Crit Rate / Crit DMG",
+            "cost_3_stat": "Electro DMG",
+            "cost_1_stat": "ATK%"
+        },
+        "best_weapons": [
+            "Stringmaster (5★)",
+            "Cosmic Ripples (5★)",
+            "Augment (4★)"
+        ]
+    }
+]

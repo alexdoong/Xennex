@@ -23,15 +23,30 @@ const inpCloudProject = document.getElementById('inp-cloud-project');
 const inpCloudApiKey = document.getElementById('inp-cloud-apikey');
 const dragRegion = document.getElementById('drag-region');
 
-// Setup Tabs
-tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-        tabs.forEach(t => t.classList.remove('active'));
-        tabContents.forEach(c => c.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+    // WuWa DB Variables
+    let wuwaCharacters = [];
+    const characterGrid = document.getElementById('character-grid');
+    const detailModal = document.getElementById('character-detail-modal');
+    const detailBody = document.getElementById('character-detail-body');
+    const btnCloseModal = document.getElementById('btn-close-modal');
+    const btnReloadDb = document.getElementById('btn-reload-db');
+
+    // UI Event Listeners
+    tabs.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabs.forEach(b => b.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+            
+            btn.classList.add('active');
+            const target = btn.dataset.tab;
+            document.getElementById(`tab-${target}`).classList.add('active');
+
+            // Load DB if WuWa tab is selected and DB is empty
+            if (target === 'wuwa-db' && wuwaCharacters.length === 0) {
+                loadWuWaDatabase();
+            }
+        });
     });
-});
 
 // Cloud Mockup logic
 btnCloudConnect.addEventListener('click', async () => {
@@ -111,6 +126,94 @@ window.onload = async () => {
             api.SetHideSidebarPullTab(e.target.checked);
         });
     }
+
+    // ----------------------------------------------------
+    // WuWa Database Logic
+    // ----------------------------------------------------
+    async function loadWuWaDatabase() {
+        try {
+            // Load from local file
+            const response = await fetch('data/wuwa_characters.json');
+            if (response.ok) {
+                wuwaCharacters = await response.json();
+                renderCharacterGrid();
+            } else {
+                characterGrid.innerHTML = '<p>Failed to load database. File not found.</p>';
+            }
+        } catch (error) {
+            console.error('Error loading DB:', error);
+            characterGrid.innerHTML = `<p>Error loading database: ${error.message}</p>`;
+        }
+    }
+
+    function renderCharacterGrid() {
+        characterGrid.innerHTML = '';
+        wuwaCharacters.forEach(char => {
+            const card = document.createElement('div');
+            card.className = `char-card rarity-${char.rarity}`;
+            card.innerHTML = `
+                <img src="${char.portrait}" alt="${char.name}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzMzMyIvPjwvc3ZnPg=='" />
+                <div class="char-name">${char.name}</div>
+            `;
+            card.addEventListener('click', () => showCharacterDetail(char));
+            characterGrid.appendChild(card);
+        });
+    }
+
+    function showCharacterDetail(char) {
+        detailBody.innerHTML = `
+            <div class="detail-layout">
+                <div class="detail-portrait">
+                    <img src="${char.portrait}" alt="${char.name}" style="border: 2px solid ${char.rarity === 5 ? '#ffd700' : '#a335ee'};" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzMzMyIvPjwvc3ZnPg=='" />
+                </div>
+                <div class="detail-info">
+                    <h2>${char.name}</h2>
+                    <p><strong>Element:</strong> ${char.element}</p>
+                    <p><strong>Weapon:</strong> ${char.weapon}</p>
+                    <p><strong>Rarity:</strong> ${char.rarity}★</p>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-item"><span>HP</span> <span>${char.stats_lvl90.hp}</span></div>
+                        <div class="stat-item"><span>ATK</span> <span>${char.stats_lvl90.atk}</span></div>
+                        <div class="stat-item"><span>DEF</span> <span>${char.stats_lvl90.def}</span></div>
+                        <div class="stat-item"><span>Crit Rate</span> <span>${char.stats_lvl90.crit_rate}%</span></div>
+                        <div class="stat-item"><span>Crit DMG</span> <span>${char.stats_lvl90.crit_dmg}%</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="build-section">
+                <h3>Recommended Build</h3>
+                <p><strong>Best Echo Set:</strong> ${char.build_recommendations.best_echo_set}</p>
+                <p><strong>Main Echo:</strong> ${char.build_recommendations.best_echo_main}</p>
+                <p><strong>Stat Priority:</strong> ${char.build_recommendations.stat_priority}</p>
+                <p><strong>4-Cost:</strong> ${char.build_recommendations.cost_4_stat}</p>
+                <p><strong>3-Cost:</strong> ${char.build_recommendations.cost_3_stat}</p>
+                <p><strong>1-Cost:</strong> ${char.build_recommendations.cost_1_stat}</p>
+            </div>
+
+            <div class="build-section">
+                <h3>Top Weapons</h3>
+                <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text-muted);">
+                    ${char.best_weapons.map(w => `<li>${w}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+        detailModal.style.display = 'flex';
+    }
+
+    btnCloseModal.addEventListener('click', () => {
+        detailModal.style.display = 'none';
+    });
+    
+    // Close modal on click outside
+    detailModal.addEventListener('click', (e) => {
+        if (e.target === detailModal) detailModal.style.display = 'none';
+    });
+
+    btnReloadDb.addEventListener('click', () => {
+        loadWuWaDatabase();
+    });
 };
 
 // Update Handlers called from C#
