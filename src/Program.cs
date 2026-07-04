@@ -2,7 +2,7 @@ using System;
 using System.Windows;
 using Xennex.UI;
 
-namespace WacomRealController
+namespace Xennex
 {
     public class Program
     {

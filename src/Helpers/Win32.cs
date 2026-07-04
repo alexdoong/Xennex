@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace WacomRealController
+namespace Xennex
 {
     public static class Win32
     {

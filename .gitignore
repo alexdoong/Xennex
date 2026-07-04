@@ -56,14 +56,17 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 
-# Custom rules for Xennex (Direct root compilation)
+# Custom rules for Xennex
 *.exe
 *.dll
 *.deps.json
 *.runtimeconfig.json
 runtimes/
-config.txt
-team_config.txt
-wuwa_build.txt
-docs/
 Backup/
+
+# Application Data
+Data/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/

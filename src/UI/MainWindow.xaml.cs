@@ -5,7 +5,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using System.Windows.Interop;
 using Microsoft.Web.WebView2.Core;
-using WacomRealController;
+using Xennex; using Xennex.Services;
 using Xennex.Interop;
 using System.Drawing;
 using System.Windows.Forms;
@@ -26,9 +26,18 @@ namespace Xennex.UI
         public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
         [DllImport("user32.dll")]
         public static extern bool ReleaseCapture();
+        [DllImport("user32.dll")]
+        public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+        [DllImport("user32.dll")]
+        public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+        [DllImport("user32.dll")]
+        public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
 
         public const int WM_NCLBUTTONDOWN = 0xA1;
         public const int HT_CAPTION = 0x2;
+        public const int GWL_EXSTYLE = -20;
+        public const int WS_EX_LAYERED = 0x80000;
+        public const int LWA_COLORKEY = 1;
 
         private bool isSidebarMode = false;
         private bool isSlidOut = false;
@@ -71,8 +80,8 @@ namespace Xennex.UI
             
             webView.CoreWebView2.Navigate("http://appassets/index.html");
             
-            // Background is solid now to fix input bug
-            webView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 14, 14, 16);
+            // Background must match the LWA_COLORKEY (Magenta) to be perfectly transparent in Win32
+            webView.DefaultBackgroundColor = System.Drawing.Color.Magenta;
 
             // Handle script messages for window drag
             webView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
@@ -92,6 +101,13 @@ namespace Xennex.UI
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            // Configure window to use Magenta as transparent color key
+            // This fixes the WebView2 input bug where AllowsTransparency=True breaks clicks
+            var hwnd = new WindowInteropHelper(this).Handle;
+            int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+            SetLayeredWindowAttributes(hwnd, 0x00FF00FF, 0, LWA_COLORKEY); // 0x00FF00FF is Magenta in 0x00bbggrr
+
             // Restore position if valid
             if (configService.Config.WindowLeft != -1 && configService.Config.WindowTop != -1)
             {
@@ -120,31 +136,43 @@ namespace Xennex.UI
             statusTimer.Start();
         }
 
+        private double normalTop = 0;
+        private double normalHeight = 600;
+
         private void ToggleSidebarMode()
         {
             if (!isSidebarMode)
             {
-                // Save current position before going into sidebar
+                // Save current position and dimensions before going into sidebar
                 configService.Config.WindowLeft = this.Left;
                 configService.Config.WindowTop = this.Top;
                 configService.SaveConfig();
+
+                normalTop = this.Top;
+                normalHeight = this.Height;
             }
 
             isSidebarMode = !isSidebarMode;
             if (isSidebarMode)
             {
-                // Compact: keep normal height, set width to 320, snap to middle-right of screen
                 this.Width = 320;
                 var scr = Screen.PrimaryScreen;
-                this.Left = scr.WorkingArea.Right - this.Width;
+                
+                // Start fully hidden, then it will slide out if mouse is over, or stay hidden
+                this.Left = scr.WorkingArea.Right - 26;
                 this.Topmost = true;
+                
+                // Immediately shrink height if we are starting hidden
+                this.Height = 64;
+                this.Top = normalTop + (normalHeight - 64) / 2;
+                isSlidOut = true;
             }
             else
             {
                 this.Topmost = false;
-                this.Width = 800; // Expanded width for normal usage
+                this.Width = 800;
+                this.Height = normalHeight;
                 
-                // Restore position
                 if (configService.Config.WindowLeft != -1 && configService.Config.WindowTop != -1)
                 {
                     this.Left = configService.Config.WindowLeft;
@@ -180,14 +208,22 @@ namespace Xennex.UI
             {
                 if (configService.Config.HideSidebarPullTab)
                 {
-                    var edgeRect = new System.Drawing.Rectangle(scr.WorkingArea.Right - 10, scr.WorkingArea.Top, 10, scr.WorkingArea.Height);
+                    var edgeRect = new System.Drawing.Rectangle(scr.WorkingArea.Right - 10, (int)normalTop, 10, (int)normalHeight);
                     mouseOver = edgeRect.Contains(mouse);
                 }
                 else
                 {
-                    var pullTabRect = new System.Drawing.Rectangle(scr.WorkingArea.Right - 26, scr.WorkingArea.Top + (scr.WorkingArea.Height - 100) / 2, 26, 100);
-                    mouseOver = pullTabRect.Contains(mouse);
+                    // In slid-out state, the window is exactly 64px high, so just check the whole window
+                    mouseOver = windowRect.Contains(mouse);
                 }
+            }
+
+            // If mouse just hovered over the hidden tab, expand the window before sliding
+            if (mouseOver && isSlidOut)
+            {
+                this.Height = normalHeight;
+                this.Top = normalTop;
+                isSlidOut = false;
             }
 
             double dest = mouseOver ? destShow : destHide;
@@ -196,7 +232,13 @@ namespace Xennex.UI
             if (this.Left < dest)
             {
                 this.Left = Math.Min(dest, this.Left + SLIDE_SPEED);
-                if (this.Left == destHide) isSlidOut = true;
+                if (this.Left == destHide && !isSlidOut) 
+                {
+                    isSlidOut = true;
+                    // Shrink window height when fully hidden
+                    this.Height = 64;
+                    this.Top = normalTop + (normalHeight - 64) / 2;
+                }
             }
             else if (this.Left > dest)
             {

@@ -1,6 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
-using WacomRealController;
+using Xennex.Services;
 
 namespace Xennex.Interop
 {

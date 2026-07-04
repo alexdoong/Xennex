@@ -1,4 +1,4 @@
-namespace WacomRealController
+namespace Xennex
 {
     public class AppConfig
     {

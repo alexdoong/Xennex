@@ -13,19 +13,7 @@
     <None Remove="Backup\**" />
   </ItemGroup>
 
-  <Target Name="CopyExecutableToRoot" AfterTargets="Build">
-    <Copy SourceFiles="$(TargetDir)Xennex.exe" DestinationFolder="$(MSBuildProjectDirectory)" />
-    <Copy SourceFiles="$(TargetDir)Xennex.dll" DestinationFolder="$(MSBuildProjectDirectory)" />
-    <Copy SourceFiles="$(TargetDir)Xennex.runtimeconfig.json" DestinationFolder="$(MSBuildProjectDirectory)" />
-    <Copy SourceFiles="$(TargetDir)Xennex.deps.json" DestinationFolder="$(MSBuildProjectDirectory)" />
-    <ItemGroup>
-      <Wv2Files Include="$(TargetDir)Microsoft.Web.WebView2*.dll" />
-      <Wv2Runtimes Include="$(TargetDir)runtimes\**\*.*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(Wv2Files)" DestinationFolder="$(MSBuildProjectDirectory)" />
-    <Copy SourceFiles="@(Wv2Runtimes)" DestinationFiles="@(Wv2Runtimes->'$(MSBuildProjectDirectory)\runtimes\%(RecursiveDir)%(Filename)%(Extension)')" />
-    <Copy SourceFiles="$(TargetDir)runtimes\win-x64\native\WebView2Loader.dll" DestinationFolder="$(MSBuildProjectDirectory)" Condition="Exists('$(TargetDir)runtimes\win-x64\native\WebView2Loader.dll')" />
-  </Target>
+
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />

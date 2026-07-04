@@ -1,6 +1,6 @@
 using System;
 
-namespace WacomRealController
+namespace Xennex
 {
     public class WuWaSubstat
     {

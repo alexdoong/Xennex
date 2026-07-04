@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace WacomRealController
+namespace Xennex.Services
 {
     public class ConfigService
     {
-        private readonly string configPath = "config.txt";
-        private readonly string buildSavePath = "wuwa_build.txt";
+        private readonly string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "config.txt");
+        private readonly string buildSavePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "wuwa_build.txt");
 
         public AppConfig Config { get; private set; } = new AppConfig();
         public WuWaBuild Build { get; private set; } = new WuWaBuild();
