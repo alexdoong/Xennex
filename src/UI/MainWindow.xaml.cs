@@ -75,7 +75,11 @@ namespace Xennex.UI
             
             webView.CoreWebView2.AddHostObjectToScript("api", apiBridge);
             
-            string wwwrootDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
+            // Resolve the true executable directory, avoiding temp extraction folders used by SingleFile publish
+            string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+            string baseDir = System.IO.Path.GetDirectoryName(exePath);
+            string wwwrootDir = Path.Combine(baseDir, "wwwroot");
+            
             webView.CoreWebView2.SetVirtualHostNameToFolderMapping("appassets", wwwrootDir, CoreWebView2HostResourceAccessKind.Allow);
             
             webView.CoreWebView2.Navigate("http://appassets/index.html");
