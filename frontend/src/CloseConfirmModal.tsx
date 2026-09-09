@@ -1,8 +1,10 @@
-﻿import React from 'react';
+import React from 'react';
 import { Power, Minimize2 } from 'lucide-react';
 
 interface CloseConfirmModalProps {
   isOpen: boolean;
+  closeToTray: boolean;
+  onToggleCloseToTray: (val: boolean) => void;
   onClose: () => void;
   onMinimizeToTray: () => void;
   onExit: () => void;
@@ -10,6 +12,8 @@ interface CloseConfirmModalProps {
 
 const CloseConfirmModal: React.FC<CloseConfirmModalProps> = ({
   isOpen,
+  closeToTray,
+  onToggleCloseToTray,
   onClose,
   onMinimizeToTray,
   onExit
@@ -55,6 +59,21 @@ const CloseConfirmModal: React.FC<CloseConfirmModalProps> = ({
               <span>Encerra todos os processos e serviços em execução</span>
             </div>
           </button>
+        </div>
+
+        <div className="close-modal-toggle-row">
+          <div>
+            <span className="toggle-label">Fechar para a Bandeja por padrão</span>
+            <span className="toggle-sublabel">Sincronizado com a opção nas Configurações</span>
+          </div>
+          <label className="switch">
+            <input 
+              type="checkbox" 
+              checked={closeToTray} 
+              onChange={(e) => onToggleCloseToTray(e.target.checked)} 
+            />
+            <span className="slider"></span>
+          </label>
         </div>
 
         <div className="close-modal-footer">

@@ -24,6 +24,8 @@ namespace Xennex.Services
 
             configPath = Path.Combine(dataDir, "config.txt");
             buildSavePath = Path.Combine(dataDir, "wuwa_build.txt");
+
+            LoadConfig();
         }
 
         public event Action<string> OnLogReceived;
@@ -72,16 +74,66 @@ namespace Xennex.Services
         {
             if (string.IsNullOrWhiteSpace(item)) return;
 
-            if (item.StartsWith("CloseToTray=")) { Config.CloseToTray = item.EndsWith("true"); return; }
-            if (item.StartsWith("AutoStart=")) { Config.AutoStart = item.EndsWith("true"); return; }
-            if (item.StartsWith("HideSidebarPullTab=")) { Config.HideSidebarPullTab = item.EndsWith("true"); return; }
-            if (item.StartsWith("SidebarPosition=")) { Config.SidebarPosition = item.Substring("SidebarPosition=".Length); return; }
-            if (item.StartsWith("SidebarMonitor=") && int.TryParse(item.Substring("SidebarMonitor=".Length), out int sm)) { Config.SidebarMonitorIndex = sm; return; }
-            if (item.StartsWith("HandMotionCameraIndex=") && int.TryParse(item.Substring("HandMotionCameraIndex=".Length), out int hm)) { Config.HandMotionCameraIndex = hm; return; }
-            if (item.StartsWith("WindowLeft=") && double.TryParse(item.Substring("WindowLeft=".Length), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double wl)) { Config.WindowLeft = wl; return; }
-            if (item.StartsWith("WindowTop=") && double.TryParse(item.Substring("WindowTop=".Length), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double wt)) { Config.WindowTop = wt; return; }
-            if (item.StartsWith("AutoHideSidebar=")) { Config.AutoHideSidebar = item.EndsWith("true"); return; }
-            if (item.StartsWith("AutoHideTitlebar=")) { Config.AutoHideTitlebar = item.EndsWith("true"); return; }
+            if (item.StartsWith("CloseToTray=", StringComparison.OrdinalIgnoreCase))
+            {
+                if (bool.TryParse(item.Substring("CloseToTray=".Length).Trim(), out bool val))
+                    Config.CloseToTray = val;
+                return;
+            }
+            if (item.StartsWith("AutoStart=", StringComparison.OrdinalIgnoreCase))
+            {
+                if (bool.TryParse(item.Substring("AutoStart=".Length).Trim(), out bool val))
+                    Config.AutoStart = val;
+                return;
+            }
+            if (item.StartsWith("HideSidebarPullTab=", StringComparison.OrdinalIgnoreCase))
+            {
+                if (bool.TryParse(item.Substring("HideSidebarPullTab=".Length).Trim(), out bool val))
+                    Config.HideSidebarPullTab = val;
+                return;
+            }
+            if (item.StartsWith("SidebarPosition=", StringComparison.OrdinalIgnoreCase))
+            {
+                Config.SidebarPosition = item.Substring("SidebarPosition=".Length).Trim();
+                return;
+            }
+            if (item.StartsWith("SidebarMonitor=", StringComparison.OrdinalIgnoreCase) && int.TryParse(item.Substring("SidebarMonitor=".Length).Trim(), out int sm))
+            {
+                Config.SidebarMonitorIndex = sm;
+                return;
+            }
+            if (item.StartsWith("HandMotionCameraIndex=", StringComparison.OrdinalIgnoreCase) && int.TryParse(item.Substring("HandMotionCameraIndex=".Length).Trim(), out int hm))
+            {
+                Config.HandMotionCameraIndex = hm;
+                return;
+            }
+            if (item.StartsWith("WindowLeft=", StringComparison.OrdinalIgnoreCase) && double.TryParse(item.Substring("WindowLeft=".Length).Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double wl))
+            {
+                Config.WindowLeft = wl;
+                return;
+            }
+            if (item.StartsWith("WindowTop=", StringComparison.OrdinalIgnoreCase) && double.TryParse(item.Substring("WindowTop=".Length).Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double wt))
+            {
+                Config.WindowTop = wt;
+                return;
+            }
+            if (item.StartsWith("AutoHideSidebar=", StringComparison.OrdinalIgnoreCase))
+            {
+                if (bool.TryParse(item.Substring("AutoHideSidebar=".Length).Trim(), out bool val))
+                    Config.AutoHideSidebar = val;
+                return;
+            }
+            if (item.StartsWith("AutoHideTitlebar=", StringComparison.OrdinalIgnoreCase))
+            {
+                if (bool.TryParse(item.Substring("AutoHideTitlebar=".Length).Trim(), out bool val))
+                    Config.AutoHideTitlebar = val;
+                return;
+            }
+            if (item.StartsWith("ActiveSkin=", StringComparison.OrdinalIgnoreCase))
+            {
+                Config.ActiveSkin = item.Substring("ActiveSkin=".Length).Trim();
+                return;
+            }
         }
 
         public void SaveConfig()

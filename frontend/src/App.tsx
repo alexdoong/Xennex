@@ -27,6 +27,9 @@ const App: React.FC = () => {
   // Skin Configuration State
   const [skinConfig, setSkinConfig] = useState<SkinConfig | null>(null);
 
+  // Close & Tray State
+  const [closeToTray, setCloseToTray] = useState(false);
+
   // Auto-hide States
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [isTitlebarHovered, setIsTitlebarHovered] = useState(false);
@@ -71,6 +74,7 @@ const App: React.FC = () => {
     window.showCloseModal = () => setShowCloseConfirm(true);
 
     if (api) {
+      api.GetCloseToTray().then(val => setCloseToTray(val));
       api.GetSidebarPosition().then(pos => setSidebarPosition(pos || 'MiddleRight'));
       api.GetAutoHideSidebar().then(val => setAutoHideSidebar(val));
       api.GetAutoHideTitlebar().then(val => setAutoHideTitlebar(val));
@@ -288,6 +292,8 @@ const App: React.FC = () => {
                 setAutoHideSidebar={setAutoHideSidebar}
                 autoHideTitlebar={autoHideTitlebar}
                 setAutoHideTitlebar={setAutoHideTitlebar}
+                closeToTray={closeToTray}
+                setCloseToTray={setCloseToTray}
                 onSkinUpdated={(cfg) => {
                   const normalized = normalizeSkinConfig(cfg);
                   setSkinConfig(normalized);
@@ -301,6 +307,11 @@ const App: React.FC = () => {
         {/* Modal de Confirmação ao Fechar */}
         <CloseConfirmModal 
           isOpen={showCloseConfirm}
+          closeToTray={closeToTray}
+          onToggleCloseToTray={(val) => {
+            setCloseToTray(val);
+            api?.SetCloseToTray(val);
+          }}
           onClose={() => setShowCloseConfirm(false)}
           onMinimizeToTray={() => {
             setShowCloseConfirm(false);

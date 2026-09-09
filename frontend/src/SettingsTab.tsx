@@ -9,6 +9,8 @@ interface SettingsTabProps {
   setAutoHideSidebar: (val: boolean) => void;
   autoHideTitlebar: boolean;
   setAutoHideTitlebar: (val: boolean) => void;
+  closeToTray: boolean;
+  setCloseToTray: (val: boolean) => void;
   onSkinUpdated?: (config: SkinConfig) => void;
 }
 
@@ -18,9 +20,10 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   setAutoHideSidebar,
   autoHideTitlebar,
   setAutoHideTitlebar,
+  closeToTray,
+  setCloseToTray,
   onSkinUpdated
 }) => {
-  const [closeToTray, setCloseToTray] = useState(true);
   const [sidebarPosition, setSidebarPosition] = useState('MiddleRight');
   const [availableSkins, setAvailableSkins] = useState<string[]>([]);
   const [activeSkin, setActiveSkin] = useState<string>('default');
@@ -36,7 +39,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   useEffect(() => {
     const loadSettings = async () => {
       if (api) {
-        setCloseToTray(await api.GetCloseToTray());
+        // closeToTray passed as prop
         setSidebarPosition(await api.GetSidebarPosition());
         const skins = await api.GetAvailableSkins();
         setAvailableSkins(skins);

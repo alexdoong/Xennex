@@ -85,8 +85,8 @@ namespace Xennex.UI
         {
             apiBridge = new ApiBridge(wacomService, realEngineService, handMotionService, configService, skinService, streamService)
             {
-                MinimizeToTrayRequested = () => this.WindowState = WindowState.Minimized,
-                ShutdownRequested = CloseRequestedFromWeb,
+                MinimizeToTrayRequested = MinimizeToTray,
+                ShutdownRequested = ShutdownApp,
                 ToggleSidebarModeRequested = () => sidebarService.ToggleSidebarMode(),
                 IsSidebarModeGetter = () => sidebarService.IsSidebarMode,
                 SidebarPositionChangedRequested = () => sidebarService.OnSidebarPositionChanged()
@@ -272,20 +272,8 @@ namespace Xennex.UI
             }
         }
 
-        private void CloseRequestedFromWeb()
-        {
-            if (configService.Config.CloseToTray)
-            {
-                MinimizeToTray();
-                return;
-            }
-
-            ShutdownApp();
-        }
-
         private void ShutdownApp()
         {
-            System.IO.File.AppendAllText("startup.log", $"[{DateTime.Now}] ShutdownApp called! StackTrace: {Environment.StackTrace}\n");
             isForceExiting = true;
 
             if (!sidebarService.IsSidebarMode)
@@ -308,7 +296,6 @@ namespace Xennex.UI
 
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            System.IO.File.AppendAllText("startup.log", $"[{DateTime.Now}] MainWindow_Closing fired! isForceExiting={isForceExiting}\n");
             if (isForceExiting)
             {
                 if (!sidebarService.IsSidebarMode)
