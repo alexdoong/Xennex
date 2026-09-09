@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Script automatizado de empacotamento do Xennex para distribuicao universal ("Normie PC").
+    Script automatizado e infalivel de empacotamento do Xennex para distribuicao universal ("Normie PC").
 .DESCRIPTION
-    Compila o frontend, valida todos os assets, publica o C# em modo Self-Contained,
-    inclui WebView2Loader.dll, copia configuracoes limpas, assina o executavel
-    e compacta em um arquivo .zip pronto para o GitHub Releases.
+    Compila o frontend, valida o bundle JS exato referenciado pelo index.html, publica o C#
+    em modo Self-Contained, garante a copia plana (sem aninhamento wwwroot\wwwroot),
+    inclui WebView2Loader.dll, assina digitalmente e compacta em ZIP.
 #>
 
 param(
@@ -36,24 +36,38 @@ finally {
 # 2. Validacao rigorosa dos arquivos em wwwroot
 Write-Host "`n[2/6] Validando integridade dos assets do wwwroot..." -ForegroundColor Yellow
 $wwwroot = Join-Path $rootDir "wwwroot"
-$assetsDir = Join-Path $wwwroot "assets"
-
 $indexHtml = Join-Path $wwwroot "index.html"
 if (-not (Test-Path $indexHtml)) {
     throw "FALHA CRITICA: wwwroot/index.html nao foi encontrado!"
 }
 
-$jsFiles = Get-ChildItem -Path $assetsDir -Filter "index-*.js" -ErrorAction SilentlyContinue
-if (-not $jsFiles -or $jsFiles.Count -eq 0) {
-    throw "FALHA CRITICA: Nenhum bundle JS (index-*.js) foi encontrado em wwwroot/assets!"
+$htmlContent = Get-Content $indexHtml -Raw
+if ($htmlContent -notmatch 'src="/assets/(index-[^"]+\.js)"') {
+    throw "FALHA CRITICA: index.html nao contem referencia para /assets/index-*.js!"
 }
-Write-Host " -> Bundle JS verificado: $($jsFiles[0].Name) ($([math]::Round($jsFiles[0].Length / 1KB, 1)) KB)" -ForegroundColor Green
+$expectedJs = $matches[1]
 
-$cssFiles = Get-ChildItem -Path $assetsDir -Filter "index-*.css" -ErrorAction SilentlyContinue
-if (-not $cssFiles -or $cssFiles.Count -eq 0) {
-    throw "FALHA CRITICA: Nenhum bundle CSS (index-*.css) foi encontrado em wwwroot/assets!"
+if ($htmlContent -notmatch 'href="/assets/(index-[^"]+\.css)"') {
+    throw "FALHA CRITICA: index.html nao contem referencia para /assets/index-*.css!"
 }
-Write-Host " -> Bundle CSS verificado: $($cssFiles[0].Name) ($([math]::Round($cssFiles[0].Length / 1KB, 1)) KB)" -ForegroundColor Green
+$expectedCss = $matches[1]
+
+$jsPath = Join-Path (Join-Path $wwwroot "assets") $expectedJs
+if (-not (Test-Path $jsPath)) {
+    throw "FALHA CRITICA: O arquivo JavaScript '$expectedJs' referenciado pelo index.html nao existe em wwwroot/assets!"
+}
+$jsSizeKb = [math]::Round((Get-Item $jsPath).Length / 1KB, 1)
+if ($jsSizeKb -lt 50) {
+    throw "FALHA CRITICA: O bundle JavaScript '$expectedJs' parece corrompido (tamanho $jsSizeKb KB < 50 KB)!"
+}
+Write-Host " -> Bundle JS verificado: $expectedJs ($jsSizeKb KB)" -ForegroundColor Green
+
+$cssPath = Join-Path (Join-Path $wwwroot "assets") $expectedCss
+if (-not (Test-Path $cssPath)) {
+    throw "FALHA CRITICA: O arquivo CSS '$expectedCss' nao existe em wwwroot/assets!"
+}
+$cssSizeKb = [math]::Round((Get-Item $cssPath).Length / 1KB, 1)
+Write-Host " -> Bundle CSS verificado: $expectedCss ($cssSizeKb KB)" -ForegroundColor Green
 
 # 3. Publicar .NET Self-Contained
 Write-Host "`n[3/6] Publicando executavel .NET 8 Self-Contained (Win-x64)..." -ForegroundColor Yellow
@@ -74,7 +88,7 @@ if ($LASTEXITCODE -ne 0) {
 # Remover .pdb
 Get-ChildItem -Path $stagingDir -Filter "*.pdb" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
 
-# 4. Incluir WebView2Loader.dll, scripts e Data limpo
+# 4. Montar pacote de forma plana e limpa (sem aninhamento wwwroot\wwwroot)
 Write-Host "`n[4/6] Montando pacote e dependencias nativas..." -ForegroundColor Yellow
 
 # Copiar WebView2Loader.dll para a raiz do staging
@@ -83,21 +97,41 @@ if (Test-Path $nativeDll) {
     Copy-Item $nativeDll (Join-Path $stagingDir "WebView2Loader.dll") -Force
     Write-Host " -> WebView2Loader.dll copiado com sucesso." -ForegroundColor Green
 } else {
-    Write-Warning "WebView2Loader.dll nao encontrado no caminho de runtimes. Tentando buscar recursivamente..."
     $foundDll = Get-ChildItem -Path (Join-Path $rootDir "bin") -Filter "WebView2Loader.dll" -Recurse | Select-Object -First 1
     if ($foundDll) {
         Copy-Item $foundDll.FullName (Join-Path $stagingDir "WebView2Loader.dll") -Force
+        Write-Host " -> WebView2Loader.dll encontrado e copiado." -ForegroundColor Green
     }
 }
 
-# Copiar wwwroot completo
-Copy-Item -Recurse -Path $wwwroot -Destination (Join-Path $stagingDir "wwwroot") -Force
-Write-Host " -> Pasta wwwroot completa copiada." -ForegroundColor Green
+# Limpar qualquer wwwroot residual criado pelo dotnet publish no staging
+$stagingWwwroot = Join-Path $stagingDir "wwwroot"
+if (Test-Path $stagingWwwroot) {
+    Remove-Item -Recurse -Force $stagingWwwroot
+}
+New-Item -ItemType Directory -Path $stagingWwwroot -Force | Out-Null
+
+# Copiar conteudo do wwwroot para staging\wwwroot
+Copy-Item -Recurse -Path "$wwwroot\*" -Destination "$stagingWwwroot\" -Force
+
+# Validar que NAO existe aninhamento wwwroot\wwwroot
+if (Test-Path (Join-Path $stagingWwwroot "wwwroot")) {
+    throw "FALHA CRITICA: Ocorreu aninhamento indevido de wwwroot\wwwroot no pacote de distribuicao!"
+}
+
+# Validar que o JS e CSS estao fisicamente presentes no staging
+$stagingJs = Join-Path (Join-Path $stagingWwwroot "assets") $expectedJs
+if (-not (Test-Path $stagingJs)) {
+    throw "FALHA CRITICA: O arquivo JavaScript '$expectedJs' nao foi encontrado no staging de distribuicao!"
+}
+Write-Host " -> wwwroot validado com sucesso no pacote final ($expectedJs presente)." -ForegroundColor Green
 
 # Copiar scripts
 $scriptsDir = Join-Path $rootDir "scripts"
 if (Test-Path $scriptsDir) {
-    Copy-Item -Recurse -Path $scriptsDir -Destination (Join-Path $stagingDir "scripts") -Force
+    $stagingScripts = Join-Path $stagingDir "scripts"
+    New-Item -ItemType Directory -Path $stagingScripts -Force | Out-Null
+    Copy-Item -Recurse -Path "$scriptsDir\*" -Destination "$stagingScripts\" -Force
     Write-Host " -> Scripts copiados." -ForegroundColor Green
 }
 
@@ -147,7 +181,6 @@ if (Test-Path $zipPath) {
     Remove-Item -Force $zipPath
 }
 
-# Também salvar pasta descompactada para conveniência
 $folderName = "Xennex-v$Version-win64"
 $finalFolder = Join-Path $backupDir $folderName
 if (Test-Path $finalFolder) {
@@ -165,7 +198,7 @@ $zipSizeMb = [math]::Round($zipItem.Length / 1MB, 1)
 $hash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash
 
 Write-Host "`n======================================================" -ForegroundColor Green
-Write-Host "   PACOTE GERADO COM SUCESSO!                        " -ForegroundColor Green
+Write-Host "   PACOTE GERADO E VALIDADO COM SUCESSO!             " -ForegroundColor Green
 Write-Host "======================================================" -ForegroundColor Green
 Write-Host " Arquivo:  $zipPath" -ForegroundColor White
 Write-Host " Tamanho:  $zipSizeMb MB" -ForegroundColor White

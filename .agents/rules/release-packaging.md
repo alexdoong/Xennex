@@ -49,3 +49,9 @@ Xennex-vX.Y.Z-win64/
   powershell -ExecutionPolicy Bypass -File scripts/package_release.ps1 -Version "X.Y.Z"
   ```
 - O script realiza todas as validações de integridade, compilação, assinatura e compactação em `Backup/Xennex-vX.Y.Z-win64.zip`.
+
+### 7. Prevenção de Aninhamento Indevido (PowerShell Copy-Item Gotcha)
+- No PowerShell, quando o `dotnet publish` já cria a pasta `wwwroot` no diretório de destino, executar `Copy-Item -Recurse -Path $wwwroot -Destination $dest\wwwroot` faz o PowerShell criar uma subpasta aninhada `wwwroot\wwwroot`!
+- Isso faz com que a pasta `wwwroot` raiz fique sem o arquivo JavaScript novo, quebrando o carregamento da interface.
+- **Regra**: O script de empacotamento deve SEMPRE excluir qualquer `wwwroot` gerado previamente pelo `dotnet publish`, criar a pasta limpa e copiar o conteúdo com `Copy-Item -Path "$wwwroot\*" -Destination "$dest\wwwroot\"`.
+- É obrigatório validar programaticamente que `wwwroot\wwwroot` NÃO existe e que o arquivo JS referenciado pelo `index.html` existe e possui tamanho > 50 KB no pacote final.
