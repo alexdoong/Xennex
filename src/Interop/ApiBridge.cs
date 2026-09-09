@@ -14,13 +14,14 @@ namespace Xennex.Interop
         private SkinService _skinService;
         private HandMotionService _handMotionService;
         private StreamService _streamService;
+        private UpdateService _updateService;
         public Action MinimizeToTrayRequested;
         public Action ShutdownRequested;
         public Action ToggleSidebarModeRequested;
         public Action SidebarPositionChangedRequested;
         public Func<bool> IsSidebarModeGetter;
 
-        public ApiBridge(WacomService wacomService, RealEngineService realEngineService, HandMotionService handMotionService, ConfigService configService, SkinService skinService, StreamService streamService)
+        public ApiBridge(WacomService wacomService, RealEngineService realEngineService, HandMotionService handMotionService, ConfigService configService, SkinService skinService, StreamService streamService, UpdateService updateService = null)
         {
             _wacomService = wacomService;
             _realEngineService = realEngineService;
@@ -28,6 +29,7 @@ namespace Xennex.Interop
             _configService = configService;
             _skinService = skinService;
             _streamService = streamService;
+            _updateService = updateService ?? new UpdateService();
         }
 
         // Wacom
@@ -141,5 +143,12 @@ namespace Xennex.Interop
             }
             catch { }
         }
+
+        // Updates & Versioning
+        public string GetAppVersion() => UpdateService.CurrentVersion;
+        public async System.Threading.Tasks.Task<string> CheckForUpdates() =>
+            System.Text.Json.JsonSerializer.Serialize(await _updateService.CheckForUpdatesAsync());
+        public async System.Threading.Tasks.Task<bool> StartAutoUpdate(string downloadUrl) =>
+            await _updateService.StartAutoUpdateAsync(downloadUrl);
     }
 }

@@ -23,6 +23,7 @@ namespace Xennex.UI
         private readonly StreamService streamService;
         private readonly LocalWebServer localWebServer;
         private readonly SidebarService sidebarService;
+        private readonly UpdateService updateService;
         private ApiBridge apiBridge;
         private NotifyIcon notifyIcon;
         private DispatcherTimer statusTimer;
@@ -67,6 +68,7 @@ namespace Xennex.UI
             skinService = new SkinService(configService);
             streamService = new StreamService();
             sidebarService = new SidebarService(this, configService, OnSidebarModeChanged);
+            updateService = new UpdateService();
 
             string baseDir = AppContext.BaseDirectory;
             string wwwDir = Path.Combine(baseDir, "wwwroot");
@@ -83,7 +85,7 @@ namespace Xennex.UI
 
         private void InitializeApiBridge()
         {
-            apiBridge = new ApiBridge(wacomService, realEngineService, handMotionService, configService, skinService, streamService)
+            apiBridge = new ApiBridge(wacomService, realEngineService, handMotionService, configService, skinService, streamService, updateService)
             {
                 MinimizeToTrayRequested = MinimizeToTray,
                 ShutdownRequested = ShutdownApp,

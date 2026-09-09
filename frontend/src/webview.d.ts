@@ -72,6 +72,9 @@ declare global {
             CloseStreamViewer(roomId: string): Promise<boolean>;
             SetViewerAlwaysOnTop(roomId: string, val: boolean): Promise<boolean>;
             OpenBrowser(url: string): Promise<void>;
+            GetAppVersion(): Promise<string>;
+            CheckForUpdates(): Promise<string>;
+            StartAutoUpdate(downloadUrl: string): Promise<boolean>;
           };
         };
       };

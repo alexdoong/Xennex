@@ -6,6 +6,6 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: '../wwwroot',
-    emptyOutDir: true
+    emptyOutDir: false
   }
 })

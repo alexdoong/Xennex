@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { SkinConfig } from './webview';
 import SkinEditorModal from './SkinEditorModal';
-import { Palette, Plus, FolderOpen, RotateCcw, X, Check } from 'lucide-react';
+import { Palette, Plus, FolderOpen, RotateCcw, X, Check, RefreshCw, Download, ExternalLink, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface SettingsTabProps {
   sidebarMode: boolean;
@@ -34,6 +34,12 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [newSkinNameInput, setNewSkinNameInput] = useState('');
   const [skinErrorMsg, setSkinErrorMsg] = useState('');
 
+  // Version & Updates State
+  const [appVersion, setAppVersion] = useState('v0.2.0');
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'updating' | 'error'>('idle');
+  const [updateData, setUpdateData] = useState<any>(null);
+  const [updateMessage, setUpdateMessage] = useState('');
+
   const api = window.chrome?.webview?.hostObjects?.api;
 
   useEffect(() => {
@@ -45,6 +51,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         setAvailableSkins(skins);
         const currentActive = await api.GetActiveSkin();
         setActiveSkin(currentActive || 'default');
+        if (api && api.GetAppVersion) {
+          api.GetAppVersion().then((v: string) => setAppVersion(v || 'v0.2.0'));
+        }
       }
     };
     loadSettings();
@@ -100,6 +109,46 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           console.error('Reload skin error:', err);
         }
       }
+    }
+  };
+
+  
+  const handleCheckUpdate = async () => {
+    if (!api || !api.CheckForUpdates) return;
+    setUpdateStatus('checking');
+    setUpdateMessage('');
+    try {
+      const json = await api.CheckForUpdates();
+      const res = JSON.parse(json);
+      setUpdateData(res);
+      if (!res.Success) {
+        setUpdateStatus('error');
+        setUpdateMessage(res.ErrorMessage || 'Erro ao consultar atualizações.');
+      } else if (res.HasUpdate) {
+        setUpdateStatus('available');
+      } else {
+        setUpdateStatus('up-to-date');
+        setUpdateMessage(res.ErrorMessage || 'Você já está utilizando a versão mais recente.');
+      }
+    } catch (e: any) {
+      setUpdateStatus('error');
+      setUpdateMessage('Falha ao conectar com o GitHub.');
+    }
+  };
+
+  const handleStartAutoUpdate = async () => {
+    if (!api || !api.StartAutoUpdate || !updateData?.DownloadUrl) return;
+    setUpdateStatus('updating');
+    setUpdateMessage('Baixando e instalando nova versão... O app será reiniciado em instantes.');
+    try {
+      const ok = await api.StartAutoUpdate(updateData.DownloadUrl);
+      if (!ok) {
+        setUpdateStatus('error');
+        setUpdateMessage('Falha ao baixar atualização. Você pode baixar manualmente pelo GitHub.');
+      }
+    } catch (e) {
+      setUpdateStatus('error');
+      setUpdateMessage('Erro ao aplicar atualização automática.');
     }
   };
 
@@ -277,6 +326,153 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
               Recarregar
             </button>
           </div>
+        </div>
+
+
+        {/* Version & Updates Card */}
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '40px', height: '40px', borderRadius: '12px',
+                background: 'rgba(255, 255, 255, 0.06)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <Sparkles size={20} color="var(--primary)" />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px' }}>Sobre o Xennex</h3>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: '6px',
+                    fontSize: '12px', fontWeight: 600,
+                    background: 'rgba(139, 92, 246, 0.2)', color: 'var(--primary)',
+                    border: '1px solid rgba(139, 92, 246, 0.3)'
+                  }}>
+                    {appVersion}
+                  </span>
+                </div>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  HUD & Gaming Companion por Alex Doong
+                </span>
+              </div>
+            </div>
+
+            <button
+              className="btn"
+              onClick={handleCheckUpdate}
+              disabled={updateStatus === 'checking' || updateStatus === 'updating'}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <RefreshCw size={16} className={updateStatus === 'checking' ? 'spin' : ''} />
+              {updateStatus === 'checking' ? 'Verificando...' : 'Verificar Atualizações'}
+            </button>
+          </div>
+
+          {/* Update Status Feedback */}
+          {updateStatus === 'up-to-date' && (
+            <div style={{
+              padding: '12px 16px', borderRadius: '10px',
+              background: 'rgba(34, 197, 94, 0.1)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              display: 'flex', alignItems: 'center', gap: '10px',
+              color: 'hsl(142, 70%, 65%)', fontSize: '13px'
+            }}>
+              <ShieldCheck size={18} />
+              <span>{updateMessage}</span>
+            </div>
+          )}
+
+          {updateStatus === 'error' && (
+            <div style={{
+              padding: '12px 16px', borderRadius: '10px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              color: 'hsl(0, 80%, 75%)', fontSize: '13px'
+            }}>
+              <span>{updateMessage}</span>
+              <button
+                className="btn"
+                style={{ padding: '4px 10px', fontSize: '12px' }}
+                onClick={() => api?.OpenBrowser('https://github.com/alexdoong/Xennex/releases')}
+              >
+                Abrir GitHub
+              </button>
+            </div>
+          )}
+
+          {updateStatus === 'updating' && (
+            <div style={{
+              padding: '14px 16px', borderRadius: '10px',
+              background: 'rgba(139, 92, 246, 0.15)',
+              border: '1px solid var(--primary)',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              fontSize: '13px'
+            }}>
+              <RefreshCw size={18} className="spin" color="var(--primary)" />
+              <span>{updateMessage}</span>
+            </div>
+          )}
+
+          {updateStatus === 'available' && updateData && (
+            <div style={{
+              padding: '16px', borderRadius: '12px',
+              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(59, 130, 246, 0.1))',
+              border: '1px solid var(--primary)',
+              display: 'flex', flexDirection: 'column', gap: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '15px', fontWeight: 600 }}>Nova versão disponível:</span>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: '6px',
+                    fontSize: '13px', fontWeight: 700,
+                    background: 'var(--primary)', color: '#fff'
+                  }}>
+                    {updateData.LatestVersion}
+                  </span>
+                </div>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {updateData.ReleaseTitle}
+                </span>
+              </div>
+
+              {updateData.ReleaseNotes && (
+                <div style={{
+                  padding: '10px 12px', borderRadius: '8px',
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  fontSize: '12px', color: 'var(--text-secondary)',
+                  maxHeight: '100px', overflowY: 'auto', whiteSpace: 'pre-wrap'
+                }}>
+                  {updateData.ReleaseNotes}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                {updateData.DownloadUrl && (
+                  <button
+                    className="btn primary"
+                    onClick={handleStartAutoUpdate}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}
+                  >
+                    <Download size={16} />
+                    Atualizar Agora Automaticamente
+                  </button>
+                )}
+
+                <button
+                  className="btn"
+                  onClick={() => api?.OpenBrowser(updateData.HtmlUrl || 'https://github.com/alexdoong/Xennex/releases')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <ExternalLink size={16} />
+                  Ver no GitHub
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
