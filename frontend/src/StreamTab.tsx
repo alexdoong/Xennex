@@ -161,17 +161,38 @@ const StreamTab: React.FC = () => {
         videoConstraints.height = { ideal: res.height };
       }
       if (selectedFps > 0) {
-        videoConstraints.frameRate = { ideal: selectedFps, max: selectedFps };
+        videoConstraints.frameRate = {
+          ideal: selectedFps,
+          max: selectedFps,
+          min: Math.min(30, selectedFps)
+        };
+      } else {
+        // Modo Ilimitado / High Refresh Rate (120Hz / 144Hz)
+        videoConstraints.frameRate = { ideal: 144, min: 60 };
       }
 
-      const stream = await mediaDevices.getDisplayMedia({
-        video: videoConstraints,
+      const stream = await (mediaDevices as any).getDisplayMedia({
+        video: {
+          ...videoConstraints,
+          cursor: 'always',
+          displaySurface: 'monitor'
+        },
         audio: captureAudio ? {
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false
-        } : false
-      });
+          autoGainControl: false,
+          channelCount: 2,
+          sampleRate: 48000
+        } : false,
+        systemAudio: 'include',
+        selfBrowserSurface: 'exclude'
+      } as any);
+
+      // Destrava o encoder de video do Chromium para modo motion (60 FPS fluido em jogos)
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack && 'contentHint' in videoTrack) {
+        videoTrack.contentHint = 'motion';
+      }
 
       localStreamRef.current = stream;
 
@@ -212,6 +233,38 @@ const StreamTab: React.FC = () => {
         call.answer(stream);
         activeCallsRef.current.push(call);
         setViewerCount(activeCallsRef.current.length);
+
+        // Otimizacao WebRTC RTCRtpSender para 60 FPS e Bitrate Elevado (15 a 25 Mbps)
+        const tuneSenders = () => {
+          try {
+            const pc = (call as any).peerConnection as RTCPeerConnection;
+            if (!pc) return;
+            pc.getSenders().forEach((sender) => {
+              if (sender.track && sender.track.kind === 'video') {
+                const params = sender.getParameters();
+                if (!params.encodings || params.encodings.length === 0) {
+                  params.encodings = [{}];
+                }
+                const targetBitrate = selectedFps === 0 ? 25_000_000 : (selectedFps >= 60 ? 15_000_000 : 8_000_000);
+                params.encodings[0].maxBitrate = targetBitrate;
+                params.encodings[0].networkPriority = 'high';
+                // Garante que o WebRTC nunca derrube os 60 FPS mesmo sob variacao de rede
+                params.degradationPreference = 'maintain-framerate';
+                sender.setParameters(params).catch(() => {});
+              }
+            });
+          } catch (e) {
+            console.warn('[Host] Senders tuning error:', e);
+          }
+        };
+
+        tuneSenders();
+        const pc = (call as any).peerConnection as RTCPeerConnection;
+        if (pc) {
+          pc.addEventListener('connectionstatechange', () => {
+            if (pc.connectionState === 'connected') tuneSenders();
+          });
+        }
 
         call.on('close', () => {
           activeCallsRef.current = activeCallsRef.current.filter(c => c !== call);

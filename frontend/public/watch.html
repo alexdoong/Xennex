@@ -789,13 +789,23 @@
 
       try {
         const stream = await mediaDevices.getDisplayMedia({
-          video: videoConstraints,
+          video: {
+            ...videoConstraints,
+            cursor: 'always'
+          },
           audio: captureAudio ? {
             echoCancellation: false,
             noiseSuppression: false,
-            autoGainControl: false
-          } : false
+            autoGainControl: false,
+            channelCount: 2
+          } : false,
+          systemAudio: 'include'
         });
+
+        const vTrack = stream.getVideoTracks()[0];
+        if (vTrack && 'contentHint' in vTrack) {
+          vTrack.contentHint = 'motion';
+        }
 
         localStream = stream;
 
@@ -836,6 +846,28 @@
           call.answer(localStream);
           activeCalls.push(call);
           updateViewersCount();
+
+          const tune = () => {
+            try {
+              const pc = call.peerConnection;
+              if (!pc) return;
+              pc.getSenders().forEach((sender) => {
+                if (sender.track && sender.track.kind === 'video') {
+                  const p = sender.getParameters();
+                  if (!p.encodings || p.encodings.length === 0) p.encodings = [{}];
+                  p.encodings[0].maxBitrate = 15000000;
+                  p.degradationPreference = 'maintain-framerate';
+                  sender.setParameters(p).catch(() => {});
+                }
+              });
+            } catch(e) {}
+          };
+          tune();
+          if (call.peerConnection) {
+            call.peerConnection.addEventListener('connectionstatechange', () => {
+              if (call.peerConnection.connectionState === 'connected') tune();
+            });
+          }
 
           call.on('close', () => {
             activeCalls = activeCalls.filter(c => c !== call);
