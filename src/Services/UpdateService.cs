@@ -13,7 +13,7 @@ namespace Xennex.Services
     {
         public bool Success { get; set; }
         public bool HasUpdate { get; set; }
-        public string CurrentVersion { get; set; } = "v0.2.1";
+        public string CurrentVersion { get; set; } = "v0.2.2";
         public string LatestVersion { get; set; } = "";
         public string ReleaseTitle { get; set; } = "";
         public string ReleaseNotes { get; set; } = "";
@@ -25,7 +25,7 @@ namespace Xennex.Services
 
     public class UpdateService
     {
-        public const string CurrentVersion = "v0.2.1";
+        public const string CurrentVersion = "v0.2.2";
         private const string RepoOwner = "alexdoong";
         private const string RepoName = "Xennex";
         private readonly HttpClient _httpClient;

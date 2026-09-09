@@ -163,19 +163,20 @@ const StreamTab: React.FC = () => {
       if (selectedFps > 0) {
         videoConstraints.frameRate = {
           ideal: selectedFps,
-          max: selectedFps,
-          min: Math.min(30, selectedFps)
+          max: selectedFps
         };
       } else {
         // Modo Ilimitado / High Refresh Rate (120Hz / 144Hz)
-        videoConstraints.frameRate = { ideal: 144, min: 60 };
+        videoConstraints.frameRate = {
+          ideal: 144,
+          max: 240
+        };
       }
 
       const stream = await (mediaDevices as any).getDisplayMedia({
         video: {
           ...videoConstraints,
-          cursor: 'always',
-          displaySurface: 'monitor'
+          cursor: 'always'
         },
         audio: captureAudio ? {
           echoCancellation: false,
