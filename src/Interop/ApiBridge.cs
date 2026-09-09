@@ -11,16 +11,23 @@ namespace Xennex.Interop
         private WacomService _wacomService;
         private RealEngineService _realEngineService;
         private ConfigService _configService;
+        private SkinService _skinService;
+        private HandMotionService _handMotionService;
+        private StreamService _streamService;
         public Action MinimizeToTrayRequested;
         public Action ShutdownRequested;
         public Action ToggleSidebarModeRequested;
+        public Action SidebarPositionChangedRequested;
         public Func<bool> IsSidebarModeGetter;
 
-        public ApiBridge(WacomService wacomService, RealEngineService realEngineService, ConfigService configService)
+        public ApiBridge(WacomService wacomService, RealEngineService realEngineService, HandMotionService handMotionService, ConfigService configService, SkinService skinService, StreamService streamService)
         {
             _wacomService = wacomService;
             _realEngineService = realEngineService;
+            _handMotionService = handMotionService;
             _configService = configService;
+            _skinService = skinService;
+            _streamService = streamService;
         }
 
         // Wacom
@@ -31,6 +38,18 @@ namespace Xennex.Interop
         public void StartReal() => _realEngineService.Start(_configService.Config.RealExePath);
         public void StopReal() => _realEngineService.Stop();
         public bool IsRealRunning() => _realEngineService.IsRunning;
+
+        // Hand Motion
+        public void StartHandMotion() => _handMotionService.Start(_configService.Config.HandMotionCameraIndex);
+        public void StopHandMotion() => _handMotionService.Stop();
+        public bool IsHandMotionRunning() => _handMotionService.IsRunning;
+        public void RecordHandGesture(string action) => _handMotionService.RecordGesture(action);
+        public void StartRecordingGesture(string action) => _handMotionService.StartRecordingGesture(action);
+        public void StopRecordingGesture() => _handMotionService.StopRecordingGesture();
+        public string[] GetSavedGestures() => _handMotionService.GetSavedGestures();
+        public void DeleteGesture(string name) => _handMotionService.DeleteGesture(name);
+        public string GetSwipeConfig() => _handMotionService.GetSwipeConfig();
+        public void SaveSwipeConfig(string json) => _handMotionService.SaveSwipeConfig(json);
 
         // Window Controls
         public void MinimizeToTray() => MinimizeToTrayRequested?.Invoke();
@@ -51,6 +70,49 @@ namespace Xennex.Interop
             _configService.Config.HideSidebarPullTab = val;
             _configService.SaveConfig();
         }
+        public bool GetAutoHideSidebar() => _configService.Config.AutoHideSidebar;
+        public void SetAutoHideSidebar(bool val)
+        {
+            _configService.Config.AutoHideSidebar = val;
+            _configService.SaveConfig();
+        }
+
+        public bool GetAutoHideTitlebar() => _configService.Config.AutoHideTitlebar;
+        public void SetAutoHideTitlebar(bool val)
+        {
+            _configService.Config.AutoHideTitlebar = val;
+            _configService.SaveConfig();
+        }
+
+        public string GetSidebarPosition() => _configService.Config.SidebarPosition;
+
+        // Skin Engine
+        public string[] GetAvailableSkins() => _skinService.GetAvailableSkins();
+        public string GetActiveSkinConfig() => _skinService.GetActiveSkinConfig();
+        public string GetSkinConfig(string skinName) => _skinService.GetSkinConfig(skinName);
+        public bool SaveSkinConfig(string skinName, string json) => _skinService.SaveSkinConfig(skinName, json);
+        public bool CreateNewSkin(string newSkinName, string baseSkinName) => _skinService.CreateNewSkin(newSkinName, baseSkinName);
+        public string PickAndImportAsset(string skinName, string assetType) => _skinService.PickAndImportAsset(skinName, assetType);
+        public void OpenSkinFolder() => _skinService.OpenSkinFolder();
+        public string GetActiveSkin() => _configService.Config.ActiveSkin;
+        public void SetActiveSkin(string val)
+        {
+            _configService.Config.ActiveSkin = val;
+            _configService.SaveConfig();
+        }
+        public void SetSidebarPosition(string val)
+        {
+            _configService.Config.SidebarPosition = val;
+            _configService.SaveConfig();
+            SidebarPositionChangedRequested?.Invoke();
+        }
+
+        public int GetHandMotionCameraIndex() => _configService.Config.HandMotionCameraIndex;
+        public void SetHandMotionCameraIndex(int val)
+        {
+            _configService.Config.HandMotionCameraIndex = val;
+            _configService.SaveConfig();
+        }
 
         // Cloud Config
         public string GetCloudProjectId() => _configService.Config.CloudProjectId;
@@ -65,6 +127,19 @@ namespace Xennex.Interop
         {
             _configService.Config.CloudApiKey = val;
             _configService.SaveConfig();
+        }
+
+        // Stream Viewer Windows (P2P Pop-out)
+        public bool OpenStreamViewer(string roomId, string title) => _streamService.OpenViewer(roomId, title);
+        public bool CloseStreamViewer(string roomId) => _streamService.CloseViewer(roomId);
+        public bool SetViewerAlwaysOnTop(string roomId, bool val) => _streamService.SetAlwaysOnTop(roomId, val);
+        public void OpenBrowser(string url)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch { }
         }
     }
 }

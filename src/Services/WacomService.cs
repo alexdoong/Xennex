@@ -1,9 +1,9 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
-namespace Xennex
+namespace Xennex.Services
 {
     public class WacomService
     {
@@ -37,7 +37,7 @@ namespace Xennex
 
         private void RunElevatedCommand(string commandArgs, string logPrefix)
         {
-            Log($"[Wacom] {logPrefix} drivers (admin)…");
+            Log($"[Wacom] {logPrefix} drivers (admin)â€¦");
             try
             {
                 var p = Process.Start(new ProcessStartInfo 
@@ -67,3 +67,4 @@ namespace Xennex
         }
     }
 }
+

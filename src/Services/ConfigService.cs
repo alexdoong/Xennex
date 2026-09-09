@@ -1,16 +1,30 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using Xennex.Models;
 
 namespace Xennex.Services
 {
     public class ConfigService
     {
-        private readonly string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "config.txt");
-        private readonly string buildSavePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "wuwa_build.txt");
+        private readonly string configPath;
+        private readonly string buildSavePath;
 
         public AppConfig Config { get; private set; } = new AppConfig();
         public WuWaBuild Build { get; private set; } = new WuWaBuild();
+
+        public ConfigService()
+        {
+            string baseDir = AppContext.BaseDirectory;
+            string dataDir = Path.Combine(baseDir, "Data");
+            if (!Directory.Exists(dataDir))
+            {
+                Directory.CreateDirectory(dataDir);
+            }
+
+            configPath = Path.Combine(dataDir, "config.txt");
+            buildSavePath = Path.Combine(dataDir, "wuwa_build.txt");
+        }
 
         public event Action<string> OnLogReceived;
         public event Action OnConfigChanged;
@@ -27,28 +41,22 @@ namespace Xennex.Services
                     AutoDetectReal();
                     return;
                 }
+
                 var lines = File.ReadAllLines(configPath);
                 if (lines.Length > 0 && File.Exists(lines[0].Trim()))
                 {
                     Config.RealExePath = lines[0].Trim();
                     Log("[Controller] REAL path: " + Path.GetFileName(Config.RealExePath));
                 }
+
                 if (lines.Length > 1)
                 {
                     foreach (var item in lines[1].Split(','))
                     {
-                        if (item == "CloseToTray=false") Config.CloseToTray = false;
-                        if (item == "AutoStart=true")    Config.AutoStart = true;
-                        if (item == "HideSidebarPullTab=true") Config.HideSidebarPullTab = true;
-                        if (item == "HideSidebarPullTab=false") Config.HideSidebarPullTab = false;
-                        if (item.StartsWith("SidebarMonitor="))
-                        {
-                            int val;
-                            if (int.TryParse(item.Substring("SidebarMonitor=".Length), out val))
-                                Config.SidebarMonitorIndex = val;
-                        }
+                        ParseConfigItem(item.Trim());
                     }
                 }
+
                 if (string.IsNullOrEmpty(Config.RealExePath))
                 {
                     AutoDetectReal();
@@ -60,19 +68,46 @@ namespace Xennex.Services
             }
         }
 
+        private void ParseConfigItem(string item)
+        {
+            if (string.IsNullOrWhiteSpace(item)) return;
+
+            if (item.StartsWith("CloseToTray=")) { Config.CloseToTray = item.EndsWith("true"); return; }
+            if (item.StartsWith("AutoStart=")) { Config.AutoStart = item.EndsWith("true"); return; }
+            if (item.StartsWith("HideSidebarPullTab=")) { Config.HideSidebarPullTab = item.EndsWith("true"); return; }
+            if (item.StartsWith("SidebarPosition=")) { Config.SidebarPosition = item.Substring("SidebarPosition=".Length); return; }
+            if (item.StartsWith("SidebarMonitor=") && int.TryParse(item.Substring("SidebarMonitor=".Length), out int sm)) { Config.SidebarMonitorIndex = sm; return; }
+            if (item.StartsWith("HandMotionCameraIndex=") && int.TryParse(item.Substring("HandMotionCameraIndex=".Length), out int hm)) { Config.HandMotionCameraIndex = hm; return; }
+            if (item.StartsWith("WindowLeft=") && double.TryParse(item.Substring("WindowLeft=".Length), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double wl)) { Config.WindowLeft = wl; return; }
+            if (item.StartsWith("WindowTop=") && double.TryParse(item.Substring("WindowTop=".Length), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double wt)) { Config.WindowTop = wt; return; }
+            if (item.StartsWith("AutoHideSidebar=")) { Config.AutoHideSidebar = item.EndsWith("true"); return; }
+            if (item.StartsWith("AutoHideTitlebar=")) { Config.AutoHideTitlebar = item.EndsWith("true"); return; }
+        }
+
         public void SaveConfig()
         {
             try
             {
-                string line2 = string.Format("CloseToTray={0},AutoStart={1},SidebarMonitor={2},HideSidebarPullTab={3}",
+                string line2 = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "CloseToTray={0},AutoStart={1},SidebarMonitor={2},HideSidebarPullTab={3},SidebarPosition={4},HandMotionCameraIndex={5},WindowLeft={6},WindowTop={7},AutoHideSidebar={8},AutoHideTitlebar={9}",
                     Config.CloseToTray ? "true" : "false",
                     Config.AutoStart ? "true" : "false",
                     Config.SidebarMonitorIndex,
-                    Config.HideSidebarPullTab ? "true" : "false");
+                    Config.HideSidebarPullTab ? "true" : "false",
+                    Config.SidebarPosition,
+                    Config.HandMotionCameraIndex,
+                    Config.WindowLeft,
+                    Config.WindowTop,
+                    Config.AutoHideSidebar ? "true" : "false",
+                    Config.AutoHideTitlebar ? "true" : "false");
+
                 File.WriteAllLines(configPath, new[] { Config.RealExePath, line2 });
                 OnConfigChanged?.Invoke();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log($"[Config SAVE ERR] {ex.Message}");
+            }
         }
 
         public void AutoDetectReal()
@@ -83,25 +118,34 @@ namespace Xennex.Services
                 Config.RealExePath = found;
                 SaveConfig();
                 Log("[Controller] Auto-located: " + Config.RealExePath);
+                return;
             }
-            else
-            {
-                Log("[Controller] REAL.exe not found – set in Settings.");
-            }
+
+            Log("[Controller] REAL.exe not found – set in Settings.");
         }
 
         private string ScanForReal()
         {
-            string dir = AppDomain.CurrentDomain.BaseDirectory;
+            string dir = AppContext.BaseDirectory;
             string[] paths = {
                 "REAL.exe", "real.exe", "real-app.exe",
                 @"..\REAL-updater-v2\REAL-updater-v2\real-app\build\Debug\real-app.exe",
                 @"..\REAL-updater-v2\REAL-updater-v2\real-app\build\Release\real-app.exe"
             };
+
             foreach (var rel in paths)
             {
-                try { string f = Path.GetFullPath(Path.Combine(dir, rel)); if (File.Exists(f)) return f; } catch { }
+                try
+                {
+                    string f = Path.GetFullPath(Path.Combine(dir, rel));
+                    if (File.Exists(f)) return f;
+                }
+                catch (Exception ex)
+                {
+                    Log($"[ScanForReal Path ERR] {ex.Message}");
+                }
             }
+
             try
             {
                 foreach (var f in Directory.GetFiles(dir, "*real*.exe", SearchOption.AllDirectories))
@@ -110,13 +154,18 @@ namespace Xennex.Services
                     if (!n.Contains("controller")) return f;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log($"[ScanForReal Dir ERR] {ex.Message}");
+            }
+
             return null;
         }
 
         public void LoadWuWaBuild(Action<string, string, Dictionary<int, string>> onPathsLoaded)
         {
             if (!File.Exists(buildSavePath)) return;
+
             try
             {
                 var echoPaths = new Dictionary<int, string>();
@@ -127,6 +176,7 @@ namespace Xennex.Services
                 {
                     int eq = line.IndexOf('=');
                     if (eq < 0) continue;
+
                     string key = line.Substring(0, eq).Trim();
                     string val = line.Substring(eq + 1).Trim();
 
@@ -153,73 +203,100 @@ namespace Xennex.Services
                         case "EnergyRegen":  Build.StatEnergyRegen = val; break;
                         case "SklDMG":       Build.StatSklDMG = val; break;
                         default:
-                            if (key.Length >= 2 && key[0] == 'E' && char.IsDigit(key[1]))
-                            {
-                                int ei = key[1] - '0';
-                                if (ei >= 0 && ei < 5)
-                                {
-                                    string sub = key.Length > 2 ? key.Substring(2) : "";
-                                    if (sub == "Image" && File.Exists(val)) { Build.Echoes[ei].ImagePath = val; echoPaths[ei] = val; }
-                                    else if (sub == "Main") { var p = val.Split('|'); Build.Echoes[ei].MainStatName = p.Length > 0 ? p[0] : ""; Build.Echoes[ei].MainStatValue = p.Length > 1 ? p[1] : ""; }
-                                    else if (sub.Length >= 2 && sub[0] == 'S' && char.IsDigit(sub[1]))
-                                    {
-                                        int si = sub[1] - '0';
-                                        if (si >= 0 && si < 5)
-                                        {
-                                            var p = val.Split('|');
-                                            Build.Echoes[ei].Substats[si].Name  = p.Length > 0 ? p[0] : "";
-                                            Build.Echoes[ei].Substats[si].Value = p.Length > 1 ? p[1] : "";
-                                            int q = 0; int.TryParse(p.Length > 2 ? p[2] : "0", out q);
-                                            Build.Echoes[ei].Substats[si].Quality = q;
-                                        }
-                                    }
-                                }
-                            }
+                            ParseEchoProperty(key, val, echoPaths);
                             break;
                     }
                 }
+
                 onPathsLoaded?.Invoke(charImagePath, weaponImagePath, echoPaths);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log($"[WuWaBuild LOAD ERR] {ex.Message}");
+            }
+        }
+
+        private void ParseEchoProperty(string key, string val, Dictionary<int, string> echoPaths)
+        {
+            if (key.Length < 2 || key[0] != 'E' || !char.IsDigit(key[1])) return;
+
+            int ei = key[1] - '0';
+            if (ei < 0 || ei >= 5) return;
+
+            string sub = key.Length > 2 ? key.Substring(2) : "";
+            if (sub == "Image" && File.Exists(val))
+            {
+                Build.Echoes[ei].ImagePath = val;
+                echoPaths[ei] = val;
+                return;
+            }
+
+            if (sub == "Main")
+            {
+                var parts = val.Split('|');
+                Build.Echoes[ei].MainStatName = parts.Length > 0 ? parts[0] : "";
+                Build.Echoes[ei].MainStatValue = parts.Length > 1 ? parts[1] : "";
+                return;
+            }
+
+            if (sub.Length < 2 || sub[0] != 'S' || !char.IsDigit(sub[1])) return;
+
+            int si = sub[1] - '0';
+            if (si < 0 || si >= 5) return;
+
+            var p = val.Split('|');
+            Build.Echoes[ei].Substats[si].Name = p.Length > 0 ? p[0] : "";
+            Build.Echoes[ei].Substats[si].Value = p.Length > 1 ? p[1] : "";
+            int.TryParse(p.Length > 2 ? p[2] : "0", out int quality);
+            Build.Echoes[ei].Substats[si].Quality = quality;
         }
 
         public void SaveWuWaBuild()
         {
             try
             {
-                var lines = new List<string>();
-                lines.Add("Name=" + Build.ResonatorName);
-                lines.Add("Level=" + Build.Level);
-                lines.Add("Element=" + Build.Element);
-                lines.Add("Seq=" + Build.Sequence);
-                lines.Add("CharImage=" + Build.CharImagePath);
-                lines.Add("ImgPanX=" + Build.ImagePanX);
-                lines.Add("ImgPanY=" + Build.ImagePanY);
-                lines.Add("ImgScale=" + Build.ImageScale.ToString("F2"));
-                lines.Add("WeaponName=" + Build.WeaponName);
-                lines.Add("WeaponRarity=" + Build.WeaponRarity);
-                lines.Add("WeaponRef=" + Build.WeaponRefinement);
-                lines.Add("WeaponLevel=" + Build.WeaponLevel);
-                lines.Add("WeaponImage=" + Build.WeaponImagePath);
-                lines.Add("HP=" + Build.StatHP);
-                lines.Add("ATK=" + Build.StatATK);
-                lines.Add("DEF=" + Build.StatDEF);
-                lines.Add("CritRate=" + Build.StatCritRate);
-                lines.Add("CritDMG=" + Build.StatCritDMG);
-                lines.Add("EnergyRegen=" + Build.StatEnergyRegen);
-                lines.Add("SklDMG=" + Build.StatSklDMG);
+                var lines = new List<string>
+                {
+                    "Name=" + Build.ResonatorName,
+                    "Level=" + Build.Level,
+                    "Element=" + Build.Element,
+                    "Seq=" + Build.Sequence,
+                    "CharImage=" + Build.CharImagePath,
+                    "ImgPanX=" + Build.ImagePanX,
+                    "ImgPanY=" + Build.ImagePanY,
+                    "ImgScale=" + Build.ImageScale.ToString("F2"),
+                    "WeaponName=" + Build.WeaponName,
+                    "WeaponRarity=" + Build.WeaponRarity,
+                    "WeaponRef=" + Build.WeaponRefinement,
+                    "WeaponLevel=" + Build.WeaponLevel,
+                    "WeaponImage=" + Build.WeaponImagePath,
+                    "HP=" + Build.StatHP,
+                    "ATK=" + Build.StatATK,
+                    "DEF=" + Build.StatDEF,
+                    "CritRate=" + Build.StatCritRate,
+                    "CritDMG=" + Build.StatCritDMG,
+                    "EnergyRegen=" + Build.StatEnergyRegen,
+                    "SklDMG=" + Build.StatSklDMG
+                };
+
                 for (int i = 0; i < 5; i++)
                 {
                     var echo = Build.Echoes[i];
                     lines.Add(string.Format("E{0}Image={1}", i, echo.ImagePath));
                     lines.Add(string.Format("E{0}Main={1}|{2}", i, echo.MainStatName, echo.MainStatValue));
                     for (int j = 0; j < 5; j++)
+                    {
                         lines.Add(string.Format("E{0}S{1}={2}|{3}|{4}", i, j,
                             echo.Substats[j].Name, echo.Substats[j].Value, echo.Substats[j].Quality));
+                    }
                 }
+
                 File.WriteAllLines(buildSavePath, lines);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log($"[WuWaBuild SAVE ERR] {ex.Message}");
+            }
         }
     }
 }

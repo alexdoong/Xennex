@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
 
-namespace Xennex
+namespace Xennex.Services
 {
     public class RealEngineService
     {
@@ -107,7 +107,7 @@ namespace Xennex
                 return;
             }
 
-            Log("[REAL] Sending stop signal…");
+            Log("[REAL] Sending stop signalâ€¦");
             try
             {
                 if (!realProcess.HasExited)
@@ -170,3 +170,4 @@ namespace Xennex
         }
     }
 }
+

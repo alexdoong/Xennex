@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xennex Live - Transmissão & Visualização P2P</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #07090E;
+      color: #F1F5F9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      height: 56px;
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: 0.5px;
+    }
+
+    .brand-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #A855F7, #6366F1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 900;
+      font-size: 0.85rem;
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+    }
+
+    .nav-tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 3px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      gap: 4px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      padding: 6px 14px;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: #FFF;
+    }
+
+    .tab-btn.active {
+      background: #A855F7;
+      color: #FFF;
+      box-shadow: 0 2px 10px rgba(168, 85, 247, 0.35);
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+
+    /* Tab Panes */
+    .tab-content {
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tab-content.active {
+      display: flex;
+    }
+
+    /* Cards */
+    .card {
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 32px 28px;
+      max-width: 440px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      animation: fadeIn 0.3s ease;
+      margin: 20px 0;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      color: #C084FC;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .badge-live {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #F87171;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #EF4444;
+      box-shadow: 0 0 8px #EF4444;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      margin-bottom: 8px;
+      color: #FFF;
+    }
+
+    p.subtitle {
+      font-size: 0.88rem;
+      color: #94A3B8;
+      margin-bottom: 22px;
+      line-height: 1.4;
+    }
+
+    /* Form Controls */
+    .form-group {
+      text-align: left;
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #94A3B8;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      color: #FFF;
+      padding: 11px 14px;
+      font-size: 1rem;
+      font-family: monospace;
+      text-transform: uppercase;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: #A855F7;
+      box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2);
+    }
+
+    select {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      color: #FFF;
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    select option {
+      background: #0F172A;
+      color: #FFF;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: #CBD5E1;
+      cursor: pointer;
+      user-select: none;
+      margin-bottom: 20px;
+    }
+
+    .checkbox-row input {
+      accent-color: #A855F7;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #A855F7, #9333EA);
+      color: #FFF;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      transition: all 0.2s;
+      box-shadow: 0 4px 15px rgba(168, 85, 247, 0.35);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #9333EA, #7E22CE);
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #EF4444, #DC2626);
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-danger:hover {
+      background: linear-gradient(135deg, #DC2626, #B91C1C);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #FFF;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Video Player (Watch Mode) */
+    #viewer-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    #hud-viewer {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 8px 16px;
+      border-radius: 30px;
+      font-size: 0.82rem;
+      z-index: 20;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    #viewer-container:hover #hud-viewer,
+    #viewer-container:hover #viewer-controls {
+      opacity: 1;
+    }
+
+    #viewer-controls {
+      position: absolute;
+      bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 8px 16px;
+      border-radius: 30px;
+      z-index: 20;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    /* Broadcast Active State */
+    #broadcast-active-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      width: 92%;
+      max-width: 720px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      margin: 20px 0;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .room-display-box {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      border-radius: 12px;
+      padding: 16px;
+      width: 100%;
+      margin: 16px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .room-code-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .room-code-text {
+      font-family: monospace;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #C084FC;
+      letter-spacing: 2px;
+    }
+
+    .link-share-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 6px 12px;
+    }
+
+    .link-text {
+      flex: 1;
+      font-size: 0.82rem;
+      color: #94A3B8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: monospace;
+    }
+
+    .stats-bar {
+      display: flex;
+      gap: 20px;
+      font-size: 0.85rem;
+      color: #94A3B8;
+      margin-bottom: 16px;
+    }
+
+    .stats-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .preview-wrapper {
+      width: 100%;
+      max-height: 360px;
+      background: #000;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    #previewVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">X</div>
+      <span>XENNEX <span style="color: #A855F7;">LIVE</span></span>
+    </div>
+
+    <div class="nav-tabs">
+      <button class="tab-btn active" id="tabBtnWatch" onclick="switchTab('watch')">
+        📺 Assistir
+      </button>
+      <button class="tab-btn" id="tabBtnBroadcast" onclick="switchTab('broadcast')">
+        📡 Transmitir Minha Tela
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Area -->
+  <main>
+
+    <!-- TAB 1: ASSISTIR -->
+    <div class="tab-content active" id="tabWatch">
+      <!-- Connect Card -->
+      <div class="card" id="watchCard">
+        <div class="badge">📡 WebRTC P2P Player</div>
+        <h2 id="watchStatusTitle">Assistir Transmissão</h2>
+        <p class="subtitle" id="watchStatusDesc">
+          Digite o código da sala gerado pelo host para assistir à tela em tempo real com áudio e ultrabaixa latência.
+        </p>
+
+        <div class="form-group">
+          <div class="input-row">
+            <input type="text" id="roomInput" placeholder="Ex: XNX-1234" maxlength="12">
+            <button class="btn-primary" style="width: auto; padding: 11px 22px;" id="connectBtn" onclick="startWatch()">
+              Conectar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Player (Active Stream) -->
+      <div id="viewer-container">
+        <video id="video" autoplay playsinline></video>
+
+        <div id="hud-viewer">
+          <span class="pulse-dot"></span>
+          <strong>AO VIVO</strong>
+          <span id="hudRoomText" style="color: #38BDF8; font-family: monospace;"></span>
+        </div>
+
+        <div id="viewer-controls">
+          <button class="btn-secondary" onclick="toggleViewerAudio()" id="muteBtn">
+            🔊 Mutar
+          </button>
+          <button class="btn-secondary" onclick="toggleFullscreen()">
+            ⛶ Tela Cheia
+          </button>
+          <button class="btn-secondary" style="color: #F87171;" onclick="disconnectViewer()">
+            ✕ Sair
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: TRANSMITIR MINHA TELA -->
+    <div class="tab-content" id="tabBroadcast">
+      <!-- Setup Card -->
+      <div class="card" id="broadcastSetupCard">
+        <div class="badge">🚀 Web Broadcaster</div>
+        <h2>Transmitir Minha Tela</h2>
+        <p class="subtitle">
+          Compartilhe sua tela ou janela para qualquer amigo diretamente pelo navegador, sem precisar instalar nada!
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Resolução</label>
+          <select id="selectResolution">
+            <option value="1080p">1080p (Full HD - 1920x1080)</option>
+            <option value="720p">720p (HD - 1280x720)</option>
+            <option value="source">Fonte Original (Nativa sem escala)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Taxa de Quadros (FPS)</label>
+          <select id="selectFps">
+            <option value="60">60 FPS (Máxima Fluidez para Jogos)</option>
+            <option value="30">30 FPS (Equilíbrio e Leveza)</option>
+          </select>
+        </div>
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="checkAudio" checked>
+          <span>Compartilhar áudio do sistema / guia</span>
+        </label>
+
+        <button class="btn-primary" onclick="startBroadcasting()">
+          📡 Iniciar Compartilhamento de Tela
+        </button>
+      </div>
+
+      <!-- Active Broadcast Dashboard -->
+      <div id="broadcast-active-container">
+        <div class="badge badge-live">
+          <span class="pulse-dot"></span>
+          <span>AO VIVO NO NAVEGADOR</span>
+        </div>
+        <h2>Transmitindo sua Tela</h2>
+
+        <div class="room-display-box">
+          <div class="room-code-row">
+            <div>
+              <div style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase;">Código da Sala</div>
+              <div class="room-code-text" id="activeRoomCode">XNX-0000</div>
+            </div>
+            <button class="btn-secondary" id="copyCodeBtn" onclick="copyRoomCode()">
+              📋 Copiar Código
+            </button>
+          </div>
+
+          <div class="link-share-row">
+            <span class="link-text" id="shareUrlText">https://...</span>
+            <button class="btn-secondary" id="copyLinkBtn" style="padding: 4px 10px; font-size: 0.75rem;" onclick="copyDirectLink()">
+              🔗 Copiar Link
+            </button>
+          </div>
+        </div>
+
+        <div class="stats-bar">
+          <div class="stats-item">
+            <span>👥 Espectadores:</span>
+            <strong style="color: #38BDF8;" id="viewersCount">0</strong>
+          </div>
+          <div class="stats-item">
+            <span>⏱️ No ar:</span>
+            <strong style="color: #FFF;" id="uptimeText">00:00</strong>
+          </div>
+        </div>
+
+        <div class="preview-wrapper">
+          <video id="previewVideo" autoplay muted playsinline></video>
+        </div>
+
+        <button class="btn-primary btn-danger" onclick="stopBroadcasting()">
+          ⏹ Encerrar Transmissão
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // Navigation Tabs
+    function switchTab(tab) {
+      document.getElementById('tabBtnWatch').classList.toggle('active', tab === 'watch');
+      document.getElementById('tabBtnBroadcast').classList.toggle('active', tab === 'broadcast');
+      document.getElementById('tabWatch').classList.toggle('active', tab === 'watch');
+      document.getElementById('tabBroadcast').classList.toggle('active', tab === 'broadcast');
+    }
+
+    // ==========================================
+    // 📺 ASSISTIR (WATCH MODE)
+    // ==========================================
+    const params = new URLSearchParams(window.location.search);
+    const initialRoom = params.get('room');
+    const roomInput = document.getElementById('roomInput');
+    const watchCard = document.getElementById('watchCard');
+    const viewerContainer = document.getElementById('viewer-container');
+    const video = document.getElementById('video');
+    const hudRoomText = document.getElementById('hudRoomText');
+    const watchStatusTitle = document.getElementById('watchStatusTitle');
+    const watchStatusDesc = document.getElementById('watchStatusDesc');
+
+    let viewerPeer = null;
+    let currentCall = null;
+
+    if (initialRoom) {
+      roomInput.value = initialRoom.toUpperCase();
+      switchTab('watch');
+      startWatch();
+    }
+
+    function createDummyStream() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 2; canvas.height = 2;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 2, 2);
+      const canvasStream = canvas.captureStream ? canvas.captureStream(1) : canvas.mozCaptureStream(1);
+      return new MediaStream([canvasStream.getVideoTracks()[0]]);
+    }
+
+    function startWatch() {
+      const room = roomInput.value.trim().toUpperCase();
+      if (!room) return;
+
+      watchStatusTitle.innerText = "Conectando à Sala...";
+      watchStatusDesc.innerText = "Localizando o host " + room + " via WebRTC P2P...";
+
+      if (viewerPeer) {
+        viewerPeer.destroy();
+      }
+
+      viewerPeer = new Peer({
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        }
+      });
+
+      viewerPeer.on('open', (id) => {
+        const dummy = createDummyStream();
+        const call = viewerPeer.call(room, dummy);
+        currentCall = call;
+
+        call.on('stream', (remoteStream) => {
+          showViewerStream(remoteStream, room);
+        });
+
+        if (call.peerConnection) {
+          call.peerConnection.ontrack = (ev) => {
+            if (ev.streams && ev.streams[0]) {
+              showViewerStream(ev.streams[0], room);
+            }
+          };
+        }
+
+        call.on('close', () => {
+          disconnectViewer("Transmissão Encerrada", "O host encerrou o compartilhamento de tela.");
+        });
+
+        call.on('error', (err) => {
+          disconnectViewer("Erro na Conexão", err.message || "Não foi possível conectar ao host.");
+        });
+      });
+
+      viewerPeer.on('error', (err) => {
+        disconnectViewer("Host não Encontrado", "Verifique se a sala " + room + " está com a transmissão aberta.");
+      });
+    }
+
+    function showViewerStream(remoteStream, room) {
+      watchCard.style.display = 'none';
+      viewerContainer.style.display = 'flex';
+      video.srcObject = remoteStream;
+      video.play().catch(() => {
+        video.muted = true;
+        video.play();
+      });
+      hudRoomText.innerText = room;
+    }
+
+    function disconnectViewer(title = "Assistir Transmissão", desc = "Digite o código da sala gerado pelo host para assistir à tela.") {
+      if (currentCall) {
+        try { currentCall.close(); } catch {}
+        currentCall = null;
+      }
+      if (viewerPeer) {
+        try { viewerPeer.destroy(); } catch {}
+        viewerPeer = null;
+      }
+      if (video.srcObject) {
+        video.srcObject = null;
+      }
+      viewerContainer.style.display = 'none';
+      watchCard.style.display = 'block';
+      watchStatusTitle.innerText = title;
+      watchStatusDesc.innerText = desc;
+    }
+
+    function toggleViewerAudio() {
+      const btn = document.getElementById('muteBtn');
+      video.muted = !video.muted;
+      btn.innerText = video.muted ? '🔇 Desmutar' : '🔊 Mutar';
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        viewerContainer.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    // ==========================================
+    // 📡 TRANSMITIR (BROADCAST MODE)
+    // ==========================================
+    let hostPeer = null;
+    let localStream = null;
+    let activeCalls = [];
+    let uptimeInterval = null;
+    let uptimeSeconds = 0;
+
+    const broadcastSetupCard = document.getElementById('broadcastSetupCard');
+    const broadcastActiveContainer = document.getElementById('broadcast-active-container');
+    const previewVideo = document.getElementById('previewVideo');
+    const activeRoomCode = document.getElementById('activeRoomCode');
+    const shareUrlText = document.getElementById('shareUrlText');
+    const viewersCount = document.getElementById('viewersCount');
+    const uptimeText = document.getElementById('uptimeText');
+
+    async function startBroadcasting() {
+      const mediaDevices = navigator.mediaDevices || navigator.webkitMediaDevices;
+      if (!mediaDevices || !mediaDevices.getDisplayMedia) {
+        alert('Seu navegador não suporta compartilhamento de tela ou precisa estar em uma conexão segura (HTTPS).\nTente utilizar Chrome, Edge ou Opera GX no computador.');
+        return;
+      }
+
+      const resSelect = document.getElementById('selectResolution').value;
+      const fpsSelect = parseInt(document.getElementById('selectFps').value, 10);
+      const captureAudio = document.getElementById('checkAudio').checked;
+
+      const videoConstraints = {};
+      if (resSelect === '1080p') {
+        videoConstraints.width = { ideal: 1920 };
+        videoConstraints.height = { ideal: 1080 };
+      } else if (resSelect === '720p') {
+        videoConstraints.width = { ideal: 1280 };
+        videoConstraints.height = { ideal: 720 };
+      }
+
+      if (fpsSelect > 0) {
+        videoConstraints.frameRate = { ideal: fpsSelect, max: fpsSelect };
+      }
+
+      try {
+        const stream = await mediaDevices.getDisplayMedia({
+          video: videoConstraints,
+          audio: captureAudio ? {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          } : false
+        });
+
+        localStream = stream;
+
+        // Listen for native stop share button
+        stream.getVideoTracks()[0].onended = () => {
+          stopBroadcasting();
+        };
+
+        // Preview video
+        previewVideo.srcObject = stream;
+        previewVideo.play().catch(() => {});
+
+        // Generate clean Room ID
+        const generatedRoom = 'XNX-' + Math.floor(1000 + Math.random() * 9000);
+        activeRoomCode.innerText = generatedRoom;
+
+        // Build direct share URL
+        const directUrl = window.location.origin + window.location.pathname + '?room=' + generatedRoom;
+        shareUrlText.innerText = directUrl;
+
+        // Initialize Peer Host
+        hostPeer = new Peer(generatedRoom, {
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+          }
+        });
+
+        hostPeer.on('open', (id) => {
+          broadcastSetupCard.style.display = 'none';
+          broadcastActiveContainer.style.display = 'flex';
+          startUptimeTimer();
+        });
+
+        hostPeer.on('call', (call) => {
+          call.answer(localStream);
+          activeCalls.push(call);
+          updateViewersCount();
+
+          call.on('close', () => {
+            activeCalls = activeCalls.filter(c => c !== call);
+            updateViewersCount();
+          });
+
+          call.on('error', () => {
+            activeCalls = activeCalls.filter(c => c !== call);
+            updateViewersCount();
+          });
+        });
+
+        hostPeer.on('error', (err) => {
+          console.error('[Web Broadcast] Peer Error:', err);
+        });
+
+      } catch (err) {
+        console.error('[Web Broadcast] Capture Error:', err);
+        if (err.name !== 'NotAllowedError') {
+          alert('Erro ao iniciar compartilhamento de tela: ' + err.message);
+        }
+      }
+    }
+
+    function stopBroadcasting() {
+      if (uptimeInterval) {
+        clearInterval(uptimeInterval);
+        uptimeInterval = null;
+      }
+      uptimeSeconds = 0;
+
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+      }
+
+      if (previewVideo.srcObject) {
+        previewVideo.srcObject = null;
+      }
+
+      activeCalls.forEach(call => {
+        try { call.close(); } catch {}
+      });
+      activeCalls = [];
+
+      if (hostPeer) {
+        try { hostPeer.destroy(); } catch {}
+        hostPeer = null;
+      }
+
+      broadcastActiveContainer.style.display = 'none';
+      broadcastSetupCard.style.display = 'block';
+    }
+
+    function updateViewersCount() {
+      viewersCount.innerText = activeCalls.length.toString();
+    }
+
+    function startUptimeTimer() {
+      uptimeSeconds = 0;
+      uptimeText.innerText = '00:00';
+      if (uptimeInterval) clearInterval(uptimeInterval);
+      uptimeInterval = setInterval(() => {
+        uptimeSeconds++;
+        const mins = Math.floor(uptimeSeconds / 60).toString().padStart(2, '0');
+        const secs = (uptimeSeconds % 60).toString().padStart(2, '0');
+        uptimeText.innerText = mins + ':' + secs;
+      }, 1000);
+    }
+
+    function copyRoomCode() {
+      const code = activeRoomCode.innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const btn = document.getElementById('copyCodeBtn');
+        btn.innerText = '✓ Copiado!';
+        setTimeout(() => { btn.innerText = '📋 Copiar Código'; }, 2000);
+      });
+    }
+
+    function copyDirectLink() {
+      const link = shareUrlText.innerText;
+      navigator.clipboard.writeText(link).then(() => {
+        const btn = document.getElementById('copyLinkBtn');
+        btn.innerText = '✓ Copiado!';
+        setTimeout(() => { btn.innerText = '🔗 Copiar Link'; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

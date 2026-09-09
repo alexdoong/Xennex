@@ -32,3 +32,11 @@ Para manter o projeto organizado, sem lixo e escalável, qualquer agente (IA) ou
 - Evite ao máximo alinhar condicionais dentro de condicionais (`if` dentro de `for` dentro de `if` dentro de `if`). O código não pode parecer uma flecha deitada `(> ...)`.
 - **Early Returns (Cláusulas de Guarda):** Em vez de encapsular todo o bloco de sucesso num `if`, verifique o erro primeiro e dê `return` imediatamente.
 - *Código raso é código legível:* Ninguém deve precisar manter na cabeça o que aconteceu 3 níveis de código acima para entender a linha atual.
+
+## 7. Isolamento de Abas e Padronização UI (Frontend)
+Para não transformar o Frontend num monstro indomável:
+- **Componentização Estrita:** Cada nova aba DEVE ser um componente isolado (`NomeDaAbaTab.tsx`). O arquivo `App.tsx` serve apenas como roteador para ligar/desligar abas.
+- **Separação de CSS (Scoping):** Toda aba deve ter um contêiner principal com um ID ou Classe única (Ex: `<div className="tab-content wuwa-tab">`). No `index.css`, as regras específicas da aba DEVEM ser aninhadas dentro da classe pai (Ex: `.wuwa-tab h2 { ... }`).
+- **Reaproveitamento UI:** Regras globais (ex: `.btn`, painéis de vidro `.glass-panel`) devem ser criadas na raiz do `index.css` e reaproveitadas em todas as abas. Nenhuma aba deve recriar botões ou estilos base do zero.
+- **Isolamento de Layout:** Nenhuma aba deve intervir no `Titlebar` ou no `topbar`. O conteúdo da aba se restringe a viver abaixo da barra superior de navegação.
+
