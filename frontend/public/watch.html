@@ -457,6 +457,29 @@
       object-fit: contain;
       display: block;
     }
+  
+    /* Click to Unmute Banner */
+    .unmute-overlay {
+      position: absolute;
+      top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(239, 68, 68, 0.9);
+      color: #FFF;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      z-index: 40;
+      box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
+      animation: pulse 1.5s infinite;
+      user-select: none;
+    }
+
   </style>
 </head>
 <body>
@@ -503,7 +526,13 @@
 
       <!-- Video Player (Active Stream) -->
       <div id="viewer-container">
-        <video id="video" autoplay playsinline></video>
+        
+        <!-- Unmute prompt banner -->
+        <div class="unmute-overlay" id="unmuteOverlay" onclick="unmuteViewerAudio()">
+          🔊 Clique aqui para ativar o áudio da transmissão
+        </div>
+
+        <video id="video" autoplay playsinline onclick="unmuteViewerAudio()"></video>
 
         <div id="hud-viewer">
           <span class="pulse-dot"></span>
@@ -788,31 +817,88 @@
       }
 
       try {
-        const stream = await mediaDevices.getDisplayMedia({
-          video: {
-            ...videoConstraints,
-            cursor: 'always'
-          },
-          audio: captureAudio ? {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-            channelCount: 2
-          } : false,
-          systemAudio: 'include'
-        });
-
-        const vTrack = stream.getVideoTracks()[0];
-        if (vTrack && 'contentHint' in vTrack) {
-          vTrack.contentHint = 'motion';
+        let stream;
+        try {
+          stream = await mediaDevices.getDisplayMedia({
+            video: {
+              ...videoConstraints,
+              cursor: 'always'
+            },
+            audio: captureAudio ? {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false
+            } : false,
+            systemAudio: 'include'
+          });
+        } catch (aErr) {
+          if (aErr.name === 'NotAllowedError') throw aErr;
+          stream = await mediaDevices.getDisplayMedia({
+            video: {
+              ...videoConstraints,
+              cursor: 'always'
+            },
+            audio: captureAudio ? true : false,
+            systemAudio: 'include'
+          });
         }
-
-        localStream = stream;
 
         // Listen for native stop share button
         stream.getVideoTracks()[0].onended = () => {
           stopBroadcasting();
         };
+
+        let streamToSend = stream;
+        if (videoConstraints.width && videoConstraints.height) {
+          const targetW = videoConstraints.width.ideal;
+          const targetH = videoConstraints.height.ideal;
+          const targetFps = fpsSelect > 0 ? fpsSelect : 60;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+
+          const hiddenVideo = document.createElement('video');
+          hiddenVideo.autoplay = true;
+          hiddenVideo.muted = true;
+          hiddenVideo.playsInline = true;
+          hiddenVideo.srcObject = stream;
+          await hiddenVideo.play().catch(() => {});
+
+          let isRendering = true;
+          const drawFrame = () => {
+            if (!isRendering || !ctx) return;
+            const vW = hiddenVideo.videoWidth;
+            const vH = hiddenVideo.videoHeight;
+            if (vW > 0 && vH > 0) {
+              const scale = Math.min(targetW / vW, targetH / vH);
+              const drawW = Math.round(vW * scale);
+              const drawH = Math.round(vH * scale);
+              const offX = Math.round((targetW - drawW) / 2);
+              const offY = Math.round((targetH - drawH) / 2);
+
+              if (offX > 0 || offY > 0) {
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, targetW, targetH);
+              }
+              ctx.drawImage(hiddenVideo, offX, offY, drawW, drawH);
+            }
+            requestAnimationFrame(drawFrame);
+          };
+          drawFrame();
+
+          const canvasStream = canvas.captureStream(targetFps);
+          stream.getAudioTracks().forEach(track => canvasStream.addTrack(track));
+          streamToSend = canvasStream;
+        }
+
+        const vTrack = streamToSend.getVideoTracks()[0];
+        if (vTrack && 'contentHint' in vTrack) {
+          vTrack.contentHint = 'detail';
+        }
+
+        localStream = streamToSend;
 
         // Preview video
         previewVideo.srcObject = stream;
@@ -856,7 +942,8 @@
                   const p = sender.getParameters();
                   if (!p.encodings || p.encodings.length === 0) p.encodings = [{}];
                   p.encodings[0].maxBitrate = 15000000;
-                  p.degradationPreference = 'maintain-framerate';
+                  p.encodings[0].scaleResolutionDownBy = 1.0;
+                  p.degradationPreference = 'maintain-resolution';
                   sender.setParameters(p).catch(() => {});
                 }
               });

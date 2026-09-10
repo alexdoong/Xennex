@@ -24,7 +24,7 @@ Write-Host "`n[1/6] Compilando interface React (frontend)..." -ForegroundColor Y
 $frontendDir = Join-Path $rootDir "frontend"
 Push-Location $frontendDir
 try {
-    npm run build
+    cmd /c "npm run build"
     if ($LASTEXITCODE -ne 0) {
         throw "Erro ao compilar o frontend React via npm run build."
     }
@@ -189,6 +189,14 @@ if (Test-Path $finalFolder) {
 Copy-Item -Recurse -Path $stagingDir -Destination $finalFolder
 
 Compress-Archive -Path "$stagingDir\*" -DestinationPath $zipPath -CompressionLevel Optimal
+
+# Atualizar executavel e dependencias na raiz do projeto se nao estiver em execucao
+try {
+    Copy-Item (Join-Path $stagingDir "Xennex.exe") (Join-Path $rootDir "Xennex.exe") -Force
+    Write-Host " -> Xennex.exe da raiz atualizado com sucesso!" -ForegroundColor Green
+} catch {
+    Write-Host " -> [AVISO] Xennex.exe na raiz esta em execucao e nao pode ser sobrescrito." -ForegroundColor Yellow
+}
 
 # Limpar staging
 Remove-Item -Recurse -Force $stagingDir

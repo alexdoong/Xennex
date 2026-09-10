@@ -24,6 +24,7 @@ namespace Xennex.UI
         private readonly LocalWebServer localWebServer;
         private readonly SidebarService sidebarService;
         private readonly UpdateService updateService;
+        private readonly ProcessAudioCaptureService processAudioCaptureService;
         private ApiBridge apiBridge;
         private NotifyIcon notifyIcon;
         private DispatcherTimer statusTimer;
@@ -69,6 +70,11 @@ namespace Xennex.UI
             streamService = new StreamService();
             sidebarService = new SidebarService(this, configService, OnSidebarModeChanged);
             updateService = new UpdateService();
+            processAudioCaptureService = new ProcessAudioCaptureService();
+            processAudioCaptureService.OnAudioChunkAvailable += (bytes, rate, ch) =>
+            {
+                localWebServer?.BroadcastAudioChunk(bytes, rate, ch);
+            };
 
             string baseDir = AppContext.BaseDirectory;
             string wwwDir = Path.Combine(baseDir, "wwwroot");
@@ -85,7 +91,7 @@ namespace Xennex.UI
 
         private void InitializeApiBridge()
         {
-            apiBridge = new ApiBridge(wacomService, realEngineService, handMotionService, configService, skinService, streamService, updateService)
+            apiBridge = new ApiBridge(wacomService, realEngineService, handMotionService, configService, skinService, streamService, updateService, processAudioCaptureService)
             {
                 MinimizeToTrayRequested = MinimizeToTray,
                 ShutdownRequested = ShutdownApp,
@@ -290,6 +296,8 @@ namespace Xennex.UI
             realEngineService.Stop();
             handMotionService.Stop();
             streamService?.CloseAllViewers();
+            processAudioCaptureService?.StopCapture();
+            processAudioCaptureService?.StopCapture();
             localWebServer?.Stop();
             notifyIcon?.Dispose();
 
@@ -311,6 +319,8 @@ namespace Xennex.UI
                 realEngineService.Stop();
                 handMotionService.Stop();
                 streamService?.CloseAllViewers();
+            processAudioCaptureService?.StopCapture();
+            processAudioCaptureService?.StopCapture();
                 notifyIcon?.Dispose();
                 return;
             }

@@ -75,6 +75,11 @@ declare global {
             GetAppVersion(): Promise<string>;
             CheckForUpdates(): Promise<string>;
             StartAutoUpdate(downloadUrl: string): Promise<boolean>;
+            GetAudioProcesses(): Promise<string>;
+            StartProcessAudioCapture(pid: number): Promise<boolean>;
+            StopProcessAudioCapture(): Promise<void>;
+            IsProcessAudioCapturing(): Promise<boolean>;
+            GetCapturedProcessId(): Promise<number>;
           };
         };
       };

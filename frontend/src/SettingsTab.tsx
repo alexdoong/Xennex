@@ -35,7 +35,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [skinErrorMsg, setSkinErrorMsg] = useState('');
 
   // Version & Updates State
-  const [appVersion, setAppVersion] = useState('v0.2.2');
+  const [appVersion, setAppVersion] = useState('v0.2.1');
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'updating' | 'error'>('idle');
   const [updateData, setUpdateData] = useState<any>(null);
   const [updateMessage, setUpdateMessage] = useState('');
@@ -52,7 +52,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         const currentActive = await api.GetActiveSkin();
         setActiveSkin(currentActive || 'default');
         if (api && api.GetAppVersion) {
-          api.GetAppVersion().then((v: string) => setAppVersion(v || 'v0.2.2'));
+          api.GetAppVersion().then((v: string) => setAppVersion(v || 'v0.2.1'));
         }
       }
     };

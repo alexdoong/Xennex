@@ -2,8 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Peer, type MediaConnection } from 'peerjs';
 import { 
   Volume2, VolumeX, Maximize, Minimize, Pin, RefreshCw, 
-  Tv, Wifi, AlertCircle, Sparkles, Activity
+  Tv, Wifi, AlertCircle, Sparkles, Activity, ScreenShare
 } from 'lucide-react';
+import type { DataConnection } from 'peerjs';
+
+interface StreamItem {
+  id: string;
+  peerId: string;
+  title: string;
+  stream: MediaStream;
+}
 
 const StreamViewer: React.FC = () => {
   const searchParams = new URLSearchParams(window.location.search);
@@ -26,10 +34,19 @@ const StreamViewer: React.FC = () => {
   const [isPinned, setIsPinned] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Multi-Stream States
+  const [streams, setStreams] = useState<StreamItem[]>([]);
+  const [activeStreamId, setActiveStreamId] = useState<string>('');
+  const [isSharingOwnScreen, setIsSharingOwnScreen] = useState(false);
+  const ownCoPeerRef = useRef<Peer | null>(null);
+  const ownStreamRef = useRef<MediaStream | null>(null);
+  const dataConnRef = useRef<DataConnection | null>(null);
+
   // Live Stats
   const [fps, setFps] = useState<number | null>(null);
   const [bitrateKbps, setBitrateKbps] = useState<number | null>(null);
   const [resolution, setResolution] = useState<string>('');
+  const [remoteHasAudio, setRemoteHasAudio] = useState<boolean | null>(null);
 
   const peerRef = useRef<Peer | null>(null);
   const callRef = useRef<MediaConnection | null>(null);
@@ -92,8 +109,27 @@ const StreamViewer: React.FC = () => {
   };
 
   const handleIncomingStream = (remoteStream: MediaStream) => {
-    console.log('[Viewer] Stream recebido com sucesso! Faixas:', remoteStream.getTracks());
-    if (videoRef.current) {
+    console.log('[Viewer] Stream principal recebido! Faixas:', remoteStream.getTracks());
+    const aTracks = remoteStream.getAudioTracks();
+    setRemoteHasAudio(aTracks.length > 0);
+
+    const mainItem: StreamItem = {
+      id: roomId,
+      peerId: roomId,
+      title: streamTitle || 'Transmissão Principal',
+      stream: remoteStream
+    };
+
+    setStreams(prev => {
+      if (prev.some(s => s.peerId === roomId)) {
+        return prev.map(s => s.peerId === roomId ? mainItem : s);
+      }
+      return [mainItem, ...prev];
+    });
+
+    setActiveStreamId(prev => prev || roomId);
+
+    if (videoRef.current && (!activeStreamId || activeStreamId === roomId)) {
       videoRef.current.srcObject = remoteStream;
       videoRef.current.play().catch(e => {
         console.warn('Autoplay catch, retrying muted:', e);
@@ -107,6 +143,123 @@ const StreamViewer: React.FC = () => {
     setIsConnected(true);
     setIsConnecting(false);
     setErrorMessage(null);
+  };
+
+  const switchActiveStream = (targetPeerId: string) => {
+    setActiveStreamId(targetPeerId);
+    const found = streams.find(s => s.peerId === targetPeerId);
+    if (found && found.stream && videoRef.current) {
+      videoRef.current.srcObject = found.stream;
+      videoRef.current.play().catch(() => {});
+      const aTracks = found.stream.getAudioTracks();
+      setRemoteHasAudio(aTracks.length > 0);
+    }
+  };
+
+  const callCoStreamer = (targetPeerId: string, title: string) => {
+    if (!peerRef.current) return;
+    console.log('[Viewer] Conectando ao Co-Streamer:', targetPeerId, title);
+    const dummy = createDummyStream();
+    const call = peerRef.current.call(targetPeerId, dummy);
+
+    call.on('stream', (coStream) => {
+      console.log('[Viewer] Recebido stream secundário:', targetPeerId);
+      const item: StreamItem = {
+        id: targetPeerId,
+        peerId: targetPeerId,
+        title: title || 'Transmissão Secundária',
+        stream: coStream
+      };
+
+      setStreams(prev => {
+        if (prev.some(s => s.peerId === targetPeerId)) {
+          return prev.map(s => s.peerId === targetPeerId ? item : s);
+        }
+        return [...prev, item];
+      });
+    });
+
+    call.on('close', () => {
+      setStreams(prev => prev.filter(s => s.peerId !== targetPeerId));
+    });
+  };
+
+  const startViewerScreenShare = async () => {
+    if (isSharingOwnScreen) {
+      stopViewerScreenShare();
+      return;
+    }
+
+    try {
+      const mediaDevices = navigator.mediaDevices || (navigator as any).webkitMediaDevices;
+      if (!mediaDevices || !mediaDevices.getDisplayMedia) {
+        alert('Compartilhamento de tela não suportado ou bloqueado.');
+        return;
+      }
+
+      const myStream = await mediaDevices.getDisplayMedia({
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
+        audio: true,
+        systemAudio: 'include'
+      } as any);
+
+      ownStreamRef.current = myStream;
+      myStream.getVideoTracks()[0].onended = () => {
+        stopViewerScreenShare();
+      };
+
+      const myCoId = `${roomId}_co_${Math.floor(1000 + Math.random() * 9000)}`;
+      const coPeer = new Peer(myCoId, {
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        }
+      });
+      ownCoPeerRef.current = coPeer;
+
+      coPeer.on('open', (id) => {
+        console.log('[Viewer Co-Stream] Transmissão própria iniciada na sala:', id);
+        setIsSharingOwnScreen(true);
+
+        const myItem: StreamItem = {
+          id: myCoId,
+          peerId: myCoId,
+          title: 'Minha Tela',
+          stream: myStream
+        };
+        setStreams(prev => [...prev.filter(s => s.peerId !== myCoId), myItem]);
+
+        if (dataConnRef.current && dataConnRef.current.open) {
+          dataConnRef.current.send({
+            type: 'register-co-streamer',
+            peerId: id,
+            title: 'Tela de Espectador'
+          });
+        }
+      });
+
+      coPeer.on('call', (incomingCall) => {
+        incomingCall.answer(myStream);
+      });
+
+    } catch (err) {
+      console.warn('[Viewer] Cancelado ou erro ao compartilhar tela:', err);
+    }
+  };
+
+  const stopViewerScreenShare = () => {
+    if (ownStreamRef.current) {
+      ownStreamRef.current.getTracks().forEach(t => t.stop());
+      ownStreamRef.current = null;
+    }
+    if (ownCoPeerRef.current) {
+      try { ownCoPeerRef.current.destroy(); } catch {}
+      ownCoPeerRef.current = null;
+    }
+    setIsSharingOwnScreen(false);
+    setStreams(prev => prev.filter(s => s.title !== 'Minha Tela'));
   };
 
   const connectToStream = () => {
@@ -166,6 +319,21 @@ const StreamViewer: React.FC = () => {
           };
         }
 
+        // Conectar ao DataChannel do Host da sala para receber anúncios de outros streamers
+        const dataConn = peer.connect(roomId);
+        dataConnRef.current = dataConn;
+
+        dataConn.on('data', (data: any) => {
+          if (!data) return;
+          if (data.type === 'co-streamer-added') {
+            console.log('[Viewer] Novo co-streamer na sala anunciado:', data);
+            callCoStreamer(data.peerId, data.title);
+          } else if (data.type === 'streamers-list' && Array.isArray(data.streamers)) {
+            console.log('[Viewer] Lista de streamers existentes recebida:', data.streamers);
+            data.streamers.forEach((s: any) => callCoStreamer(s.peerId, s.title));
+          }
+        });
+
         call.on('stream', (remoteStream) => {
           console.log('[Viewer] Stream de vídeo/áudio recebido!');
           if (videoRef.current) {
@@ -211,6 +379,8 @@ const StreamViewer: React.FC = () => {
     connectToStream();
 
     return () => {
+      stopViewerScreenShare();
+      if (dataConnRef.current) try { dataConnRef.current.close(); } catch {}
       if (callRef.current) callRef.current.close();
       if (peerRef.current) peerRef.current.destroy();
     };
@@ -356,17 +526,56 @@ const StreamViewer: React.FC = () => {
             </div>
             <span className="hud-title">{streamTitle}</span>
             <span className="hud-room-badge">{roomId}</span>
+
+            {/* Multi-Stream Switcher Tabs */}
+            {streams.length > 1 && (
+              <div className="stream-switcher-bar">
+                <span className="switcher-label">Telas ({streams.length}):</span>
+                {streams.map((s) => (
+                  <button 
+                    key={s.peerId}
+                    className={`stream-tab-btn ${activeStreamId === s.peerId ? 'active' : ''}`}
+                    onClick={() => switchActiveStream(s.peerId)}
+                  >
+                    <ScreenShare size={12} />
+                    <span>{s.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="hud-right">
+            <button 
+              className={`hud-btn highlight-btn ${isSharingOwnScreen ? 'active' : ''}`}
+              onClick={startViewerScreenShare}
+              title={isSharingOwnScreen ? "Parar de Compartilhar Minha Tela" : "Compartilhar Minha Tela Nesta Sala"}
+            >
+              <ScreenShare size={14} />
+              <span>{isSharingOwnScreen ? "Parar Tela" : "Compartilhar Tela"}</span>
+            </button>
+
+            {remoteHasAudio !== null && (
+              <span 
+                className="hud-stat-badge" 
+                title={remoteHasAudio ? 'Áudio do sistema ativo' : 'O host não compartilhou áudio (Janela selecionada ou sem som)'}
+                style={remoteHasAudio ? { color: '#34D399', borderColor: 'rgba(52, 211, 153, 0.3)' } : { color: '#94A3B8' }}
+              >
+                {remoteHasAudio ? <Volume2 size={12} /> : <VolumeX size={12} />}
+                {remoteHasAudio ? 'ÁUDIO' : 'SEM SOM'}
+              </span>
+            )}
             {resolution && (
               <span className="hud-stat-badge">
                 <Sparkles size={12} /> {resolution}
               </span>
             )}
             {fps !== null && (
-              <span className="hud-stat-badge">
-                {fps} FPS
+              <span 
+                className="hud-stat-badge"
+                title={fps <= 1 ? "Tela estática (economia de banda inteligente do Chromium). Sobe para 60 FPS ao se movimentar." : `${fps} FPS em tempo real`}
+              >
+                {fps} FPS {fps <= 1 && <span style={{ opacity: 0.6, fontSize: '10px' }}>(Repouso)</span>}
               </span>
             )}
             {bitrateKbps !== null && (

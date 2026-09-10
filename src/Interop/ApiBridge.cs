@@ -15,13 +15,14 @@ namespace Xennex.Interop
         private HandMotionService _handMotionService;
         private StreamService _streamService;
         private UpdateService _updateService;
+        private ProcessAudioCaptureService _processAudioCaptureService;
         public Action MinimizeToTrayRequested;
         public Action ShutdownRequested;
         public Action ToggleSidebarModeRequested;
         public Action SidebarPositionChangedRequested;
         public Func<bool> IsSidebarModeGetter;
 
-        public ApiBridge(WacomService wacomService, RealEngineService realEngineService, HandMotionService handMotionService, ConfigService configService, SkinService skinService, StreamService streamService, UpdateService updateService = null)
+        public ApiBridge(WacomService wacomService, RealEngineService realEngineService, HandMotionService handMotionService, ConfigService configService, SkinService skinService, StreamService streamService, UpdateService updateService = null, ProcessAudioCaptureService processAudioCaptureService = null)
         {
             _wacomService = wacomService;
             _realEngineService = realEngineService;
@@ -30,6 +31,7 @@ namespace Xennex.Interop
             _skinService = skinService;
             _streamService = streamService;
             _updateService = updateService ?? new UpdateService();
+            _processAudioCaptureService = processAudioCaptureService ?? new ProcessAudioCaptureService();
         }
 
         // Wacom
@@ -150,5 +152,45 @@ namespace Xennex.Interop
             System.Text.Json.JsonSerializer.Serialize(await _updateService.CheckForUpdatesAsync());
         public async System.Threading.Tasks.Task<bool> StartAutoUpdate(string downloadUrl) =>
             await _updateService.StartAutoUpdateAsync(downloadUrl);
+
+        // Process-specific Audio Capture (WASAPI Loopback)
+        public string GetAudioProcesses()
+        {
+            try
+            {
+                var processes = _processAudioCaptureService.GetAvailableProcesses();
+                return System.Text.Json.JsonSerializer.Serialize(processes);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[ApiBridge] Erro ao obter processos de audio: " + ex.Message);
+                return "[]";
+            }
+        }
+
+        public bool StartProcessAudioCapture(int pid)
+        {
+            try
+            {
+                return _processAudioCaptureService.StartCapture(pid);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[ApiBridge] Erro ao iniciar captura de processo: " + ex.Message);
+                return false;
+            }
+        }
+
+        public void StopProcessAudioCapture()
+        {
+            try
+            {
+                _processAudioCaptureService.StopCapture();
+            }
+            catch { }
+        }
+
+        public bool IsProcessAudioCapturing() => _processAudioCaptureService?.IsCapturing ?? false;
+        public int GetCapturedProcessId() => _processAudioCaptureService?.CapturedPid ?? 0;
     }
 }
