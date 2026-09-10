@@ -53,6 +53,8 @@ interface FpsOption {
   desc: string;
 }
 
+const DEFAULT_CLOUDFLARE_URL = 'https://xennex-live.alexdoong11.workers.dev';
+
 const RESOLUTIONS: ResolutionOption[] = [
   { id: 'source', label: 'Fonte Original', desc: 'Resolução nativa sem redimensionar' },
   { id: '1440p',  label: '1440p (2K)',      desc: '2560 x 1440 (Ultra Nitidez)', width: 2560, height: 1440 },
@@ -122,7 +124,7 @@ const StreamTab: React.FC = () => {
   const [participantsList, setParticipantsList] = useState<{ peerId: string; name: string; isHost: boolean; isStreaming: boolean; streamTitle?: string; streamPeerId?: string }[]>([]);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
   const [cloudflareUrl, setCloudflareUrl] = useState<string>(() => {
-    return localStorage.getItem('xennex_cloudflare_url') || '';
+    return localStorage.getItem('xennex_cloudflare_url') || DEFAULT_CLOUDFLARE_URL;
   });
   const [copiedWebLink, setCopiedWebLink] = useState(false);
 
@@ -834,7 +836,7 @@ const StreamTab: React.FC = () => {
   // Copy Web Link for Friends
   const copyWebLink = () => {
     if (!myRoomId) return;
-    const baseUrl = cloudflareUrl.trim() || `${window.location.origin}/watch.html`;
+    const baseUrl = (cloudflareUrl.trim() || DEFAULT_CLOUDFLARE_URL);
     const fullUrl = `${baseUrl.replace(/\/+$/, '')}${baseUrl.includes('?') ? '&' : '?'}room=${myRoomId}`;
     navigator.clipboard.writeText(fullUrl);
     setCopiedWebLink(true);
@@ -887,7 +889,7 @@ const StreamTab: React.FC = () => {
 
   const handleOpenInBrowser = async () => {
     if (!myRoomId) return;
-    const baseUrl = cloudflareUrl.trim() || `http://localhost:5000/watch.html`;
+    const baseUrl = (cloudflareUrl.trim() || DEFAULT_CLOUDFLARE_URL);
     const fullUrl = `${baseUrl.replace(/\/+$/, '')}${baseUrl.includes('?') ? '&' : '?'}room=${myRoomId}`;
     if (api && api.OpenBrowser) {
       await api.OpenBrowser(fullUrl);
