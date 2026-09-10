@@ -203,6 +203,7 @@ const StreamTab: React.FC = () => {
     const proc = audioProcesses.find(p => p.Pid === pid);
     if (proc) {
       setCapturedProcessName(proc.Name);
+      setSelectedProcessHwnd(proc.Hwnd || 0);
     }
   };
 
@@ -219,14 +220,17 @@ const StreamTab: React.FC = () => {
         const found = list.find(p => p.Pid === selectedProcessPid);
         if (found) {
           setCapturedProcessName(found.Name);
+          setSelectedProcessHwnd(found.Hwnd || 0);
         } else if (list.length > 0) {
           const firstWithSound = list.find(p => p.HasActiveAudio) || list[0];
           setSelectedProcessPid(firstWithSound.Pid);
+          setSelectedProcessHwnd(firstWithSound.Hwnd || 0);
           setCapturedProcessName(firstWithSound.Name);
         }
       } else if (list.length > 0) {
         const firstWithSound = list.find(p => p.HasActiveAudio) || list[0];
         setSelectedProcessPid(firstWithSound.Pid);
+        setSelectedProcessHwnd(firstWithSound.Hwnd || 0);
         setCapturedProcessName(firstWithSound.Name);
       }
     } catch (err) {
@@ -605,13 +609,22 @@ const StreamTab: React.FC = () => {
   const startStream = async (targetRoomOverride?: string) => {
     try {
       // 1. Verificar se podemos usar Captura Nativa WGC GPU (Zero-Dialog)
-      const canUseNative = !!(api && typeof api.StartNativeWindowCapture === 'function' && pickerTab === 'apps' && selectedProcessHwnd && selectedProcessHwnd !== 0);
+      const canUseNative = !!(api && typeof api.StartNativeWindowCapture === 'function');
 
       if (canUseNative) {
-        console.log('[Host] Ativando Captura Nativa WGC GPU (Zero-Dialog) para HWND:', selectedProcessHwnd);
+        let hwndToCapture = 0;
+        if (pickerTab === 'apps') {
+          const matchedProc = audioProcesses.find(p => p.Pid === selectedProcessPid);
+          hwndToCapture = selectedProcessHwnd || matchedProc?.Hwnd || 0;
+        } else {
+          // Telas Inteiras -> Monitor Primário
+          hwndToCapture = 0;
+        }
+
+        console.log('[Host] Ativando Captura Nativa WGC GPU (Zero-Dialog) para HWND:', hwndToCapture);
         const targetFps = selectedFps > 0 ? selectedFps : 60;
         const resObj = RESOLUTIONS.find(r => r.id === selectedResolution);
-        const nativeStarted = await api.StartNativeWindowCapture(selectedProcessHwnd, selectedProcessPid || 0, targetFps, selectedResolution || '1080p');
+        const nativeStarted = await api.StartNativeWindowCapture(hwndToCapture, selectedProcessPid || 0, targetFps, selectedResolution || '1080p');
 
         if (nativeStarted) {
           const nativeVideoStream = await connectNativeVideoWebSocket(targetFps, resObj?.width, resObj?.height);
@@ -1697,7 +1710,7 @@ const StreamTab: React.FC = () => {
                 Cancelar
               </button>
               <button className="btn-primary btn-discord-go-live" onClick={handleConfirmPickerStream}>
-                {pickerTab === 'apps' && selectedProcessHwnd ? '🚀 Transmitir Jogo Direto (Nativo)' : '🚀 Entrar em Direto'}
+                {api ? '🚀 Transmitir Direto (Nativo)' : '🚀 Entrar em Direto'}
               </button>
             </div>
           </div>

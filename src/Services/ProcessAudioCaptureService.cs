@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -130,6 +130,120 @@ namespace Xennex.Services
             [In] IActivateAudioInterfaceCompletionHandler completionHandler,
             [Out] out IntPtr asyncOperation);
 
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumDesktopWindows(IntPtr hDesktop, EnumWindowsProc lpfn, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr OpenDesktop(string lpszDesktop, uint dwFlags, bool fInherit, uint dwDesiredAccess);
+
+        [DllImport("user32.dll")]
+        private static extern bool CloseDesktop(IntPtr hDesktop);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowTextW(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetShellWindow();
+
+        private class WindowEntry
+        {
+            public IntPtr Hwnd;
+            public int Pid;
+            public string ProcessName = string.Empty;
+            public string Title = string.Empty;
+        }
+
+        private static List<WindowEntry> GetTopLevelWindows()
+        {
+            var windows = new List<WindowEntry>();
+            IntPtr shell = IntPtr.Zero;
+            try { shell = GetShellWindow(); } catch { }
+
+            EnumWindowsProc callback = (hWnd, lParam) =>
+            {
+                if (hWnd == IntPtr.Zero || hWnd == shell) return true;
+                if (!IsWindowVisible(hWnd)) return true;
+
+                int isCloaked = 0;
+                try
+                {
+                    DwmGetWindowAttribute(hWnd, 14 /* DWMWA_CLOAKED */, out isCloaked, sizeof(int));
+                }
+                catch { }
+                if (isCloaked != 0) return true;
+
+                var sb = new System.Text.StringBuilder(512);
+                int len = GetWindowTextW(hWnd, sb, 512);
+                string title = sb.ToString().Trim();
+                if (string.IsNullOrWhiteSpace(title)) return true;
+
+                if (title == "Program Manager" || title == "Windows Input Experience") return true;
+
+                uint pid = 0;
+                GetWindowThreadProcessId(hWnd, out pid);
+                if (pid <= 4) return true;
+
+                string pName = string.Empty;
+                try
+                {
+                    var proc = Process.GetProcessById((int)pid);
+                    pName = proc.ProcessName;
+                }
+                catch { }
+
+                windows.Add(new WindowEntry
+                {
+                    Hwnd = hWnd,
+                    Pid = (int)pid,
+                    ProcessName = pName,
+                    Title = title
+                });
+
+                return true;
+            };
+
+            try
+            {
+                EnumWindows(callback, IntPtr.Zero);
+            }
+            catch { }
+
+            if (windows.Count == 0)
+            {
+                try
+                {
+                    IntPtr hDesk = OpenDesktop("default", 0, false, 0x0100 /* DESKTOP_ENUMERATE */ | 0x0001 /* DESKTOP_READOBJECTS */);
+                    if (hDesk != IntPtr.Zero)
+                    {
+                        try
+                        {
+                            EnumDesktopWindows(hDesk, callback, IntPtr.Zero);
+                        }
+                        finally
+                        {
+                            CloseDesktop(hDesk);
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return windows;
+        }
+
         private static readonly Guid MEDIASUBTYPE_IEEE_FLOAT = new Guid("00000003-0000-0010-8000-00aa00389b71");
         private static readonly Guid IID_IAudioClient = new Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2");
         private const string VAD_PROCESS_LOOPBACK = @"VAD\Process_Loopback";
@@ -151,7 +265,24 @@ namespace Xennex.Services
             var resultDict = new Dictionary<int, AudioProcessInfo>();
             int currentPid = Process.GetCurrentProcess().Id;
 
-            // 1. Inspecionar sessões de áudio ativas do CoreAudio (WASAPI)
+            // 1. Coletar todas as janelas reais visíveis no desktop
+            var allWindows = GetTopLevelWindows();
+            var windowByPid = new Dictionary<int, WindowEntry>();
+            var windowByName = new Dictionary<string, WindowEntry>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var win in allWindows)
+            {
+                if (!windowByPid.ContainsKey(win.Pid))
+                {
+                    windowByPid[win.Pid] = win;
+                }
+                if (!string.IsNullOrEmpty(win.ProcessName) && !windowByName.ContainsKey(win.ProcessName))
+                {
+                    windowByName[win.ProcessName] = win;
+                }
+            }
+
+            // 2. Inspecionar sessões de áudio ativas do CoreAudio (WASAPI)
             try
             {
                 using var enumerator = new MMDeviceEnumerator();
@@ -168,6 +299,8 @@ namespace Xennex.Services
                         int ipid = (int)pid;
                         string pName = "Processo " + ipid;
                         string title = string.Empty;
+                        long hwnd = 0;
+
                         try
                         {
                             var proc = Process.GetProcessById(ipid);
@@ -175,6 +308,25 @@ namespace Xennex.Services
                             title = proc.MainWindowTitle;
                         }
                         catch { }
+
+                        // Tenta associar janela por PID exato
+                        if (windowByPid.TryGetValue(ipid, out var winInfo))
+                        {
+                            hwnd = winInfo.Hwnd.ToInt64();
+                            if (string.IsNullOrWhiteSpace(title) || title == pName)
+                            {
+                                title = winInfo.Title;
+                            }
+                        }
+                        // Se não encontrou por PID (ex: Opera/Chrome áudio renderer child), associa pelo nome do executável
+                        else if (!string.IsNullOrEmpty(pName) && windowByName.TryGetValue(pName, out var nameWinInfo))
+                        {
+                            hwnd = nameWinInfo.Hwnd.ToInt64();
+                            if (string.IsNullOrWhiteSpace(title) || title == pName)
+                            {
+                                title = nameWinInfo.Title;
+                            }
+                        }
 
                         float peak = 0f;
                         try
@@ -186,6 +338,7 @@ namespace Xennex.Services
                         resultDict[ipid] = new AudioProcessInfo
                         {
                             Pid = ipid,
+                            Hwnd = hwnd,
                             Name = pName,
                             Title = string.IsNullOrWhiteSpace(title) ? pName : title,
                             HasActiveAudio = true,
@@ -199,40 +352,32 @@ namespace Xennex.Services
                 Log($"Aviso ao enumerar sessões de áudio: {ex.Message}");
             }
 
-            // 2. Incluir processos com janelas ativas (jogos e aplicativos que podem estar silenciosos no momento)
-            try
+            // 3. Incluir processos com janelas ativas (jogos e aplicativos que podem estar silenciosos no momento)
+            foreach (var win in allWindows)
             {
-                var processes = Process.GetProcesses();
-                foreach (var proc in processes)
+                if (win.Pid == currentPid) continue;
+
+                var existing = resultDict.Values.FirstOrDefault(p => p.Hwnd == win.Hwnd.ToInt64() || p.Pid == win.Pid);
+                if (existing != null)
                 {
-                    try
+                    existing.Hwnd = win.Hwnd.ToInt64();
+                    if (string.IsNullOrWhiteSpace(existing.Title) || existing.Title == existing.Name)
                     {
-                        if (proc.Id == currentPid || proc.Id <= 4) continue;
-                        if (proc.MainWindowHandle != IntPtr.Zero && !string.IsNullOrWhiteSpace(proc.MainWindowTitle))
-                        {
-                            if (!resultDict.ContainsKey(proc.Id))
-                            {
-                                resultDict[proc.Id] = new AudioProcessInfo
-                                {
-                                    Pid = proc.Id,
-                                    Name = proc.ProcessName,
-                                    Title = proc.MainWindowTitle,
-                                    HasActiveAudio = false,
-                                    PeakVolume = 0f
-                                };
-                            }
-                            else if (string.IsNullOrWhiteSpace(resultDict[proc.Id].Title) || resultDict[proc.Id].Title == resultDict[proc.Id].Name)
-                            {
-                                resultDict[proc.Id].Title = proc.MainWindowTitle;
-                            }
-                        }
+                        existing.Title = win.Title;
                     }
-                    catch { }
                 }
-            }
-            catch (Exception ex)
-            {
-                Log($"Aviso ao enumerar janelas ativas: {ex.Message}");
+                else
+                {
+                    resultDict[win.Pid] = new AudioProcessInfo
+                    {
+                        Pid = win.Pid,
+                        Hwnd = win.Hwnd.ToInt64(),
+                        Name = win.ProcessName,
+                        Title = win.Title,
+                        HasActiveAudio = false,
+                        PeakVolume = 0f
+                    };
+                }
             }
 
             return resultDict.Values

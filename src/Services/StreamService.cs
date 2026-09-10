@@ -9,6 +9,7 @@ namespace Xennex.Services
     {
         private readonly Dictionary<string, StreamViewerWindow> _viewers = new();
         private readonly object _lock = new();
+        public object ApiBridge { get; set; }
 
         public bool OpenViewer(string roomId, string title)
         {
@@ -29,7 +30,7 @@ namespace Xennex.Services
                         return;
                     }
 
-                    var window = new StreamViewerWindow(roomId, title, this);
+                    var window = new StreamViewerWindow(roomId, title, this, ApiBridge);
                     window.Closed += (s, e) =>
                     {
                         lock (_lock)

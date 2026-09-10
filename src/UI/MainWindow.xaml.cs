@@ -99,6 +99,7 @@ namespace Xennex.UI
                 IsSidebarModeGetter = () => sidebarService.IsSidebarMode,
                 SidebarPositionChangedRequested = () => sidebarService.OnSidebarPositionChanged()
             };
+            streamService.ApiBridge = apiBridge;
         }
 
         private void OnSidebarModeChanged(bool isSidebar)

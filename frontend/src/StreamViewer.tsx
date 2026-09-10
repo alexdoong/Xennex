@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Peer, type MediaConnection } from 'peerjs';
 import { 
   Volume2, VolumeX, Maximize, Minimize, Pin, RefreshCw, 
@@ -101,6 +101,63 @@ const StreamViewer: React.FC = () => {
   const callRef = useRef<MediaConnection | null>(null);
 
   const api = window.chrome?.webview?.hostObjects?.api;
+  const nativeCaptureSocketRef = useRef<WebSocket | null>(null);
+
+  const connectNativeVideoWebSocket = async (targetFps: number): Promise<MediaStream | null> => {
+    return new Promise((resolve) => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1920;
+        canvas.height = 1080;
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+
+        const ws = new WebSocket('ws://127.0.0.1:59124/videostream/');
+        ws.binaryType = 'arraybuffer';
+        nativeCaptureSocketRef.current = ws;
+
+        let hasFirstFrame = false;
+        let isRendering = false;
+
+        ws.onmessage = async (event) => {
+          if (!(event.data instanceof ArrayBuffer) || !ctx) return;
+          if (isRendering) return;
+
+          isRendering = true;
+          try {
+            const blob = new Blob([event.data], { type: 'image/jpeg' });
+            const bitmap = await createImageBitmap(blob);
+            if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+              canvas.width = bitmap.width;
+              canvas.height = bitmap.height;
+            }
+            ctx.drawImage(bitmap, 0, 0);
+            bitmap.close();
+
+            if (!hasFirstFrame) {
+              hasFirstFrame = true;
+              console.log('[Viewer Native] Primeiro frame GPU recebido!');
+              const canvasStream = canvas.captureStream ? canvas.captureStream(targetFps) : (canvas as any).mozCaptureStream(targetFps);
+              resolve(canvasStream);
+            }
+          } catch (e) {
+            console.warn('[Viewer Native] Erro no canvas:', e);
+          } finally {
+            isRendering = false;
+          }
+        };
+
+        ws.onerror = () => {
+          if (!hasFirstFrame) resolve(null);
+        };
+
+        setTimeout(() => {
+          if (!hasFirstFrame) resolve(null);
+        }, 3000);
+      } catch (err) {
+        resolve(null);
+      }
+    });
+  };
 
   const toggleThemeMode = () => {
     setThemeMode(prev => {
@@ -376,17 +433,29 @@ const StreamViewer: React.FC = () => {
     }
 
     try {
-      const mediaDevices = navigator.mediaDevices || (navigator as any).webkitMediaDevices;
-      if (!mediaDevices || !mediaDevices.getDisplayMedia) {
-        alert('Compartilhamento de tela não suportado ou bloqueado.');
-        return;
+      let myStream: MediaStream | null = null;
+
+      if (api && typeof api.StartNativeWindowCapture === 'function') {
+        console.log('[Viewer] Iniciando captura nativa sem diálogos...');
+        const nativeStarted = await api.StartNativeWindowCapture(0, 0, 60, '1080p');
+        if (nativeStarted) {
+          myStream = await connectNativeVideoWebSocket(60);
+        }
       }
 
-      const myStream = await mediaDevices.getDisplayMedia({
-        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
-        audio: true,
-        systemAudio: 'include'
-      } as any);
+      if (!myStream) {
+        const mediaDevices = navigator.mediaDevices || (navigator as any).webkitMediaDevices;
+        if (!mediaDevices || !mediaDevices.getDisplayMedia) {
+          alert('Compartilhamento de tela não suportado ou bloqueado.');
+          return;
+        }
+
+        myStream = await mediaDevices.getDisplayMedia({
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
+          audio: true,
+          systemAudio: 'include'
+        } as any);
+      }
 
       ownStreamRef.current = myStream;
       myStream.getVideoTracks()[0].onended = () => {
@@ -459,6 +528,13 @@ const StreamViewer: React.FC = () => {
   };
 
   const stopViewerScreenShare = () => {
+    if (api && api.StopNativeWindowCapture) {
+      try { api.StopNativeWindowCapture(); } catch {}
+    }
+    if (nativeCaptureSocketRef.current) {
+      try { nativeCaptureSocketRef.current.close(); } catch {}
+      nativeCaptureSocketRef.current = null;
+    }
     if (ownStreamRef.current) {
       ownStreamRef.current.getTracks().forEach(t => t.stop());
       ownStreamRef.current = null;

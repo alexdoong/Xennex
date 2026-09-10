@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System;
 using System.IO;
 using System.Windows;
@@ -12,14 +12,16 @@ namespace Xennex.UI
         private readonly string _roomId;
         private readonly string _title;
         private readonly StreamService _streamService;
+        private readonly object _apiBridge;
         private bool _isPinned = false;
 
-        public StreamViewerWindow(string roomId, string title, StreamService streamService)
+        public StreamViewerWindow(string roomId, string title, StreamService streamService, object apiBridge = null)
         {
             InitializeComponent();
             _roomId = roomId;
             _title = string.IsNullOrWhiteSpace(title) ? $"Stream - {roomId}" : title;
             _streamService = streamService;
+            _apiBridge = apiBridge;
 
             TxtTitle.Text = _title;
             TxtRoomBadge.Text = roomId;
@@ -50,6 +52,11 @@ namespace Xennex.UI
                         env = await CoreWebView2Environment.CreateAsync(null, fallbackFolder);
                     }
                     await webView.EnsureCoreWebView2Async(env);
+                }
+
+                if (_apiBridge != null)
+                {
+                    webView.CoreWebView2.AddHostObjectToScript("api", _apiBridge);
                 }
 
                 webView.CoreWebView2.PermissionRequested += (s, ev) =>
