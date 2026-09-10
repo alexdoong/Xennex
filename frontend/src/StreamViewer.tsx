@@ -215,7 +215,7 @@ const StreamViewer: React.FC = () => {
     const dummy = createDummyStream();
     const call = peerRef.current.call(targetPeerId, dummy);
 
-    call.on('stream', (coStream) => {
+    const handleIncomingCoStream = (coStream: MediaStream) => {
       console.log('[Viewer] Recebido stream secundário:', targetPeerId);
       const item: StreamItem = {
         id: targetPeerId,
@@ -230,7 +230,22 @@ const StreamViewer: React.FC = () => {
         }
         return [...prev, item];
       });
-    });
+
+      if (activeStreamId === targetPeerId || !activeStreamId || isHostInLobby) {
+        setActiveStreamId(targetPeerId);
+        setIsHostInLobby(false);
+      }
+    };
+
+    call.on('stream', handleIncomingCoStream);
+
+    if (call.peerConnection) {
+      call.peerConnection.ontrack = (ev) => {
+        if (ev.streams && ev.streams[0]) {
+          handleIncomingCoStream(ev.streams[0]);
+        }
+      };
+    }
 
     call.on('close', () => {
       setStreams(prev => prev.filter(s => s.peerId !== targetPeerId));
@@ -253,9 +268,11 @@ const StreamViewer: React.FC = () => {
     const existing = streams.find(s => s.peerId === targetId);
     if (existing) {
       switchActiveStream(targetId);
+      setIsHostInLobby(false);
     } else {
       callCoStreamer(targetId, p.streamTitle || p.name);
       setActiveStreamId(targetId);
+      setIsHostInLobby(false);
     }
   };
 
@@ -302,6 +319,26 @@ const StreamViewer: React.FC = () => {
           stream: myStream
         };
         setStreams(prev => [...prev.filter(s => s.peerId !== myCoId), myItem]);
+        setActiveStreamId(myCoId);
+        setIsHostInLobby(false);
+
+        // Atualizar lista de participantes
+        setParticipants(prev => {
+          const myId = myPeerIdRef.current;
+          const found = prev.find(p => p.peerId === myId);
+          if (found) {
+            return prev.map(p => p.peerId === myId ? { ...p, isStreaming: true, streamPeerId: id, streamTitle: 'Minha Tela' } : p);
+          } else {
+            return [...prev, {
+              peerId: myId,
+              name: 'Você (Transmissor)',
+              isHost: false,
+              isStreaming: true,
+              streamPeerId: id,
+              streamTitle: 'Minha Tela'
+            }];
+          }
+        });
 
         if (dataConnRef.current && dataConnRef.current.open) {
           const myName = myPeerIdRef.current ? `Espectador (${myPeerIdRef.current.slice(-4)})` : 'Espectador';

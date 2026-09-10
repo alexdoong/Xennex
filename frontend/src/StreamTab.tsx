@@ -3,7 +3,7 @@ import { Peer, type MediaConnection } from 'peerjs';
 import { 
   Tv, Radio, Play, Square, Pause, ExternalLink, Copy, Check, Users, 
   Clock, Sparkles, Trash2, Sliders, Zap, Volume2, VolumeX, Crosshair, RefreshCw,
-  Shuffle, LogIn
+  Shuffle, LogIn, Eye
 } from 'lucide-react';
 import type { DataConnection } from 'peerjs';
 
@@ -116,6 +116,7 @@ const StreamTab: React.FC = () => {
   const [myRoomId, setMyRoomId] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
+  const [participantsList, setParticipantsList] = useState<{ peerId: string; name: string; isHost: boolean; isStreaming: boolean; streamTitle?: string; streamPeerId?: string }[]>([]);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
   const [cloudflareUrl, setCloudflareUrl] = useState<string>(() => {
     return localStorage.getItem('xennex_cloudflare_url') || '';
@@ -328,8 +329,10 @@ const StreamTab: React.FC = () => {
 
   // Broadcast Room Presence to all connected data channels
   const broadcastRoomPresence = () => {
+    const isHostLive = participantsRef.current.some(p => p.isHost && p.isStreaming);
     const payload = {
       type: 'room-presence',
+      isHostStreaming: isHostLive,
       participants: participantsRef.current
     };
     roomDataConnectionsRef.current.forEach(c => {
@@ -337,6 +340,7 @@ const StreamTab: React.FC = () => {
         try { c.send(payload); } catch {}
       }
     });
+    setParticipantsList([...participantsRef.current]);
   };
 
   // Initialize or attach to a Persistent Room
@@ -977,6 +981,36 @@ const StreamTab: React.FC = () => {
                 )}
 
                 {/* Ações de Controle da Sala Aberta */}
+                {/* Participantes Conectados na Sala */}
+                {participantsList.length > 1 && (
+                  <div className="room-participants-host-box">
+                    <div className="participants-host-header">
+                      <Users size={14} />
+                      <span>Participantes Conectados ({participantsList.length})</span>
+                    </div>
+                    <div className="participants-host-list">
+                      {participantsList.map(p => (
+                        <div key={p.peerId} className="participant-host-item">
+                          <div className="participant-host-name">
+                            <span className={p.isStreaming ? "p-dot live" : "p-dot"}></span>
+                            <span className="p-name">{p.name} {p.isHost ? '(Host)' : ''}</span>
+                            {p.isStreaming && <span className="host-streaming-badge">AO VIVO</span>}
+                          </div>
+                          {p.isStreaming && !p.isHost && p.streamPeerId && (
+                            <button 
+                              className="btn-host-watch-stream"
+                              onClick={() => handleOpenViewer(p.streamPeerId!, p.streamTitle || p.name)}
+                              title="Assistir tela transmitida por este amigo"
+                            >
+                              <Eye size={13} />
+                              <span>Assistir Tela</span>
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="open-room-actions-grid">
                   {!isStreaming ? (
                     <button className="btn-start-stream" onClick={() => startStream(myRoomId)}>

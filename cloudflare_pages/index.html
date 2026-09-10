@@ -1074,13 +1074,34 @@
           </select>
         </div>
 
+        <!-- Contextual Current Room Sharing Banner -->
+        <div id="broadcastCurrentRoomBox" style="display: none; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: left;">
+          <div style="font-size: 0.75rem; color: #C084FC; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Sala Atual Conectada</div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px; margin-bottom: 10px;">
+            <span id="broadcastTargetRoomLabel" style="font-size: 1.25rem; font-family: monospace; font-weight: 800; color: #FFF;">XNX-0000</span>
+            <span style="font-size: 0.75rem; background: rgba(56, 189, 248, 0.2); color: #38BDF8; padding: 2px 8px; border-radius: 4px; font-weight: 600;">Transmitir nesta sala</span>
+          </div>
+          <p style="font-size: 0.82rem; color: #CBD5E1; margin-bottom: 12px; line-height: 1.4;">
+            Transmita sua tela diretamente para todos os amigos que já estão com você nesta sala, sem precisar criar um novo código!
+          </p>
+          <button class="btn-primary" style="background: linear-gradient(135deg, #10B981, #059669); box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);" onclick="startShareInCurrentRoom()">
+            📡 Transmitir Agora na Sala Atual
+          </button>
+        </div>
+
+        <div id="broadcastOrDivider" style="display: none; align-items: center; text-align: center; margin: 15px 0; color: #64748B; font-size: 0.8rem; font-weight: 600;">
+          <div style="flex: 1; border-bottom: 1px solid rgba(255, 255, 255, 0.08);"></div>
+          <span style="padding: 0 10px;">OU CRIAR UMA NOVA SALA AVULSA</span>
+          <div style="flex: 1; border-bottom: 1px solid rgba(255, 255, 255, 0.08);"></div>
+        </div>
+
         <label class="checkbox-row">
           <input type="checkbox" id="checkAudio" checked>
           <span>Compartilhar áudio do sistema / guia</span>
         </label>
 
         <button class="btn-primary" onclick="startBroadcasting()">
-          📡 Iniciar Compartilhamento de Tela
+          📡 Iniciar Compartilhamento em Nova Sala
         </button>
       </div>
 
@@ -1162,10 +1183,49 @@
 
     // Navigation Tabs
     function switchTab(tab) {
+      // Se o usuário clicar em Transmitir enquanto já está conectado em uma sala ativa
+      if (tab === 'broadcast' && currentRoom && viewerPeer) {
+        if (isSharingOwnScreen) {
+          stopViewerScreenShare();
+        } else {
+          toggleViewerScreenShare();
+        }
+        return;
+      }
+
       document.getElementById('tabBtnWatch').classList.toggle('active', tab === 'watch');
       document.getElementById('tabBtnBroadcast').classList.toggle('active', tab === 'broadcast');
       document.getElementById('tabWatch').classList.toggle('active', tab === 'watch');
       document.getElementById('tabBroadcast').classList.toggle('active', tab === 'broadcast');
+
+      if (tab === 'broadcast') {
+        updateBroadcastCardContext();
+      }
+    }
+
+    function updateBroadcastCardContext() {
+      const room = currentRoom || (roomInput ? roomInput.value.trim().toUpperCase() : '') || initialRoom;
+      const box = document.getElementById('broadcastCurrentRoomBox');
+      const divider = document.getElementById('broadcastOrDivider');
+      const label = document.getElementById('broadcastTargetRoomLabel');
+      if (room && box && divider && label) {
+        label.innerText = room;
+        box.style.display = 'block';
+        divider.style.display = 'flex';
+      } else if (box && divider) {
+        box.style.display = 'none';
+        divider.style.display = 'none';
+      }
+    }
+
+    function startShareInCurrentRoom() {
+      switchTab('watch');
+      if (viewerPeer) {
+        toggleViewerScreenShare();
+      } else if (currentRoom) {
+        startWatch();
+        setTimeout(() => { toggleViewerScreenShare(); }, 900);
+      }
     }
 
     // ==========================================
@@ -1345,7 +1405,12 @@
           if (data.type === 'room-presence' && Array.isArray(data.participants)) {
             participants = data.participants;
             const host = data.participants.find(p => p.isHost);
-            if (host && host.isStreaming) {
+            isHostLive = !!(host && host.isStreaming);
+
+            const isWatchingCoStream = activeStreamerId && activeStreamerId !== currentRoom && knownStreams[activeStreamerId];
+            const isLocalSharing = isSharingOwnScreen && ownStream;
+
+            if (isHostLive || isWatchingCoStream || isLocalSharing) {
               setLobbyState(false);
             } else {
               setLobbyState(true);
@@ -1470,11 +1535,43 @@
     function callCoStreamer(streamerPeerId, title) {
       if (!viewerPeer || !streamerPeerId) return;
       if (streamerPeerId === viewerPeer.id) return;
+      if (ownCoPeer && streamerPeerId === ownCoPeer.id) return;
+
+      console.log('[Viewer Web] Solicitando transmissão do participante:', streamerPeerId, title);
       const dummy = createDummyStream();
       const call = viewerPeer.call(streamerPeerId, dummy);
 
-      call.on('stream', (stream) => {
+      const attachStream = (stream) => {
+        console.log('[Viewer Web] Stream recebido com sucesso de:', streamerPeerId);
         knownStreams[streamerPeerId] = stream;
+        if (activeStreamerId === streamerPeerId || !activeStream || (!isHostLive && activeStreamerId === currentRoom)) {
+          setLobbyState(false);
+          showViewerStream(stream, streamerPeerId);
+        }
+        renderParticipants();
+      };
+
+      call.on('stream', attachStream);
+
+      if (call.peerConnection) {
+        call.peerConnection.ontrack = (ev) => {
+          if (ev.streams && ev.streams[0]) {
+            attachStream(ev.streams[0]);
+          }
+        };
+      }
+
+      call.on('close', () => {
+        delete knownStreams[streamerPeerId];
+        if (activeStreamerId === streamerPeerId) {
+          activeStream = null;
+          activeStreamerId = null;
+          if (isHostLive && knownStreams[currentRoom]) {
+            showViewerStream(knownStreams[currentRoom], currentRoom);
+          } else {
+            setLobbyState(true);
+          }
+        }
         renderParticipants();
       });
     }
@@ -1489,10 +1586,21 @@
       videoCinema.srcObject = remoteStream;
       videoHub.srcObject = remoteStream;
 
+      const isOwnStream = (ownCoPeer && streamerId === ownCoPeer.id);
+
       const playAttempt = (v) => {
+        // Se for a própria tela transmitida, mutar localmente para não dar microfonia/eco no usuário
+        if (isOwnStream) {
+          v.muted = true;
+        } else {
+          v.muted = false;
+        }
+
         v.play().catch(() => {
           v.muted = true;
-          unmuteOverlay.style.display = 'flex';
+          if (!isOwnStream) {
+            unmuteOverlay.style.display = 'flex';
+          }
           v.play().catch(() => {});
         });
       };
@@ -1504,21 +1612,54 @@
     }
 
     function watchParticipantById(targetStreamId) {
+      activeStreamerId = targetStreamId;
+
+      // Se for a própria tela compartilhada localmente
+      if (ownCoPeer && targetStreamId === ownCoPeer.id && ownStream) {
+        setLobbyState(false);
+        showViewerStream(ownStream, targetStreamId);
+        renderParticipants();
+        return;
+      }
+
       if (knownStreams[targetStreamId]) {
+        setLobbyState(false);
         showViewerStream(knownStreams[targetStreamId], targetStreamId);
       } else {
         const p = participants.find(x => (x.streamPeerId || x.peerId) === targetStreamId);
         callCoStreamer(targetStreamId, p ? (p.streamTitle || p.name) : 'Transmissão');
-        activeStreamerId = targetStreamId;
-        renderParticipants();
       }
+      renderParticipants();
     }
 
     function renderParticipants() {
       if (!participantsList) return;
-      const effectiveList = participants.length > 0 ? participants : [
-        { peerId: currentRoom, name: 'Host da Sala', isHost: true, isStreaming: isHostLive, streamTitle: 'Transmissão Principal' }
-      ];
+
+      let effectiveList = [...participants];
+      if (viewerPeer) {
+        const myId = viewerPeer.id;
+        const selfInList = effectiveList.find(p => p.peerId === myId);
+        if (!selfInList) {
+          effectiveList.push({
+            peerId: myId,
+            name: isSharingOwnScreen ? 'Você (Transmissor)' : 'Você',
+            isHost: false,
+            isStreaming: isSharingOwnScreen,
+            streamPeerId: ownCoPeer ? ownCoPeer.id : '',
+            streamTitle: 'Sua Tela'
+          });
+        } else if (isSharingOwnScreen) {
+          selfInList.isStreaming = true;
+          selfInList.streamPeerId = ownCoPeer ? ownCoPeer.id : selfInList.streamPeerId;
+        }
+      }
+
+      if (effectiveList.length === 0) {
+        effectiveList = [
+          { peerId: currentRoom, name: 'Host da Sala', isHost: true, isStreaming: isHostLive, streamTitle: 'Transmissão Principal' }
+        ];
+      }
+
       participantCount.innerText = effectiveList.length.toString();
       lobbyCinemaCount.innerText = effectiveList.length.toString();
       lobbyHubCount.innerText = effectiveList.length.toString();
@@ -1526,8 +1667,18 @@
       participantsList.innerHTML = effectiveList.map(p => {
         const targetId = p.streamPeerId || p.peerId;
         const isStreaming = p.isStreaming || (p.isHost && isHostLive);
+        const isSelf = (viewerPeer && p.peerId === viewerPeer.id) || (ownCoPeer && targetId === ownCoPeer.id);
         const isWatchingThis = activeStreamerId === targetId || (!activeStreamerId && p.isHost && isHostLive);
         const initial = (p.name || 'M').charAt(0).toUpperCase();
+
+        let buttonText = '👁️ Assistir Tela';
+        let buttonClass = 'btn-watch-stream';
+        if (isWatchingThis) {
+          buttonText = isSelf ? '✓ Transmitindo Sua Tela' : '✓ Assistindo Tela';
+          buttonClass += ' active-watching';
+        } else if (isSelf) {
+          buttonText = '👁️ Ver Minha Tela';
+        }
 
         return `
           <div class="participant-card ${isStreaming ? 'is-streaming' : ''}">
@@ -1539,7 +1690,7 @@
                 </div>
                 <div class="participant-name-col">
                   <span class="participant-name">${p.name || 'Participante'}</span>
-                  <span class="participant-role">${p.isHost ? 'Host da Sala' : (viewerPeer && p.peerId === viewerPeer.id ? 'Você' : 'Membro')}</span>
+                  <span class="participant-role">${p.isHost ? 'Host da Sala' : (isSelf ? 'Você' : 'Membro')}</span>
                 </div>
               </div>
               ${isStreaming ? '<div class="live-indicator"><span class="pulse-dot"></span> AO VIVO</div>' : ''}
@@ -1547,10 +1698,10 @@
 
             ${isStreaming ? `
               <button 
-                class="btn-watch-stream ${isWatchingThis ? 'active-watching' : ''}" 
+                class="${buttonClass}" 
                 onclick="watchParticipantById('${targetId}')"
               >
-                ${isWatchingThis ? '✓ Assistindo Tela' : '👁️ Assistir Tela'}
+                ${buttonText}
               </button>
             ` : ''}
           </div>
@@ -1583,6 +1734,8 @@
         };
 
         const coId = currentRoom + '_webco_' + Math.floor(1000 + Math.random() * 9000);
+        console.log('[Viewer Web] Criando Peer para compartilhamento de tela:', coId);
+
         ownCoPeer = new Peer(coId, {
           config: {
             iceServers: ICE_SERVERS
@@ -1590,9 +1743,44 @@
         });
 
         ownCoPeer.on('open', (id) => {
+          console.log('[Viewer Web] Co-stream Peer registrado:', id);
           isSharingOwnScreen = true;
-          document.getElementById('btnHubShare').innerText = '⏹ Parar Compartilhamento';
-          document.getElementById('btnHubShare').classList.add('is-active');
+
+          const btn = document.getElementById('btnHubShare');
+          if (btn) {
+            btn.innerText = '⏹ Parar Compartilhamento';
+            btn.classList.add('is-active');
+          }
+          const topBtn = document.getElementById('tabBtnBroadcast');
+          if (topBtn) {
+            topBtn.innerHTML = '⏹ Parar Tela';
+            topBtn.classList.add('active');
+          }
+
+          // Armazenar o stream próprio localmente e exibir IMEDIATAMENTE no player local!
+          knownStreams[id] = ownStream;
+          activeStreamerId = id;
+          setLobbyState(false);
+          showViewerStream(ownStream, id);
+
+          // Atualizar participante próprio na lista local
+          const myId = viewerPeer ? viewerPeer.id : 'web_' + id;
+          const existing = participants.find(p => p.peerId === myId);
+          if (existing) {
+            existing.isStreaming = true;
+            existing.streamPeerId = id;
+            existing.streamTitle = 'Sua Tela (Ao Vivo)';
+          } else {
+            participants.push({
+              peerId: myId,
+              name: 'Você (Transmissor)',
+              isHost: false,
+              isStreaming: true,
+              streamPeerId: id,
+              streamTitle: 'Sua Tela (Ao Vivo)'
+            });
+          }
+          renderParticipants();
 
           if (currentDataConn && currentDataConn.open && viewerPeer) {
             currentDataConn.send({
@@ -1609,12 +1797,17 @@
           }
         });
 
-        ownCoPeer.on('call', (call) => {
-          call.answer(ownStream);
+        ownCoPeer.on('call', (incomingCall) => {
+          console.log('[Viewer Web] Respondendo chamada para minha tela...');
+          incomingCall.answer(ownStream);
+        });
+
+        ownCoPeer.on('error', (err) => {
+          console.warn('[Viewer Web] Erro no Peer de compartilhamento:', err);
         });
 
       } catch (err) {
-        console.warn('Erro ao compartilhar tela:', err);
+        console.warn('Erro ou cancelado ao compartilhar tela:', err);
       }
     }
 
@@ -1628,11 +1821,40 @@
         ownCoPeer = null;
       }
       isSharingOwnScreen = false;
+
       const btn = document.getElementById('btnHubShare');
       if (btn) {
         btn.innerText = '📡 Transmitir Minha Tela';
         btn.classList.remove('is-active');
       }
+      const topBtn = document.getElementById('tabBtnBroadcast');
+      if (topBtn) {
+        topBtn.innerHTML = '📡 Transmitir Minha Tela';
+        topBtn.classList.remove('active');
+      }
+
+      // Se estávamos assistindo a nossa própria tela, voltar para o Host se estiver ao vivo
+      if (activeStreamerId && (activeStreamerId.includes('_webco_') || activeStreamerId.includes('_co_'))) {
+        if (knownStreams[currentRoom] && isHostLive) {
+          showViewerStream(knownStreams[currentRoom], currentRoom);
+        } else {
+          activeStream = null;
+          activeStreamerId = null;
+          videoCinema.srcObject = null;
+          videoHub.srcObject = null;
+          setLobbyState(true);
+        }
+      }
+
+      if (viewerPeer) {
+        const myId = viewerPeer.id;
+        const p = participants.find(x => x.peerId === myId);
+        if (p) {
+          p.isStreaming = false;
+          p.streamPeerId = '';
+        }
+      }
+      renderParticipants();
 
       if (currentDataConn && currentDataConn.open && viewerPeer) {
         currentDataConn.send({
