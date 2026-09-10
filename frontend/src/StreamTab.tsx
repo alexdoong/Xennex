@@ -370,9 +370,14 @@ const StreamTab: React.FC = () => {
   const initPersistentRoom = (targetRoom: string): Promise<Peer> => {
     return new Promise((resolve, reject) => {
       if (peerRef.current && myRoomId === targetRoom && !peerRef.current.destroyed) {
+        setIsRoomOpen(true);
         resolve(peerRef.current);
         return;
       }
+
+      setMyRoomId(targetRoom);
+      setIsRoomOpen(true);
+      saveRecentRoom(targetRoom);
 
       if (peerRef.current) {
         try { peerRef.current.destroy(); } catch {}
@@ -607,6 +612,73 @@ const StreamTab: React.FC = () => {
     });
   };
 
+  // Helper to activate room, send tracks, and start preview
+  const finalizeStreamStart = async (streamToSend: MediaStream, targetRoomOverride?: string) => {
+    rawStreamRef.current = streamToSend;
+    localStreamRef.current = streamToSend;
+
+    // Ensure room is active and open
+    const targetRoom = targetRoomOverride || myRoomId || customRoomId.trim().toUpperCase() || generateRandomRoomId();
+    await initPersistentRoom(targetRoom);
+
+    setIsStreaming(true);
+    startUptimeTimer();
+
+    // Update room presence
+    participantsRef.current = participantsRef.current.map(p => 
+      p.isHost ? {
+        ...p,
+        isStreaming: true,
+        streamTitle: capturedProcessName || streamTitle || 'Transmissão Principal',
+        streamPeerId: targetRoom
+      } : p
+    );
+    broadcastRoomPresence();
+
+    // Notify viewers and update existing active calls with new tracks
+    roomDataConnectionsRef.current.forEach(c => {
+      if (c.open) {
+        try {
+          c.send({
+            type: 'host-video-started',
+            roomId: targetRoom,
+            streamTitle: capturedProcessName || streamTitle
+          });
+        } catch (e) {}
+      }
+    });
+
+    activeCallsRef.current.forEach(call => {
+      try {
+        const pc = call.peerConnection;
+        if (pc) {
+          const senders = pc.getSenders();
+          const vTrack = streamToSend.getVideoTracks()[0];
+          const aTrack = streamToSend.getAudioTracks()[0];
+          
+          let audioReplaced = false;
+          senders.forEach(sender => {
+            if (sender.track && sender.track.kind === 'video' && vTrack) {
+              sender.replaceTrack(vTrack).catch(() => {});
+            } else if (sender.track && sender.track.kind === 'audio' && aTrack) {
+              sender.replaceTrack(aTrack).catch(() => {});
+              audioReplaced = true;
+            }
+          });
+
+          if (!audioReplaced && aTrack) {
+            try { pc.addTrack(aTrack, streamToSend); } catch {}
+          }
+        }
+      } catch (e) {}
+    });
+
+    if (previewVideoRef.current) {
+      previewVideoRef.current.srcObject = streamToSend;
+      previewVideoRef.current.play().catch(() => {});
+    }
+  };
+
   // Start Screen Capture & Broadcast into Open Room
   const startStream = async (targetRoomOverride?: string) => {
     try {
@@ -643,8 +715,6 @@ const StreamTab: React.FC = () => {
             }
 
             const streamToSend = new MediaStream(tracks);
-            rawStreamRef.current = streamToSend;
-            localStreamRef.current = streamToSend;
 
             setCapturedStats({
               width: resObj?.width || 1920,
@@ -652,24 +722,7 @@ const StreamTab: React.FC = () => {
               fps: targetFps
             });
 
-            setIsStreaming(true);
-            startUptimeTimer();
-
-            activeCallsRef.current.forEach(call => {
-              try {
-                call.peerConnection?.getSenders()?.forEach(s => {
-                  if (s.track?.kind === 'video') s.replaceTrack(tracks[0]);
-                  if (s.track?.kind === 'audio' && tracks[1]) s.replaceTrack(tracks[1]);
-                });
-              } catch (e) {}
-            });
-
-            if (previewVideoRef.current) {
-              previewVideoRef.current.srcObject = streamToSend;
-              previewVideoRef.current.play().catch(() => {});
-            }
-
-            broadcastRoomPresence();
+            await finalizeStreamStart(streamToSend, targetRoomOverride);
             console.log('[Host] Transmissão Nativa GPU iniciada com sucesso! Zero diálogos.');
             return;
           }
@@ -814,69 +867,8 @@ const StreamTab: React.FC = () => {
         outVideoTrack.contentHint = 'detail';
       }
 
-      localStreamRef.current = streamToSend;
-
-      // Set preview video
-      if (previewVideoRef.current) {
-        previewVideoRef.current.srcObject = streamToSend;
-        previewVideoRef.current.play().catch(() => {});
-      }
-
-      // Ensure room is active
-      const targetRoom = targetRoomOverride || myRoomId || customRoomId.trim().toUpperCase() || generateRandomRoomId();
-      await initPersistentRoom(targetRoom);
-
-      setIsStreaming(true);
-      startUptimeTimer();
-
-      // Update room presence
-      participantsRef.current = participantsRef.current.map(p => 
-        p.isHost ? {
-          ...p,
-          isStreaming: true,
-          streamTitle: capturedProcessName || streamTitle || 'Transmissão Principal',
-          streamPeerId: targetRoom
-        } : p
-      );
-      broadcastRoomPresence();
-
-      // Notify viewers and update existing active calls with new tracks
-      roomDataConnectionsRef.current.forEach(c => {
-        if (c.open) {
-          try {
-            c.send({
-              type: 'host-video-started',
-              roomId: targetRoom,
-              streamTitle: capturedProcessName || streamTitle
-            });
-          } catch (e) {}
-        }
-      });
-
-      activeCallsRef.current.forEach(call => {
-        try {
-          const pc = call.peerConnection;
-          if (pc) {
-            const senders = pc.getSenders();
-            const vTrack = streamToSend.getVideoTracks()[0];
-            const aTrack = streamToSend.getAudioTracks()[0];
-            
-            let audioReplaced = false;
-            senders.forEach(sender => {
-              if (sender.track && sender.track.kind === 'video' && vTrack) {
-                sender.replaceTrack(vTrack).catch(() => {});
-              } else if (sender.track && sender.track.kind === 'audio' && aTrack) {
-                sender.replaceTrack(aTrack).catch(() => {});
-                audioReplaced = true;
-              }
-            });
-
-            if (!audioReplaced && aTrack) {
-              try { pc.addTrack(aTrack, streamToSend); } catch {}
-            }
-          }
-        } catch (e) {}
-      });
+      await finalizeStreamStart(streamToSend, targetRoomOverride);
+      console.log('[Host] Transmissão Browser iniciada.');
 
     } catch (err: any) {
       console.error('[Host] Falha ao capturar tela:', err);
@@ -1014,7 +1006,8 @@ const StreamTab: React.FC = () => {
 
   const handleConfirmPickerStream = () => {
     setIsDiscordPickerOpen(false);
-    startStream(myRoomId);
+    const roomToUse = myRoomId || customRoomId.trim().toUpperCase() || generateRandomRoomId();
+    startStream(roomToUse);
   };
 
   const handleOpenViewer = async (targetRoom?: string, title?: string) => {
@@ -1080,6 +1073,15 @@ const StreamTab: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (isStreaming && previewVideoRef.current && localStreamRef.current) {
+      if (previewVideoRef.current.srcObject !== localStreamRef.current) {
+        previewVideoRef.current.srcObject = localStreamRef.current;
+        previewVideoRef.current.play().catch(() => {});
+      }
+    }
+  }, [isStreaming]);
+
   return (
     <div className="stream-tab-container">
       {/* Top Header */}
@@ -1110,7 +1112,7 @@ const StreamTab: React.FC = () => {
               </div>
             </div>
 
-            {isRoomOpen && (
+            {(isRoomOpen || isStreaming) && (
               <div className="card-live-tag">
                 <span className={isStreaming ? "live-dot" : "live-dot lobby-dot"}></span>
                 {isStreaming ? 'AO VIVO' : 'LOBBY ABERTO'}
@@ -1120,7 +1122,7 @@ const StreamTab: React.FC = () => {
 
           <div className="stream-card-body">
             {/* Se uma sala já estiver aberta no app, exibe o painel de gerenciamento ativo */}
-            {isRoomOpen && (
+            {(isRoomOpen || isStreaming) && (
               <div className="open-room-management-box">
                 <div className="open-room-header-row">
                   <div className="open-room-info">
@@ -1152,7 +1154,13 @@ const StreamTab: React.FC = () => {
                 {isStreaming && (
                   <div className="preview-container" style={{ margin: '12px 0' }}>
                     <video 
-                      ref={previewVideoRef} 
+                      ref={el => {
+                        previewVideoRef.current = el;
+                        if (el && localStreamRef.current && el.srcObject !== localStreamRef.current) {
+                          el.srcObject = localStreamRef.current;
+                          el.play().catch(() => {});
+                        }
+                      }} 
                       muted 
                       autoPlay 
                       playsInline 
@@ -1162,7 +1170,7 @@ const StreamTab: React.FC = () => {
                       <span className="preview-label">
                         {capturedStats?.width && capturedStats?.height 
                           ? `${capturedStats.width}x${capturedStats.height} @ ${capturedStats.fps || selectedFps} FPS` 
-                          : `${selectedResolution.toUpperCase()} @ ${selectedFps > 0 ? selectedFps + ' FPS' : 'Nativo'}`}
+                          : `${(selectedResolution || '1080p').toUpperCase()} @ ${selectedFps > 0 ? selectedFps + ' FPS' : 'Nativo'}`}
                         {hasCapturedAudio ? (
                           capturedProcessName ? ` • 🎯 Áudio: ${capturedProcessName}` : ' • 🔊 Áudio Sistema'
                         ) : ' • 🔇 Sem Áudio'}
@@ -1432,7 +1440,7 @@ const StreamTab: React.FC = () => {
                   )}
                 </div>
 
-                {!isRoomOpen ? (
+                {!isRoomOpen && !isStreaming ? (
                   <div className="host-launch-buttons-row">
                     <button className="btn-start-stream" onClick={handleOpenPicker}>
                       <Play size={18} fill="currentColor" /> Iniciar Transmissão Imediata
