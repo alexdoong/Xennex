@@ -14,6 +14,7 @@ namespace Xennex.Services
     public class AudioProcessInfo
     {
         public int Pid { get; set; }
+        public long Hwnd { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public bool HasActiveAudio { get; set; }

@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <Compile Remove="Backup\**" />
+    <Compile Remove="src\CaptureWorker\**" />
     <EmbeddedResource Remove="Backup\**" />
     <None Remove="Backup\**" />
   </ItemGroup>

@@ -190,6 +190,34 @@ namespace Xennex.Interop
             catch { }
         }
 
+
+        // Native GPU Capture Worker (Windows.Graphics.Capture)
+        public bool StartNativeWindowCapture(long hwnd, int pid, int fps, string resolution)
+        {
+            try
+            {
+                _processAudioCaptureService.StartCapture(pid);
+                return _streamService.StartNativeCapture(hwnd, pid, fps, resolution);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[ApiBridge] Erro ao iniciar captura nativa: " + ex.Message);
+                return false;
+            }
+        }
+
+        public void StopNativeWindowCapture()
+        {
+            try
+            {
+                _streamService.StopNativeCapture();
+                _processAudioCaptureService.StopCapture();
+            }
+            catch { }
+        }
+
+        public bool IsNativeWindowCapturing() => _streamService.IsNativeCaptureRunning();
+
         public bool IsProcessAudioCapturing() => _processAudioCaptureService?.IsCapturing ?? false;
         public int GetCapturedProcessId() => _processAudioCaptureService?.CapturedPid ?? 0;
     }

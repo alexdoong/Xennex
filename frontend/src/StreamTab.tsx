@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Peer, type MediaConnection } from 'peerjs';
 import { 
   Tv, Radio, Play, Square, Pause, ExternalLink, Copy, Check, Users, 
@@ -33,6 +33,7 @@ export const ICE_SERVERS = [
 
 interface AudioProcessItem {
   Pid: number;
+  Hwnd?: number;
   Name: string;
   Title: string;
   HasActiveAudio: boolean;
@@ -120,11 +121,13 @@ const StreamTab: React.FC = () => {
   const [viewerCount, setViewerCount] = useState(0);
   const [isDiscordPickerOpen, setIsDiscordPickerOpen] = useState(false);
   const [pickerTab, setPickerTab] = useState<'apps' | 'screens'>('apps');
+  const [selectedProcessHwnd, setSelectedProcessHwnd] = useState<number>(0);
+  const nativeCaptureSocketRef = useRef<WebSocket | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
   const [participantsList, setParticipantsList] = useState<{ peerId: string; name: string; isHost: boolean; isStreaming: boolean; streamTitle?: string; streamPeerId?: string }[]>([]);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
   const [cloudflareUrl, setCloudflareUrl] = useState<string>(() => {
-    return localStorage.getItem('xennex_cloudflare_url') || DEFAULT_CLOUDFLARE_URL;
+    const stored = localStorage.getItem('xennex_cloudflare_url'); if (stored && !stored.includes('localhost') && !stored.includes('127.0.0.1')) { return stored; } localStorage.setItem('xennex_cloudflare_url', DEFAULT_CLOUDFLARE_URL); return DEFAULT_CLOUDFLARE_URL;
   });
   const [copiedWebLink, setCopiedWebLink] = useState(false);
 
@@ -531,9 +534,134 @@ const StreamTab: React.FC = () => {
     });
   };
 
+
+  // Connect to native GPU CaptureWorker WebSocket
+  const connectNativeVideoWebSocket = async (targetFps: number, width?: number, height?: number): Promise<MediaStream | null> => {
+    return new Promise((resolve) => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width || 1920;
+        canvas.height = height || 1080;
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+
+        const ws = new WebSocket('ws://127.0.0.1:59124/videostream/');
+        ws.binaryType = 'arraybuffer';
+        nativeCaptureSocketRef.current = ws;
+
+        let hasFirstFrame = false;
+        let isRendering = false;
+
+        ws.onmessage = async (event) => {
+          if (!(event.data instanceof ArrayBuffer) || !ctx) return;
+          if (isRendering) return;
+
+          isRendering = true;
+          try {
+            const blob = new Blob([event.data], { type: 'image/jpeg' });
+            const bitmap = await createImageBitmap(blob);
+            if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+              canvas.width = bitmap.width;
+              canvas.height = bitmap.height;
+            }
+            ctx.drawImage(bitmap, 0, 0);
+            bitmap.close();
+
+            if (!hasFirstFrame) {
+              hasFirstFrame = true;
+              console.log('[NativeVideo] Primeiro frame GPU recebido com sucesso! Stream ativo.');
+              const canvasStream = canvas.captureStream ? canvas.captureStream(targetFps) : (canvas as any).mozCaptureStream(targetFps);
+              resolve(canvasStream);
+            }
+          } catch (e) {
+            console.warn('[NativeVideo] Erro ao desenhar frame no canvas:', e);
+          } finally {
+            isRendering = false;
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.warn('[NativeVideo] Erro no WebSocket nativo:', err);
+          if (!hasFirstFrame) resolve(null);
+        };
+
+        ws.onclose = () => {
+          console.log('[NativeVideo] WebSocket nativo fechado.');
+        };
+
+        setTimeout(() => {
+          if (!hasFirstFrame) {
+            console.warn('[NativeVideo] Timeout aguardando primeiro frame do CaptureWorker.');
+            resolve(null);
+          }
+        }, 3000);
+      } catch (err) {
+        console.error('[NativeVideo] Exceção:', err);
+        resolve(null);
+      }
+    });
+  };
+
   // Start Screen Capture & Broadcast into Open Room
   const startStream = async (targetRoomOverride?: string) => {
     try {
+      // 1. Verificar se podemos usar Captura Nativa WGC GPU (Zero-Dialog)
+      const canUseNative = !!(api && typeof api.StartNativeWindowCapture === 'function' && pickerTab === 'apps' && selectedProcessHwnd && selectedProcessHwnd !== 0);
+
+      if (canUseNative) {
+        console.log('[Host] Ativando Captura Nativa WGC GPU (Zero-Dialog) para HWND:', selectedProcessHwnd);
+        const targetFps = selectedFps > 0 ? selectedFps : 60;
+        const resObj = RESOLUTIONS.find(r => r.id === selectedResolution);
+        const nativeStarted = await api.StartNativeWindowCapture(selectedProcessHwnd, selectedProcessPid || 0, targetFps, selectedResolution || '1080p');
+
+        if (nativeStarted) {
+          const nativeVideoStream = await connectNativeVideoWebSocket(targetFps, resObj?.width, resObj?.height);
+          if (nativeVideoStream) {
+            let processAudioTrack: MediaStreamTrack | null = null;
+            if (audioMode === 'process' && selectedProcessPid) {
+              processAudioTrack = await startProcessAudioCapture(selectedProcessPid);
+            }
+
+            const tracks: MediaStreamTrack[] = [nativeVideoStream.getVideoTracks()[0]];
+            if (processAudioTrack) {
+              tracks.push(processAudioTrack);
+              setHasCapturedAudio(true);
+            }
+
+            const streamToSend = new MediaStream(tracks);
+            rawStreamRef.current = streamToSend;
+            localStreamRef.current = streamToSend;
+
+            setCapturedStats({
+              width: resObj?.width || 1920,
+              height: resObj?.height || 1080,
+              fps: targetFps
+            });
+
+            setIsStreaming(true);
+            startUptimeTimer();
+
+            activeCallsRef.current.forEach(call => {
+              try {
+                call.peerConnection?.getSenders()?.forEach(s => {
+                  if (s.track?.kind === 'video') s.replaceTrack(tracks[0]);
+                  if (s.track?.kind === 'audio' && tracks[1]) s.replaceTrack(tracks[1]);
+                });
+              } catch (e) {}
+            });
+
+            if (previewVideoRef.current) {
+              previewVideoRef.current.srcObject = streamToSend;
+              previewVideoRef.current.play().catch(() => {});
+            }
+
+            broadcastRoomPresence();
+            console.log('[Host] Transmissão Nativa GPU iniciada com sucesso! Zero diálogos.');
+            return;
+          }
+        }
+        console.warn('[Host] Falha ao conectar ao CaptureWorker nativo, usando fallback de navegador...');
+      }
+
       const mediaDevices = navigator.mediaDevices || (navigator as any).webkitMediaDevices;
       if (!mediaDevices || !mediaDevices.getDisplayMedia) {
         alert('Seu navegador ou ambiente WebView não suporta compartilhamento de tela.');
@@ -745,6 +873,13 @@ const StreamTab: React.FC = () => {
 
   // Pause Video Only (Room Remains Active & Online in Lobby Mode)
   const pauseVideoStream = () => {
+    if (api && api.StopNativeWindowCapture) {
+      try { api.StopNativeWindowCapture(); } catch {}
+    }
+    if (nativeCaptureSocketRef.current) {
+      try { nativeCaptureSocketRef.current.close(); } catch {}
+      nativeCaptureSocketRef.current = null;
+    }
     if (canvasRendererRef.current) {
       try { canvasRendererRef.current.stop(); } catch {}
       canvasRendererRef.current = null;
@@ -1458,6 +1593,7 @@ const StreamTab: React.FC = () => {
                           className={`discord-app-card ${isSelected ? 'selected' : ''}`}
                           onClick={() => {
                             setSelectedProcessPid(p.Pid);
+                            setSelectedProcessHwnd(p.Hwnd || 0);
                             setCapturedProcessName(p.Name);
                             setAudioMode('process');
                           }}
@@ -1561,7 +1697,7 @@ const StreamTab: React.FC = () => {
                 Cancelar
               </button>
               <button className="btn-primary btn-discord-go-live" onClick={handleConfirmPickerStream}>
-                🚀 Entrar em Direto
+                {pickerTab === 'apps' && selectedProcessHwnd ? '🚀 Transmitir Jogo Direto (Nativo)' : '🚀 Entrar em Direto'}
               </button>
             </div>
           </div>

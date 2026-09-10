@@ -80,6 +80,9 @@ declare global {
             StopProcessAudioCapture(): Promise<void>;
             IsProcessAudioCapturing(): Promise<boolean>;
             GetCapturedProcessId(): Promise<number>;
+            StartNativeWindowCapture(hwnd: number, pid: number, fps: number, resolution: string): Promise<boolean>;
+            StopNativeWindowCapture(): Promise<void>;
+            IsNativeWindowCapturing(): Promise<boolean>;
           };
         };
       };

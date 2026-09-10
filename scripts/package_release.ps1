@@ -85,6 +85,19 @@ if ($LASTEXITCODE -ne 0) {
     throw "Erro ao publicar aplicacao via dotnet publish."
 }
 
+
+# 3.1 Publicar Xennex.CaptureWorker (GPU WGC Engine)
+Write-Host " -> Publicando Xennex.CaptureWorker (GPU WGC Engine)..." -ForegroundColor Yellow
+$workerProj = Join-Path $rootDir "src\CaptureWorker\Xennex.CaptureWorker.csproj"
+dotnet publish $workerProj -c Release -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -o $stagingDir
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Erro ao publicar Xennex.CaptureWorker via dotnet publish."
+}
+
 # Remover .pdb
 Get-ChildItem -Path $stagingDir -Filter "*.pdb" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
 
@@ -193,6 +206,7 @@ Compress-Archive -Path "$stagingDir\*" -DestinationPath $zipPath -CompressionLev
 # Atualizar executavel e dependencias na raiz do projeto se nao estiver em execucao
 try {
     Copy-Item (Join-Path $stagingDir "Xennex.exe") (Join-Path $rootDir "Xennex.exe") -Force
+    if (Test-Path (Join-Path $stagingDir "Xennex.CaptureWorker.exe")) { Copy-Item (Join-Path $stagingDir "Xennex.CaptureWorker.exe") (Join-Path $rootDir "Xennex.CaptureWorker.exe") -Force }
     Write-Host " -> Xennex.exe da raiz atualizado com sucesso!" -ForegroundColor Green
 } catch {
     Write-Host " -> [AVISO] Xennex.exe na raiz esta em execucao e nao pode ser sobrescrito." -ForegroundColor Yellow
