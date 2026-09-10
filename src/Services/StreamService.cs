@@ -114,7 +114,7 @@ namespace Xennex.Services
                 }
 
                 int currentPid = System.Diagnostics.Process.GetCurrentProcess().Id;
-                string args = $"--hwnd {hwnd} --fps {fps} --res {resolution} --parentpid {currentPid} --port 59124 --quality 80";
+                string args = $"--hwnd {hwnd} --fps {fps} --res {resolution} --parentpid {currentPid} --port 59124 --quality 88";
 
                 try
                 {

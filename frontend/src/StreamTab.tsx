@@ -519,6 +519,7 @@ const StreamTab: React.FC = () => {
         incomingCall.answer(streamToAnswer);
         activeCallsRef.current.push(incomingCall);
         setViewerCount(activeCallsRef.current.length);
+        tuneCallSenders(incomingCall);
 
         incomingCall.on('close', () => {
           activeCallsRef.current = activeCallsRef.current.filter(c => c !== incomingCall);
@@ -545,13 +546,71 @@ const StreamTab: React.FC = () => {
   };
 
 
+  // Senders tuning to enforce fixed resolution, 60fps, and high bitrate (30Mbps for 2K)
+  const tuneCallSenders = (call: MediaConnection) => {
+    const tune = () => {
+      try {
+        const pc = (call as any).peerConnection as RTCPeerConnection;
+        if (!pc) return;
+
+        const resObj = RESOLUTIONS.find(r => r.id === selectedResolution);
+        const targetW = resObj?.width || 1920;
+        const targetH = resObj?.height || 1080;
+        const targetFps = selectedFps > 0 ? selectedFps : 60;
+        const is2KOrHigher = targetW >= 2560 || targetH >= 1440;
+
+        // Dynamic bitrate budgeting to ensure crystal clear 60 FPS without compression artifacts:
+        // 2K/1440p 60fps -> 30 Mbps (min 12 Mbps)
+        // 1080p 60fps -> 18 Mbps (min 6 Mbps)
+        // 720p 60fps -> 10 Mbps (min 4 Mbps)
+        const targetBitrate = is2KOrHigher ? 30_000_000 : (targetFps >= 60 ? 18_000_000 : 10_000_000);
+        const minBitrate = is2KOrHigher ? 12_000_000 : 6_000_000;
+
+        pc.getSenders().forEach((sender) => {
+          if (sender.track && sender.track.kind === 'video') {
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+
+            params.encodings[0].maxBitrate = targetBitrate;
+            (params.encodings[0] as any).minBitrate = minBitrate;
+            params.encodings[0].maxFramerate = targetFps;
+            params.encodings[0].scaleResolutionDownBy = 1.0; // Strictly NEVER scale down resolution
+            params.encodings[0].networkPriority = 'high';
+            params.encodings[0].priority = 'high';
+
+            // Garante que o WebRTC NUNCA reduza a resolução escolhida (2K/1080p mantidos sempre)
+            params.degradationPreference = 'maintain-resolution';
+
+            sender.setParameters(params).catch(() => {});
+          }
+        });
+      } catch (e) {
+        console.warn('[Host] tuneSenders error:', e);
+      }
+    };
+
+    tune();
+    const pc = (call as any).peerConnection as RTCPeerConnection;
+    if (pc) {
+      pc.addEventListener('connectionstatechange', () => {
+        if (pc.connectionState === 'connected') {
+          tune();
+        }
+      });
+    }
+  };
+
   // Connect to native GPU CaptureWorker WebSocket
   const connectNativeVideoWebSocket = async (targetFps: number, width?: number, height?: number): Promise<MediaStream | null> => {
     return new Promise((resolve) => {
       try {
+        const targetW = width || 1920;
+        const targetH = height || 1080;
         const canvas = document.createElement('canvas');
-        canvas.width = width || 1920;
-        canvas.height = height || 1080;
+        canvas.width = targetW;
+        canvas.height = targetH;
         nativeCanvasRef.current = canvas;
         const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
@@ -570,17 +629,32 @@ const StreamTab: React.FC = () => {
           try {
             const blob = new Blob([event.data], { type: 'image/jpeg' });
             const bitmap = await createImageBitmap(blob);
-            if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
-              canvas.width = bitmap.width;
-              canvas.height = bitmap.height;
-            }
-            ctx.drawImage(bitmap, 0, 0);
+            
+            // STRICT: Always render to the chosen target resolution, never shrink canvas
+            ctx.drawImage(bitmap, 0, 0, targetW, targetH);
             bitmap.close();
 
             if (!hasFirstFrame) {
               hasFirstFrame = true;
-              console.log('[NativeVideo] Primeiro frame GPU recebido com sucesso! Stream ativo.');
+              console.log(`[NativeVideo] Primeiro frame GPU recebido com sucesso! (${targetW}x${targetH} @ ${targetFps} FPS)`);
               const canvasStream = canvas.captureStream ? canvas.captureStream(targetFps) : (canvas as any).mozCaptureStream(targetFps);
+              const vTrack = canvasStream.getVideoTracks()[0];
+              if (vTrack) {
+                if ('contentHint' in vTrack) {
+                  vTrack.contentHint = 'motion';
+                }
+                vTrack.applyConstraints({
+                  width: { exact: targetW },
+                  height: { exact: targetH },
+                  frameRate: { exact: targetFps }
+                }).catch(() => {
+                  vTrack.applyConstraints({
+                    width: { ideal: targetW },
+                    height: { ideal: targetH },
+                    frameRate: { ideal: targetFps, min: targetFps }
+                  }).catch(() => {});
+                });
+              }
               resolve(canvasStream);
             }
           } catch (e) {
@@ -670,6 +744,7 @@ const StreamTab: React.FC = () => {
             try { pc.addTrack(aTrack, streamToSend); } catch {}
           }
         }
+        tuneCallSenders(call);
       } catch (e) {}
     });
 
@@ -701,7 +776,9 @@ const StreamTab: React.FC = () => {
         const nativeStarted = await api.StartNativeWindowCapture(hwndToCapture, selectedProcessPid || 0, targetFps, selectedResolution || '1080p');
 
         if (nativeStarted) {
-          const nativeVideoStream = await connectNativeVideoWebSocket(targetFps, resObj?.width, resObj?.height);
+          const targetW = resObj?.width || 1920;
+          const targetH = resObj?.height || 1080;
+          const nativeVideoStream = await connectNativeVideoWebSocket(targetFps, targetW, targetH);
           if (nativeVideoStream) {
             let processAudioTrack: MediaStreamTrack | null = null;
             if (audioMode === 'process' && selectedProcessPid) {
@@ -989,7 +1066,16 @@ const StreamTab: React.FC = () => {
     setUptimeSeconds(0);
     if (uptimeTimerRef.current) window.clearInterval(uptimeTimerRef.current);
     uptimeTimerRef.current = window.setInterval(() => {
-      setUptimeSeconds(prev => prev + 1);
+      setUptimeSeconds(prev => {
+        const next = prev + 1;
+        // Periodic check every 3s to guarantee WebRTC never downgrades 2K/60fps
+        if (next % 3 === 0 && activeCallsRef.current.length > 0) {
+          activeCallsRef.current.forEach(c => {
+            try { tuneCallSenders(c); } catch {}
+          });
+        }
+        return next;
+      });
     }, 1000);
   };
 

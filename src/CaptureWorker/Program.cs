@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Net;
 using System.Net.WebSockets;
@@ -142,10 +143,12 @@ namespace Xennex.CaptureWorker
                 else if (args[i] == "--quality" && i + 1 < args.Length) int.TryParse(args[++i], out _quality);
                 else if (args[i] == "--res" && i + 1 < args.Length)
                 {
-                    string res = args[++i];
+                    string res = args[++i].ToLowerInvariant();
                     if (res == "1080p") { _scaleWidth = 1920; _scaleHeight = 1080; }
                     else if (res == "720p") { _scaleWidth = 1280; _scaleHeight = 720; }
-                    else if (res == "1440p") { _scaleWidth = 2560; _scaleHeight = 1440; }
+                    else if (res == "1440p" || res == "2k") { _scaleWidth = 2560; _scaleHeight = 1440; }
+                    else if (res == "480p") { _scaleWidth = 854; _scaleHeight = 480; }
+                    else if (res == "4k" || res == "2160p") { _scaleWidth = 3840; _scaleHeight = 2160; }
                 }
             }
 
@@ -328,11 +331,18 @@ namespace Xennex.CaptureWorker
 
                             using (var bmp = new Bitmap(width, height, pitch, PixelFormat.Format32bppArgb, mapped.pData))
                             {
-                                // Optional downscaling
-                                if (_scaleWidth > 0 && _scaleHeight > 0 && (_scaleWidth < width || _scaleHeight < height))
+                                // Force exact target resolution scaling (both upscaling to 2K/1440p and downscaling)
+                                if (_scaleWidth > 0 && _scaleHeight > 0 && (width != _scaleWidth || height != _scaleHeight))
                                 {
-                                    using (var scaledBmp = new Bitmap(bmp, new Size(_scaleWidth, _scaleHeight)))
+                                    using (var scaledBmp = new Bitmap(_scaleWidth, _scaleHeight))
                                     {
+                                        using (var g = Graphics.FromImage(scaledBmp))
+                                        {
+                                            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                                            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                                            g.CompositingQuality = CompositingQuality.HighQuality;
+                                            g.DrawImage(bmp, 0, 0, _scaleWidth, _scaleHeight);
+                                        }
                                         using (var ms = new MemoryStream())
                                         {
                                             scaledBmp.Save(ms, encoder, encParams);
