@@ -112,6 +112,7 @@ const StreamTab: React.FC = () => {
   const activeCallsRef = useRef<MediaConnection[]>([]);
   const roomDataConnectionsRef = useRef<DataConnection[]>([]);
   const activeCoStreamersRef = useRef<{ peerId: string; title: string }[]>([]);
+  const participantsRef = useRef<{ peerId: string; name: string; isHost: boolean; isStreaming: boolean; streamTitle?: string; streamPeerId?: string }[]>([]);
   const uptimeTimerRef = useRef<number | null>(null);
 
   const api = window.chrome?.webview?.hostObjects?.api;
@@ -542,41 +543,120 @@ const StreamTab: React.FC = () => {
         setIsStreaming(true);
       });
 
-      // Gerenciar conexões de dados da sala (Coordenação Multi-Stream Discord Style)
+      // Inicializar presença com o Host da sala
+      participantsRef.current = [{
+        peerId: targetRoom,
+        name: 'Host Principal',
+        isHost: true,
+        isStreaming: true,
+        streamTitle: capturedProcessName || 'Transmissão Principal',
+        streamPeerId: targetRoom
+      }];
+
+      const broadcastRoomPresence = () => {
+        const payload = {
+          type: 'room-presence',
+          participants: participantsRef.current
+        };
+        roomDataConnectionsRef.current.forEach(c => {
+          if (c.open) {
+            try { c.send(payload); } catch {}
+          }
+        });
+      };
+
+      // Gerenciar conexões de dados da sala (Coordenação Multi-Stream & Presença Discord Style)
       peer.on('connection', (conn) => {
         roomDataConnectionsRef.current.push(conn);
 
-        conn.on('open', () => {
-          if (activeCoStreamersRef.current.length > 0) {
+        const sendCurrentState = () => {
+          try {
             conn.send({
-              type: 'streamers-list',
-              streamers: activeCoStreamersRef.current
+              type: 'room-presence',
+              participants: participantsRef.current
             });
-          }
-        });
+            if (activeCoStreamersRef.current.length > 0) {
+              conn.send({
+                type: 'streamers-list',
+                streamers: activeCoStreamersRef.current
+              });
+            }
+          } catch (e) {}
+        };
+
+        if (conn.open) {
+          sendCurrentState();
+        } else {
+          conn.on('open', sendCurrentState);
+        }
 
         conn.on('data', (data: any) => {
-          if (data && data.type === 'register-co-streamer') {
-            console.log('[Host Hub] Novo Co-Streamer registrado na sala:', data);
+          if (!data || typeof data !== 'object') return;
+
+          if (data.type === 'join-room') {
+            const pId = data.peerId || conn.peer;
+            const pName = data.name || `Espectador (${pId.slice(-4)})`;
+            console.log('[Host Hub] Participante entrou na sala:', pName, pId);
+            
+            if (!participantsRef.current.some(p => p.peerId === pId)) {
+              participantsRef.current.push({
+                peerId: pId,
+                name: pName,
+                isHost: false,
+                isStreaming: !!data.isStreaming,
+                streamTitle: data.streamTitle,
+                streamPeerId: data.streamPeerId
+              });
+            }
+            broadcastRoomPresence();
+          } 
+          else if (data.type === 'start-sharing' || data.type === 'register-co-streamer') {
+            const sId = data.streamPeerId || data.peerId || data.streamer?.id;
+            const title = data.streamTitle || data.title || data.streamer?.label || 'Gameplay Secundária';
+            console.log('[Host Hub] Transmissão adicional registrada na sala:', sId, title);
+
             activeCoStreamersRef.current = [
-              ...activeCoStreamersRef.current.filter(s => s.peerId !== data.peerId),
-              { peerId: data.peerId, title: data.title }
+              ...activeCoStreamersRef.current.filter(s => s.peerId !== sId),
+              { peerId: sId, title }
             ];
 
-            roomDataConnectionsRef.current.forEach(c => {
-              if (c.open && c.peer !== conn.peer) {
-                c.send({
-                  type: 'co-streamer-added',
-                  peerId: data.peerId,
-                  title: data.title
-                });
-              }
-            });
+            const existing = participantsRef.current.find(p => p.peerId === conn.peer || p.peerId === sId);
+            if (existing) {
+              existing.isStreaming = true;
+              existing.streamTitle = title;
+              existing.streamPeerId = sId;
+            } else {
+              participantsRef.current.push({
+                peerId: sId,
+                name: data.name || `Convidado (${sId.slice(-4)})`,
+                isHost: false,
+                isStreaming: true,
+                streamTitle: title,
+                streamPeerId: sId
+              });
+            }
+            broadcastRoomPresence();
+          }
+          else if (data.type === 'stop-sharing' || data.type === 'unregister-co-streamer') {
+            const sId = data.streamPeerId || data.peerId || data.streamerId;
+            activeCoStreamersRef.current = activeCoStreamersRef.current.filter(s => s.peerId !== sId);
+            const existing = participantsRef.current.find(p => p.streamPeerId === sId || p.peerId === sId);
+            if (existing) {
+              existing.isStreaming = false;
+              existing.streamPeerId = undefined;
+            }
+            broadcastRoomPresence();
+          }
+          else if (data.type === 'get-presence' || data.type === 'get-streamers') {
+            sendCurrentState();
           }
         });
 
         conn.on('close', () => {
           roomDataConnectionsRef.current = roomDataConnectionsRef.current.filter(c => c !== conn);
+          participantsRef.current = participantsRef.current.filter(p => p.peerId !== conn.peer && p.streamPeerId !== conn.peer);
+          activeCoStreamersRef.current = activeCoStreamersRef.current.filter(s => s.peerId !== conn.peer);
+          broadcastRoomPresence();
         });
       });
 

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Peer, type MediaConnection } from 'peerjs';
 import { 
   Volume2, VolumeX, Maximize, Minimize, Pin, RefreshCw, 
-  Tv, Wifi, AlertCircle, Sparkles, Activity, ScreenShare
+  Tv, Wifi, AlertCircle, Sparkles, Activity, ScreenShare,
+  Users, Check, Eye, ChevronRight, ChevronLeft
 } from 'lucide-react';
 import type { DataConnection } from 'peerjs';
 
@@ -11,6 +12,15 @@ interface StreamItem {
   peerId: string;
   title: string;
   stream: MediaStream;
+}
+
+interface RoomParticipant {
+  peerId: string;
+  name: string;
+  isHost?: boolean;
+  isStreaming?: boolean;
+  streamTitle?: string;
+  streamPeerId?: string;
 }
 
 const StreamViewer: React.FC = () => {
@@ -27,6 +37,12 @@ const StreamViewer: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showHud, setShowHud] = useState(true);
   
+  // Theme mode: 'cinema' (floating HUD) vs 'discord' (room hub with participant sidebar)
+  const [themeMode, setThemeMode] = useState<'cinema' | 'discord'>(() => {
+    return (localStorage.getItem('xennex_viewer_theme') as 'cinema' | 'discord') || 'discord';
+  });
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   // Video controls
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -34,10 +50,13 @@ const StreamViewer: React.FC = () => {
   const [isPinned, setIsPinned] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Multi-Stream States
+  // Multi-Stream & Participants States
   const [streams, setStreams] = useState<StreamItem[]>([]);
+  const [participants, setParticipants] = useState<RoomParticipant[]>([]);
   const [activeStreamId, setActiveStreamId] = useState<string>('');
   const [isSharingOwnScreen, setIsSharingOwnScreen] = useState(false);
+  
+  const myPeerIdRef = useRef<string>('');
   const ownCoPeerRef = useRef<Peer | null>(null);
   const ownStreamRef = useRef<MediaStream | null>(null);
   const dataConnRef = useRef<DataConnection | null>(null);
@@ -53,7 +72,15 @@ const StreamViewer: React.FC = () => {
 
   const api = window.chrome?.webview?.hostObjects?.api;
 
-  // Auto-hide HUD on idle
+  const toggleThemeMode = () => {
+    setThemeMode(prev => {
+      const next = prev === 'cinema' ? 'discord' : 'cinema';
+      localStorage.setItem('xennex_viewer_theme', next);
+      return next;
+    });
+  };
+
+  // Auto-hide HUD on idle in cinema mode
   const triggerHud = () => {
     setShowHud(true);
     if (hudTimeoutRef.current) window.clearTimeout(hudTimeoutRef.current);
@@ -81,7 +108,7 @@ const StreamViewer: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, 2, 2);
+      ctx.fillRect(0, 2, 2, 2);
     }
     const canvasStream = canvas.captureStream ? canvas.captureStream(1) : (canvas as any).mozCaptureStream(1);
     const videoTrack = canvasStream.getVideoTracks()[0];
@@ -108,28 +135,28 @@ const StreamViewer: React.FC = () => {
     return new MediaStream(tracks);
   };
 
-  const handleIncomingStream = (remoteStream: MediaStream) => {
-    console.log('[Viewer] Stream principal recebido! Faixas:', remoteStream.getTracks());
+  const handleIncomingStream = (remoteStream: MediaStream, sourceId: string = roomId, title: string = streamTitle) => {
+    console.log('[Viewer] Stream recebido de', sourceId, 'faixas:', remoteStream.getTracks());
     const aTracks = remoteStream.getAudioTracks();
     setRemoteHasAudio(aTracks.length > 0);
 
     const mainItem: StreamItem = {
-      id: roomId,
-      peerId: roomId,
-      title: streamTitle || 'Transmissão Principal',
+      id: sourceId,
+      peerId: sourceId,
+      title: title || (sourceId === roomId ? 'Host da Sala' : 'Transmissão'),
       stream: remoteStream
     };
 
     setStreams(prev => {
-      if (prev.some(s => s.peerId === roomId)) {
-        return prev.map(s => s.peerId === roomId ? mainItem : s);
+      if (prev.some(s => s.peerId === sourceId)) {
+        return prev.map(s => s.peerId === sourceId ? mainItem : s);
       }
       return [mainItem, ...prev];
     });
 
-    setActiveStreamId(prev => prev || roomId);
+    setActiveStreamId(prev => prev || sourceId);
 
-    if (videoRef.current && (!activeStreamId || activeStreamId === roomId)) {
+    if (videoRef.current && (!activeStreamId || activeStreamId === sourceId)) {
       videoRef.current.srcObject = remoteStream;
       videoRef.current.play().catch(e => {
         console.warn('Autoplay catch, retrying muted:', e);
@@ -157,7 +184,8 @@ const StreamViewer: React.FC = () => {
   };
 
   const callCoStreamer = (targetPeerId: string, title: string) => {
-    if (!peerRef.current) return;
+    if (!peerRef.current || !targetPeerId) return;
+    if (targetPeerId === myPeerIdRef.current) return;
     console.log('[Viewer] Conectando ao Co-Streamer:', targetPeerId, title);
     const dummy = createDummyStream();
     const call = peerRef.current.call(targetPeerId, dummy);
@@ -182,6 +210,29 @@ const StreamViewer: React.FC = () => {
     call.on('close', () => {
       setStreams(prev => prev.filter(s => s.peerId !== targetPeerId));
     });
+  };
+
+  const handleWatchParticipant = (p: RoomParticipant) => {
+    const targetId = p.streamPeerId || p.peerId;
+    if (!targetId) return;
+
+    if (targetId === roomId) {
+      // Host stream
+      if (streams.some(s => s.peerId === roomId)) {
+        switchActiveStream(roomId);
+      } else {
+        connectToStream();
+      }
+      return;
+    }
+
+    const existing = streams.find(s => s.peerId === targetId);
+    if (existing) {
+      switchActiveStream(targetId);
+    } else {
+      callCoStreamer(targetId, p.streamTitle || p.name);
+      setActiveStreamId(targetId);
+    }
   };
 
   const startViewerScreenShare = async () => {
@@ -232,10 +283,17 @@ const StreamViewer: React.FC = () => {
         setStreams(prev => [...prev.filter(s => s.peerId !== myCoId), myItem]);
 
         if (dataConnRef.current && dataConnRef.current.open) {
+          const myName = myPeerIdRef.current ? `Espectador (${myPeerIdRef.current.slice(-4)})` : 'Espectador';
+          dataConnRef.current.send({
+            type: 'start-sharing',
+            peerId: myPeerIdRef.current,
+            streamPeerId: id,
+            streamTitle: `Tela de ${myName}`
+          });
           dataConnRef.current.send({
             type: 'register-co-streamer',
             peerId: id,
-            title: 'Tela de Espectador'
+            title: `Tela de ${myName}`
           });
         }
       });
@@ -260,6 +318,13 @@ const StreamViewer: React.FC = () => {
     }
     setIsSharingOwnScreen(false);
     setStreams(prev => prev.filter(s => s.title !== 'Minha Tela'));
+
+    if (dataConnRef.current && dataConnRef.current.open && myPeerIdRef.current) {
+      dataConnRef.current.send({
+        type: 'stop-sharing',
+        peerId: myPeerIdRef.current
+      });
+    }
   };
 
   const connectToStream = () => {
@@ -295,6 +360,7 @@ const StreamViewer: React.FC = () => {
       peerRef.current = peer;
 
       peer.on('open', (myId) => {
+        myPeerIdRef.current = myId;
         console.log('[Viewer] Conectado ao servidor de sinalização P2P com ID:', myId);
         
         // Initiate call with dummy stream containing tracks for valid WebRTC SDP m-lines
@@ -304,45 +370,63 @@ const StreamViewer: React.FC = () => {
 
         // Listen for standard PeerJS stream event
         call.on('stream', (remoteStream) => {
-          handleIncomingStream(remoteStream);
+          handleIncomingStream(remoteStream, roomId, streamTitle);
         });
 
         // Also hook native WebRTC ontrack for maximum browser compatibility
         if (call.peerConnection) {
           call.peerConnection.ontrack = (ev) => {
             if (ev.streams && ev.streams[0]) {
-              handleIncomingStream(ev.streams[0]);
+              handleIncomingStream(ev.streams[0], roomId, streamTitle);
             } else if (ev.track) {
               const ms = new MediaStream([ev.track]);
-              handleIncomingStream(ms);
+              handleIncomingStream(ms, roomId, streamTitle);
             }
           };
         }
 
-        // Conectar ao DataChannel do Host da sala para receber anúncios de outros streamers
+        // Conectar ao DataChannel do Host da sala para presença em tempo real
         const dataConn = peer.connect(roomId);
         dataConnRef.current = dataConn;
 
+        const sendJoinNotification = () => {
+          const myName = `Espectador (${myId.slice(-4)})`;
+          dataConn.send({
+            type: 'join-room',
+            peerId: myId,
+            name: myName,
+            isStreaming: isSharingOwnScreen
+          });
+          dataConn.send({ type: 'get-presence' });
+        };
+
+        if (dataConn.open) {
+          sendJoinNotification();
+        } else {
+          dataConn.on('open', sendJoinNotification);
+        }
+
         dataConn.on('data', (data: any) => {
           if (!data) return;
-          if (data.type === 'co-streamer-added') {
+
+          if (data.type === 'room-presence' && Array.isArray(data.participants)) {
+            console.log('[Viewer] Presença da sala recebida:', data.participants);
+            setParticipants(data.participants);
+          } else if (data.type === 'co-streamer-added') {
             console.log('[Viewer] Novo co-streamer na sala anunciado:', data);
             callCoStreamer(data.peerId, data.title);
-          } else if (data.type === 'streamers-list' && Array.isArray(data.streamers)) {
-            console.log('[Viewer] Lista de streamers existentes recebida:', data.streamers);
-            data.streamers.forEach((s: any) => callCoStreamer(s.peerId, s.title));
+          } else if ((data.type === 'streamers-list' || data.type === 'streamer-list') && Array.isArray(data.streamers)) {
+            console.log('[Viewer] Lista de streamers recebida:', data.streamers);
+            data.streamers.forEach((s: any) => {
+              const streamId = s.peerId || s.id;
+              const title = s.title || s.label;
+              if (streamId && streamId !== roomId && streamId !== myPeerIdRef.current) {
+                callCoStreamer(streamId, title);
+              }
+            });
+          } else if (data.type === 'streamer-removed') {
+            setStreams(prev => prev.filter(s => s.peerId !== data.peerId));
           }
-        });
-
-        call.on('stream', (remoteStream) => {
-          console.log('[Viewer] Stream de vídeo/áudio recebido!');
-          if (videoRef.current) {
-            videoRef.current.srcObject = remoteStream;
-            videoRef.current.play().catch(e => console.warn('Autoplay prevent:', e));
-          }
-          setIsConnected(true);
-          setIsConnecting(false);
-          setErrorMessage(null);
         });
 
         call.on('close', () => {
@@ -472,6 +556,252 @@ const StreamViewer: React.FC = () => {
     }
   };
 
+  // Render Discord Room Hub Layout
+  if (themeMode === 'discord') {
+    return (
+      <div ref={containerRef} className="stream-hub-layout">
+        {/* Main Video Viewport */}
+        <div className="stream-hub-main">
+          {/* Top Header */}
+          <div className="stream-hub-header">
+            <div className="hub-room-info">
+              <div className="live-pill">
+                <span className="live-dot"></span>
+                LIVE
+              </div>
+              <span className="hud-title">{streamTitle}</span>
+              <span className="hub-room-badge">{roomId}</span>
+
+              {/* Theme switcher toggle */}
+              <button 
+                className="theme-switch-btn" 
+                onClick={toggleThemeMode} 
+                title="Alternar para Modo Cinema Imersivo"
+              >
+                <Tv size={14} />
+                <span>Modo Cinema</span>
+              </button>
+
+              {/* Multi-Stream Switcher Tabs */}
+              {streams.length > 1 && (
+                <div className="stream-switcher-bar" style={{ maxWidth: '300px' }}>
+                  <span className="switcher-label">Telas ({streams.length}):</span>
+                  {streams.map((s) => (
+                    <button 
+                      key={s.peerId}
+                      className={`stream-tab-btn ${activeStreamId === s.peerId ? 'active' : ''}`}
+                      onClick={() => switchActiveStream(s.peerId)}
+                    >
+                      <ScreenShare size={12} />
+                      <span>{s.title}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="hud-right">
+              {remoteHasAudio !== null && (
+                <span 
+                  className="hud-stat-badge" 
+                  title={remoteHasAudio ? 'Áudio ativo' : 'Sem áudio transmitido'}
+                  style={remoteHasAudio ? { color: '#34D399', borderColor: 'rgba(52, 211, 153, 0.3)' } : { color: '#94A3B8' }}
+                >
+                  {remoteHasAudio ? <Volume2 size={12} /> : <VolumeX size={12} />}
+                  {remoteHasAudio ? 'ÁUDIO' : 'SEM SOM'}
+                </span>
+              )}
+              {resolution && (
+                <span className="hud-stat-badge">
+                  <Sparkles size={12} /> {resolution}
+                </span>
+              )}
+              {fps !== null && (
+                <span className="hud-stat-badge">
+                  {fps} FPS
+                </span>
+              )}
+              {bitrateKbps !== null && (
+                <span className="hud-stat-badge">
+                  <Activity size={12} /> {bitrateKbps} kbps
+                </span>
+              )}
+
+              {/* Controls */}
+              <button className="hud-btn" onClick={toggleMute} title={isMuted ? 'Desmutar' : 'Mutar'}>
+                {isMuted || volume === 0 ? <VolumeX size={16} color="#EF4444" /> : <Volume2 size={16} />}
+              </button>
+              <input 
+                type="range" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                value={isMuted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className="hud-volume-slider"
+                style={{ width: '60px' }}
+                title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+              />
+              <button className="hud-btn" onClick={toggleFitMode} title={fitMode === 'contain' ? 'Ajustar Tela' : 'Manter Proporção'}>
+                <span style={{ fontSize: '11px', fontWeight: 600 }}>{fitMode === 'contain' ? '16:9' : 'FILL'}</span>
+              </button>
+              <button className={`hud-btn ${isPinned ? 'active' : ''}`} onClick={toggleAlwaysOnTop} title="Fixar no Topo">
+                <Pin size={16} />
+              </button>
+              <button className="hud-btn" onClick={toggleFullscreen} title="Tela Cheia">
+                {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+              </button>
+              <button 
+                className="hud-btn" 
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+                title={isSidebarOpen ? "Recolher Participantes" : "Expandir Participantes"}
+              >
+                {isSidebarOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Video Container */}
+          <div className="stream-hub-video-area">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              className={`stream-viewer-video ${fitMode}`}
+            />
+
+            {/* Connecting Overlay */}
+            {isConnecting && (
+              <div className="stream-viewer-overlay-loading">
+                <div className="loading-radar-ring"></div>
+                <Tv size={38} className="loading-icon-pulse" />
+                <h3>Conectando à Transmissão</h3>
+                <p>Buscando host da sala <span className="room-code-tag">{roomId}</span>...</p>
+                <div className="connecting-badge">
+                  <Wifi size={14} className="spin-icon" /> Aguardando Handshake WebRTC
+                </div>
+              </div>
+            )}
+
+            {/* Error Overlay */}
+            {errorMessage && !isConnecting && (
+              <div className="stream-viewer-overlay-error">
+                <div className="error-icon-box">
+                  <AlertCircle size={42} color="#EF4444" />
+                </div>
+                <h3>Transmissão Indisponível</h3>
+                <p>{errorMessage}</p>
+                <div className="error-actions">
+                  <button className="btn-retry" onClick={connectToStream}>
+                    <RefreshCw size={15} /> Tentar Reconectar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Discord Sidebar: Participants & Streams List */}
+        <div className={`stream-hub-sidebar ${isSidebarOpen ? '' : 'collapsed'}`}>
+          <div className="hub-sidebar-top">
+            <div className="hub-sidebar-title">
+              <Users size={16} />
+              <span>Participantes ({participants.length || 1})</span>
+            </div>
+          </div>
+
+          <div className="hub-participants-scroll">
+            {participants.length === 0 ? (
+              // Default fallback if no presence received yet: host item
+              <div className="participant-card is-streaming">
+                <div className="participant-header-row">
+                  <div className="participant-avatar-group">
+                    <div className="participant-avatar">
+                      H
+                      <div className="online-dot"></div>
+                    </div>
+                    <div className="participant-name-col">
+                      <span className="participant-name">{streamTitle}</span>
+                      <span className="participant-role">Host da Sala</span>
+                    </div>
+                  </div>
+                  <div className="live-indicator">
+                    <span className="pulse-dot"></span> AO VIVO
+                  </div>
+                </div>
+                <button 
+                  className={`btn-watch-stream ${(!activeStreamId || activeStreamId === roomId) ? 'active-watching' : ''}`}
+                  onClick={() => switchActiveStream(roomId)}
+                >
+                  {(!activeStreamId || activeStreamId === roomId) ? (
+                    <><Check size={14} /> Assistindo Tela</>
+                  ) : (
+                    <><Eye size={14} /> Assistir Tela</>
+                  )}
+                </button>
+              </div>
+            ) : (
+              participants.map((p) => {
+                const targetStreamId = p.streamPeerId || p.peerId;
+                const isStreaming = p.isStreaming || (p.isHost && isConnected);
+                const isCurrent = activeStreamId === targetStreamId || (!activeStreamId && p.isHost);
+
+                return (
+                  <div key={p.peerId} className={`participant-card ${isStreaming ? 'is-streaming' : ''}`}>
+                    <div className="participant-header-row">
+                      <div className="participant-avatar-group">
+                        <div className="participant-avatar">
+                          {p.name.charAt(0).toUpperCase()}
+                          <div className="online-dot"></div>
+                        </div>
+                        <div className="participant-name-col">
+                          <span className="participant-name">{p.name}</span>
+                          <span className="participant-role">
+                            {p.isHost ? 'Host da Sala' : (p.peerId === myPeerIdRef.current ? 'Você' : 'Membro')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isStreaming && (
+                        <div className="live-indicator">
+                          <span className="pulse-dot"></span> AO VIVO
+                        </div>
+                      )}
+                    </div>
+
+                    {isStreaming && (
+                      <button 
+                        className={`btn-watch-stream ${isCurrent ? 'active-watching' : ''}`}
+                        onClick={() => handleWatchParticipant(p)}
+                      >
+                        {isCurrent ? (
+                          <><Check size={14} /> Assistindo Tela</>
+                        ) : (
+                          <><Eye size={14} /> Assistir Tela</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="hub-sidebar-footer">
+            <button 
+              className={`btn-hub-share ${isSharingOwnScreen ? 'is-active' : ''}`}
+              onClick={startViewerScreenShare}
+            >
+              <ScreenShare size={16} />
+              <span>{isSharingOwnScreen ? 'Parar Compartilhamento' : 'Transmitir Minha Tela'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render Cinema Mode (Floating HUD)
   return (
     <div 
       ref={containerRef}
@@ -526,6 +856,16 @@ const StreamViewer: React.FC = () => {
             </div>
             <span className="hud-title">{streamTitle}</span>
             <span className="hud-room-badge">{roomId}</span>
+
+            {/* Theme switcher toggle */}
+            <button 
+              className="theme-switch-btn" 
+              onClick={toggleThemeMode} 
+              title="Alternar para Modo Sala Discord"
+            >
+              <Users size={14} />
+              <span>Modo Sala ({participants.length || 1})</span>
+            </button>
 
             {/* Multi-Stream Switcher Tabs */}
             {streams.length > 1 && (
