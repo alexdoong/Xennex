@@ -138,11 +138,19 @@ const StreamViewer: React.FC = () => {
   };
 
   const applyVolumeBoost = (targetVolume: number, muted: boolean, targetStream?: MediaStream | null) => {
-    const stream = targetStream || (videoRef.current?.srcObject as MediaStream | null);
     const effectiveVol = muted ? 0 : targetVolume;
 
+    // 1. Native video element handles primary WebRTC audio unmuted (with native hardware decoding)
+    if (videoRef.current) {
+      videoRef.current.muted = muted || effectiveVol === 0;
+      videoRef.current.volume = Math.min(1, Math.max(0, effectiveVol));
+    }
+
+    // 2. Extra boost (> 100% up to 200%) via Web Audio GainNode without muting video element
     const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (AudioCtxClass && stream && stream.getAudioTracks().length > 0) {
+    const stream = targetStream || (videoRef.current?.srcObject as MediaStream | null);
+
+    if (effectiveVol > 1.0 && AudioCtxClass && stream && stream.getAudioTracks().length > 0) {
       try {
         if (!audioCtxRef.current) {
           audioCtxRef.current = new AudioCtxClass();
@@ -166,20 +174,14 @@ const StreamViewer: React.FC = () => {
         }
 
         if (gainNodeRef.current) {
-          gainNodeRef.current.gain.value = effectiveVol;
-          if (videoRef.current) {
-            videoRef.current.muted = true;
-          }
-          return;
+          // Additional boost over 100%
+          gainNodeRef.current.gain.value = Math.max(0, effectiveVol - 1.0);
         }
       } catch (e) {
-        console.warn('[StreamViewer] AudioContext boost exception, falling back to standard video volume:', e);
+        console.warn('[StreamViewer] Audio boost error:', e);
       }
-    }
-
-    if (videoRef.current) {
-      videoRef.current.volume = Math.min(1, Math.max(0, effectiveVol));
-      videoRef.current.muted = muted || effectiveVol === 0;
+    } else if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = 0;
     }
   };
 

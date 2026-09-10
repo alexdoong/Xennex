@@ -1329,18 +1329,13 @@
 
         const src = viewerAudioCtx.createMediaStreamSource(stream);
         const gain = viewerAudioCtx.createGain();
-        gain.gain.value = currentVolumeVal;
+        gain.gain.value = currentVolumeVal > 1.0 ? (currentVolumeVal - 1.0) : 0;
         src.connect(gain);
         gain.connect(viewerAudioCtx.destination);
         viewerSourceNode = src;
         viewerGainNode = gain;
-
-        if (videoCinema) videoCinema.muted = true;
-        if (videoHub) videoHub.muted = true;
       } catch (err) {
-        console.warn('Audio boost setup error, using standard video volume:', err);
-        if (videoCinema) videoCinema.volume = Math.min(1, currentVolumeVal);
-        if (videoHub) videoHub.volume = Math.min(1, currentVolumeVal);
+        console.warn('Audio boost setup error:', err);
       }
     }
 
@@ -1362,14 +1357,21 @@
       const sliders = document.querySelectorAll('.viewerVolumeSliderInput');
       sliders.forEach(s => { s.value = currentVolumeVal; });
 
+      // Native video element always handles 0% to 100% unmuted
+      if (videoCinema) {
+        videoCinema.muted = currentVolumeVal === 0;
+        videoCinema.volume = Math.min(1, currentVolumeVal);
+      }
+      if (videoHub) {
+        videoHub.muted = currentVolumeVal === 0;
+        videoHub.volume = Math.min(1, currentVolumeVal);
+      }
+
+      // GainNode only provides the extra boost above 100%
       if (viewerGainNode) {
-        viewerGainNode.gain.value = currentVolumeVal;
-      } else {
-        if (videoCinema) videoCinema.volume = Math.min(1, currentVolumeVal);
-        if (videoHub) videoHub.volume = Math.min(1, currentVolumeVal);
-        if (currentVolumeVal > 1.0 && activeStream) {
-          setupWebAudioBoost(activeStream);
-        }
+        viewerGainNode.gain.value = currentVolumeVal > 1.0 ? (currentVolumeVal - 1.0) : 0;
+      } else if (currentVolumeVal > 1.0 && activeStream) {
+        setupWebAudioBoost(activeStream);
       }
 
       if (currentVolumeVal === 0) {
@@ -1962,14 +1964,20 @@
     }
 
     function unmuteAllVideos() {
+      if (viewerAudioCtx && viewerAudioCtx.state === 'suspended') {
+        viewerAudioCtx.resume().catch(() => {});
+      }
+      if (activeStream && currentVolumeVal > 1.0) {
+        setupWebAudioBoost(activeStream);
+      }
       if (videoCinema) {
         videoCinema.muted = false;
-        videoCinema.volume = 1.0;
+        videoCinema.volume = Math.min(1, currentVolumeVal || 1.0);
         videoCinema.play().catch(() => {});
       }
       if (videoHub) {
         videoHub.muted = false;
-        videoHub.volume = 1.0;
+        videoHub.volume = Math.min(1, currentVolumeVal || 1.0);
         videoHub.play().catch(() => {});
       }
       unmuteOverlay.style.display = 'none';
