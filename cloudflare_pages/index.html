@@ -160,6 +160,17 @@
       background: #EF4444;
       box-shadow: 0 0 8px #EF4444;
       animation: pulse 1.5s infinite;
+      display: inline-block;
+    }
+
+    .pulse-dot-yellow {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #F59E0B;
+      box-shadow: 0 0 10px #F59E0B;
+      animation: pulse 1.5s infinite;
+      display: inline-block;
     }
 
     @keyframes pulse {
@@ -349,6 +360,81 @@
       box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
       animation: pulse 1.5s infinite;
       user-select: none;
+    }
+
+    /* Reconnection Toast */
+    .reconnect-toast {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(245, 158, 11, 0.95);
+      color: #000;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.84rem;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 60;
+      box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+    }
+
+    /* ==========================================================================
+       LOBBY WAITING CARD (Host is in room but has not started video yet)
+       ========================================================================== */
+    .lobby-waiting-view {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(168, 85, 247, 0.08) 0%, rgba(11, 14, 20, 0.95) 75%);
+      padding: 30px;
+      text-align: center;
+      z-index: 10;
+    }
+
+    .lobby-icon-bubble {
+      width: 70px;
+      height: 70px;
+      border-radius: 20px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      margin-bottom: 16px;
+      position: relative;
+    }
+
+    .lobby-waiting-view h3 {
+      font-size: 1.3rem;
+      margin-bottom: 8px;
+      color: #F8FAFC;
+    }
+
+    .lobby-waiting-view p {
+      font-size: 0.88rem;
+      color: #94A3B8;
+      max-width: 480px;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+
+    .lobby-stats-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      color: #CBD5E1;
     }
 
     /* ==========================================================================
@@ -807,6 +893,11 @@
     </div>
   </header>
 
+  <!-- Reconnecting status banner -->
+  <div class="reconnect-toast" id="reconnectToast">
+    🔄 Conexão oscilou. Reconectando à sala...
+  </div>
+
   <!-- Main Area -->
   <main>
 
@@ -822,7 +913,7 @@
 
         <div class="form-group">
           <div class="input-row">
-            <input type="text" id="roomInput" placeholder="Ex: XNX-1234" maxlength="12">
+            <input type="text" id="roomInput" placeholder="Ex: XNX-1234" maxlength="16">
             <button class="btn-primary" style="width: auto; padding: 11px 22px;" id="connectBtn" onclick="startWatch()">
               Conectar
             </button>
@@ -839,10 +930,22 @@
       <div id="viewer-cinema-container">
         <video id="videoCinema" autoplay playsinline onclick="unmuteAllVideos()"></video>
 
+        <!-- Lobby Waiting View in Cinema -->
+        <div class="lobby-waiting-view" id="lobbyCinemaView" style="display: none;">
+          <div class="lobby-icon-bubble">
+            <span class="pulse-dot-yellow"></span>
+          </div>
+          <h3>Sala Aberta: <span id="lobbyCinemaRoom" style="color: #38BDF8; font-family: monospace;">XNX-0000</span></h3>
+          <p>O Host está no lobby organizando a transmissão.<br>O vídeo e o áudio começarão automaticamente assim que ele iniciar!</p>
+          <div class="lobby-stats-badge">
+            👥 <span id="lobbyCinemaCount">1</span> participante(s) na sala
+          </div>
+        </div>
+
         <div id="hud-viewer">
           <div class="hud-viewer-left">
-            <span class="pulse-dot"></span>
-            <strong>AO VIVO</strong>
+            <span class="pulse-dot" id="cinemaLiveDot"></span>
+            <strong id="cinemaLiveText">AO VIVO</strong>
             <span id="hudCinemaRoomText" style="color: #38BDF8; font-family: monospace;"></span>
             <button class="theme-switch-btn" onclick="toggleThemeMode()">
               👥 Modo Sala
@@ -856,7 +959,7 @@
             <button class="btn-secondary" onclick="toggleFullscreen()">
               ⛶ Tela Cheia
             </button>
-            <button class="btn-secondary" style="color: #F87171;" onclick="disconnectViewer()">
+            <button class="btn-secondary" style="color: #F87171;" onclick="explicitDisconnect()">
               ✕ Sair
             </button>
           </div>
@@ -872,7 +975,7 @@
           <button class="btn-secondary" onclick="toggleFullscreen()">
             ⛶ Tela Cheia
           </button>
-          <button class="btn-secondary" style="color: #F87171;" onclick="disconnectViewer()">
+          <button class="btn-secondary" style="color: #F87171;" onclick="explicitDisconnect()">
             ✕ Sair
           </button>
         </div>
@@ -884,8 +987,8 @@
           <!-- Hub Header -->
           <div class="stream-hub-header">
             <div class="hub-room-info">
-              <span class="pulse-dot"></span>
-              <strong>AO VIVO</strong>
+              <span class="pulse-dot" id="hubLiveDot"></span>
+              <strong id="hubLiveText">AO VIVO</strong>
               <span class="hub-room-badge" id="hubRoomBadge">XNX-0000</span>
               <button class="theme-switch-btn" onclick="toggleThemeMode()">
                 🎭 Modo Cinema
@@ -899,7 +1002,7 @@
               <button class="btn-secondary" onclick="toggleFullscreen()">
                 ⛶ Tela Cheia
               </button>
-              <button class="btn-secondary" style="color: #F87171;" onclick="disconnectViewer()">
+              <button class="btn-secondary" style="color: #F87171;" onclick="explicitDisconnect()">
                 ✕ Sair
               </button>
             </div>
@@ -908,6 +1011,18 @@
           <!-- Video Area -->
           <div class="stream-hub-video-area">
             <video id="videoHub" autoplay playsinline onclick="unmuteAllVideos()"></video>
+
+            <!-- Lobby Waiting View in Hub -->
+            <div class="lobby-waiting-view" id="lobbyHubView" style="display: none;">
+              <div class="lobby-icon-bubble">
+                <span class="pulse-dot-yellow"></span>
+              </div>
+              <h3>Sala Aberta: <span id="lobbyHubRoom" style="color: #38BDF8; font-family: monospace;">XNX-0000</span></h3>
+              <p>O Host está no lobby organizando a transmissão.<br>O vídeo e o áudio começarão automaticamente assim que ele iniciar a transmissão!</p>
+              <div class="lobby-stats-badge">
+                👥 <span id="lobbyHubCount">1</span> participante(s) aguardando na sala
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1020,6 +1135,31 @@
   </main>
 
   <script>
+    // Robust ICE Configuration (Google STUN + OpenRelay TURN for 100% connectivity on 4G/CGNAT)
+    const ICE_SERVERS = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:openrelay.metered.ca:80' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ];
+
     // Navigation Tabs
     function switchTab(tab) {
       document.getElementById('tabBtnWatch').classList.toggle('active', tab === 'watch');
@@ -1043,14 +1183,21 @@
       const cinemaContainer = document.getElementById('viewer-cinema-container');
       const hubContainer = document.getElementById('viewer-hub-container');
       
-      // If we are currently watching a stream:
-      if (activeStream) {
+      if (viewerPeer && currentRoom) {
         if (currentTheme === 'cinema') {
           hubContainer.style.display = 'none';
           cinemaContainer.style.display = 'flex';
+          if (activeStream && videoCinema.srcObject !== activeStream) {
+            videoCinema.srcObject = activeStream;
+            videoCinema.play().catch(() => {});
+          }
         } else {
           cinemaContainer.style.display = 'none';
           hubContainer.style.display = 'flex';
+          if (activeStream && videoHub.srcObject !== activeStream) {
+            videoHub.srcObject = activeStream;
+            videoHub.play().catch(() => {});
+          }
         }
       }
     }
@@ -1071,6 +1218,14 @@
     const participantsList = document.getElementById('participantsList');
     const participantCount = document.getElementById('participantCount');
     const unmuteOverlay = document.getElementById('unmuteOverlay');
+    const reconnectToast = document.getElementById('reconnectToast');
+
+    const lobbyCinemaView = document.getElementById('lobbyCinemaView');
+    const lobbyHubView = document.getElementById('lobbyHubView');
+    const lobbyCinemaRoom = document.getElementById('lobbyCinemaRoom');
+    const lobbyHubRoom = document.getElementById('lobbyHubRoom');
+    const lobbyCinemaCount = document.getElementById('lobbyCinemaCount');
+    const lobbyHubCount = document.getElementById('lobbyHubCount');
 
     let viewerPeer = null;
     let currentCall = null;
@@ -1078,6 +1233,10 @@
     let activeStream = null;
     let activeStreamerId = null;
     let currentRoom = '';
+    let isHostLive = false;
+    let isExplicitExit = false;
+    let reconnectAttempts = 0;
+    let reconnectTimer = null;
 
     // Multi-stream & Presence
     let participants = [];
@@ -1126,43 +1285,41 @@
       const room = roomInput.value.trim().toUpperCase();
       if (!room) return;
       currentRoom = room;
+      isExplicitExit = false;
 
       document.getElementById('watchStatusTitle').innerText = "Conectando à Sala...";
-      document.getElementById('watchStatusDesc').innerText = "Localizando o host " + room + " via WebRTC P2P...";
+      document.getElementById('watchStatusDesc').innerText = "Localizando o host " + room + " via WebRTC (STUN/TURN)...";
 
-      if (viewerPeer) {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+
+      if (viewerPeer && !viewerPeer.destroyed) {
         try { viewerPeer.destroy(); } catch {}
       }
 
       viewerPeer = new Peer({
         config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
+          iceServers: ICE_SERVERS
         }
       });
 
       viewerPeer.on('open', (id) => {
-        const dummy = createDummyStream();
-        const call = viewerPeer.call(room, dummy);
-        currentCall = call;
+        reconnectAttempts = 0;
+        reconnectToast.style.display = 'none';
+        console.log('[Viewer Web] Conectado ao servidor P2P com ID:', id);
 
-        call.on('stream', (remoteStream) => {
-          knownStreams[room] = remoteStream;
-          showViewerStream(remoteStream, room);
-        });
+        // Open Room Viewer HUD/View
+        watchCard.style.display = 'none';
+        hudCinemaRoomText.innerText = currentRoom;
+        hubRoomBadge.innerText = currentRoom;
+        lobbyCinemaRoom.innerText = currentRoom;
+        lobbyHubRoom.innerText = currentRoom;
 
-        if (call.peerConnection) {
-          call.peerConnection.ontrack = (ev) => {
-            if (ev.streams && ev.streams[0]) {
-              knownStreams[room] = ev.streams[0];
-              showViewerStream(ev.streams[0], room);
-            }
-          };
-        }
+        applyTheme();
 
-        // Data Connection for real-time room presence & co-streamers
+        // Data Connection for real-time presence, lobby, and co-streamers
         const dataConn = viewerPeer.connect(room);
         currentDataConn = dataConn;
 
@@ -1183,9 +1340,26 @@
 
         dataConn.on('data', (data) => {
           if (!data) return;
+          console.log('[Viewer Web] Mensagem da sala:', data);
+
           if (data.type === 'room-presence' && Array.isArray(data.participants)) {
             participants = data.participants;
+            const host = data.participants.find(p => p.isHost);
+            if (host && host.isStreaming) {
+              setLobbyState(false);
+            } else {
+              setLobbyState(true);
+            }
             renderParticipants();
+          } else if (data.type === 'host-video-started') {
+            console.log('[Viewer Web] Host iniciou vídeo!');
+            setLobbyState(false);
+            callHostVideo();
+          } else if (data.type === 'host-video-stopped') {
+            console.log('[Viewer Web] Host pausou vídeo (está no lobby).');
+            setLobbyState(true);
+          } else if (data.type === 'room-closed') {
+            disconnectViewer("Sala Encerrada", "O host encerrou esta sala.");
           } else if (data.type === 'co-streamer-added') {
             callCoStreamer(data.peerId, data.title);
           } else if ((data.type === 'streamers-list' || data.type === 'streamer-list') && Array.isArray(data.streamers)) {
@@ -1198,18 +1372,99 @@
           }
         });
 
-        call.on('close', () => {
-          disconnectViewer("Transmissão Encerrada", "O host encerrou o compartilhamento de tela.");
-        });
+        // Call Host
+        callHostVideo();
+      });
 
-        call.on('error', (err) => {
-          disconnectViewer("Erro na Conexão", err.message || "Não foi possível conectar ao host.");
-        });
+      viewerPeer.on('disconnected', () => {
+        console.warn('[Viewer Web] Socket desconectado. Reconectando...');
+        try { viewerPeer.reconnect(); } catch {}
       });
 
       viewerPeer.on('error', (err) => {
-        disconnectViewer("Host não Encontrado", "Verifique se a sala " + room + " está com a transmissão aberta.");
+        console.warn('[Viewer Web] Erro no Peer:', err);
+        if (err.type === 'peer-unavailable') {
+          if (reconnectAttempts < 5 && !isExplicitExit) {
+            handleAutoReconnect();
+          } else {
+            disconnectViewer("Host não Encontrado", "A sala " + room + " não foi encontrada. Verifique se o host está com o app aberto.");
+          }
+        }
       });
+    }
+
+    function callHostVideo() {
+      if (!viewerPeer || !currentRoom) return;
+      const dummy = createDummyStream();
+      const call = viewerPeer.call(currentRoom, dummy);
+      currentCall = call;
+
+      call.on('stream', (remoteStream) => {
+        console.log('[Viewer Web] Stream de vídeo recebido do Host!');
+        knownStreams[currentRoom] = remoteStream;
+        setLobbyState(false);
+        showViewerStream(remoteStream, currentRoom);
+      });
+
+      if (call.peerConnection) {
+        call.peerConnection.ontrack = (ev) => {
+          if (ev.streams && ev.streams[0]) {
+            knownStreams[currentRoom] = ev.streams[0];
+            setLobbyState(false);
+            showViewerStream(ev.streams[0], currentRoom);
+          }
+        };
+      }
+
+      call.on('close', () => {
+        console.log('[Viewer Web] Chamada com o host fechada.');
+        if (!isHostLive) {
+          setLobbyState(true);
+        }
+      });
+
+      call.on('error', (err) => {
+        console.warn('[Viewer Web] Aviso na chamada:', err);
+      });
+    }
+
+    function handleAutoReconnect() {
+      if (isExplicitExit) return;
+      reconnectAttempts++;
+      reconnectToast.style.display = 'flex';
+      reconnectToast.innerText = `🔄 Reconectando à sala... Tentativa ${reconnectAttempts} de 5`;
+      
+      const delay = Math.min(reconnectAttempts * 1500, 5000);
+      reconnectTimer = setTimeout(() => {
+        if (!isExplicitExit) {
+          startWatch();
+        }
+      }, delay);
+    }
+
+    function setLobbyState(inLobby) {
+      isHostLive = !inLobby;
+      if (inLobby) {
+        lobbyCinemaView.style.display = 'flex';
+        lobbyHubView.style.display = 'flex';
+        videoCinema.style.display = 'none';
+        videoHub.style.display = 'none';
+
+        document.getElementById('cinemaLiveDot').className = 'pulse-dot-yellow';
+        document.getElementById('cinemaLiveText').innerText = 'LOBBY';
+        document.getElementById('hubLiveDot').className = 'pulse-dot-yellow';
+        document.getElementById('hubLiveText').innerText = 'LOBBY';
+      } else {
+        lobbyCinemaView.style.display = 'none';
+        lobbyHubView.style.display = 'none';
+        videoCinema.style.display = 'block';
+        videoHub.style.display = 'block';
+
+        document.getElementById('cinemaLiveDot').className = 'pulse-dot';
+        document.getElementById('cinemaLiveText').innerText = 'AO VIVO';
+        document.getElementById('hubLiveDot').className = 'pulse-dot';
+        document.getElementById('hubLiveText').innerText = 'AO VIVO';
+      }
     }
 
     function callCoStreamer(streamerPeerId, title) {
@@ -1227,7 +1482,6 @@
     function showViewerStream(remoteStream, streamerId) {
       activeStream = remoteStream;
       activeStreamerId = streamerId;
-      watchCard.style.display = 'none';
 
       hudCinemaRoomText.innerText = currentRoom;
       hubRoomBadge.innerText = currentRoom;
@@ -1249,12 +1503,12 @@
       renderParticipants();
     }
 
-    function watchParticipantStream(p) {
-      const targetStreamId = p.streamPeerId || p.peerId;
+    function watchParticipantById(targetStreamId) {
       if (knownStreams[targetStreamId]) {
         showViewerStream(knownStreams[targetStreamId], targetStreamId);
       } else {
-        callCoStreamer(targetStreamId, p.streamTitle || p.name);
+        const p = participants.find(x => (x.streamPeerId || x.peerId) === targetStreamId);
+        callCoStreamer(targetStreamId, p ? (p.streamTitle || p.name) : 'Transmissão');
         activeStreamerId = targetStreamId;
         renderParticipants();
       }
@@ -1263,14 +1517,16 @@
     function renderParticipants() {
       if (!participantsList) return;
       const effectiveList = participants.length > 0 ? participants : [
-        { peerId: currentRoom, name: 'Host da Sala', isHost: true, isStreaming: true, streamTitle: 'Tela Principal' }
+        { peerId: currentRoom, name: 'Host da Sala', isHost: true, isStreaming: isHostLive, streamTitle: 'Transmissão Principal' }
       ];
       participantCount.innerText = effectiveList.length.toString();
+      lobbyCinemaCount.innerText = effectiveList.length.toString();
+      lobbyHubCount.innerText = effectiveList.length.toString();
 
       participantsList.innerHTML = effectiveList.map(p => {
         const targetId = p.streamPeerId || p.peerId;
-        const isStreaming = p.isStreaming || p.isHost;
-        const isWatchingThis = activeStreamerId === targetId || (!activeStreamerId && p.isHost);
+        const isStreaming = p.isStreaming || (p.isHost && isHostLive);
+        const isWatchingThis = activeStreamerId === targetId || (!activeStreamerId && p.isHost && isHostLive);
         const initial = (p.name || 'M').charAt(0).toUpperCase();
 
         return `
@@ -1292,7 +1548,7 @@
             ${isStreaming ? `
               <button 
                 class="btn-watch-stream ${isWatchingThis ? 'active-watching' : ''}" 
-                onclick='watchParticipantStream(${JSON.stringify(p)})'
+                onclick="watchParticipantById('${targetId}')"
               >
                 ${isWatchingThis ? '✓ Assistindo Tela' : '👁️ Assistir Tela'}
               </button>
@@ -1310,7 +1566,7 @@
 
       const mediaDevices = navigator.mediaDevices || navigator.webkitMediaDevices;
       if (!mediaDevices || !mediaDevices.getDisplayMedia) {
-        alert('Compartilhamento de tela não suportado ou sem suporte a getDisplayMedia.');
+        alert('Compartilhamento de tela não suportado ou sem permissão HTTPS.');
         return;
       }
 
@@ -1329,10 +1585,7 @@
         const coId = currentRoom + '_webco_' + Math.floor(1000 + Math.random() * 9000);
         ownCoPeer = new Peer(coId, {
           config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' }
-            ]
+            iceServers: ICE_SERVERS
           }
         });
 
@@ -1430,8 +1683,17 @@
       }
     }
 
+    function explicitDisconnect() {
+      isExplicitExit = true;
+      disconnectViewer("Transmissão Finalizada", "Você saiu da sala.");
+    }
+
     function disconnectViewer(title = "Assistir Transmissão", desc = "Digite o código da sala gerado pelo host para assistir à tela.") {
       stopViewerScreenShare();
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       if (currentCall) {
         try { currentCall.close(); } catch {}
         currentCall = null;
@@ -1452,6 +1714,7 @@
       cinemaContainer.style.display = 'none';
       hubContainer.style.display = 'none';
       unmuteOverlay.style.display = 'none';
+      reconnectToast.style.display = 'none';
       watchCard.style.display = 'block';
 
       document.getElementById('watchStatusTitle').innerText = title;
@@ -1480,8 +1743,7 @@
     async function startBroadcasting() {
       const mediaDevices = navigator.mediaDevices || navigator.webkitMediaDevices;
       if (!mediaDevices || !mediaDevices.getDisplayMedia) {
-        alert('Seu navegador não suporta compartilhamento de tela ou precisa estar em uma conexão segura (HTTPS).
-Tente utilizar Chrome, Edge ou Opera GX no computador.');
+        alert('Seu navegador não suporta compartilhamento de tela ou precisa estar em conexão segura HTTPS.');
         return;
       }
 
@@ -1599,10 +1861,7 @@ Tente utilizar Chrome, Edge ou Opera GX no computador.');
 
         hostPeer = new Peer(generatedRoom, {
           config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' }
-            ]
+            iceServers: ICE_SERVERS
           }
         });
 
@@ -1612,7 +1871,12 @@ Tente utilizar Chrome, Edge ou Opera GX no computador.');
           startUptimeTimer();
         });
 
-        // Answer WebRTC Calls
+        hostPeer.on('disconnected', () => {
+          console.warn('[Host Web] Conexão socket oscilou. Reconectando...');
+          try { hostPeer.reconnect(); } catch {}
+        });
+
+        // Answer Calls
         hostPeer.on('call', (call) => {
           call.answer(localStream);
           activeCalls.push(call);
@@ -1629,7 +1893,7 @@ Tente utilizar Chrome, Edge ou Opera GX no computador.');
           });
         });
 
-        // Host Presence Hub Data Channel
+        // Data Connections
         hostPeer.on('connection', (conn) => {
           const pId = conn.peer;
           hostDataConnections[pId] = conn;

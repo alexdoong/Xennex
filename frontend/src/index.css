@@ -2257,3 +2257,262 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
   background: rgba(239, 68, 68, 0.25);
   color: #FCA5A5;
 }
+
+/* ==========================================================================
+   Persistent Room Management UI in Host Card
+   ========================================================================== */
+.open-room-management-box {
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.open-room-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.open-room-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.open-room-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #E2E8F0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.live {
+  background: #EF4444;
+  box-shadow: 0 0 8px #EF4444;
+}
+
+.status-dot.lobby {
+  background: #F59E0B;
+  box-shadow: 0 0 8px #F59E0B;
+}
+
+.open-room-code-display {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.room-code-label {
+  font-size: 0.8rem;
+  color: #94A3B8;
+}
+
+.room-code-value {
+  font-family: monospace;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #F8FAFC;
+  letter-spacing: 1px;
+}
+
+.open-room-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #38BDF8;
+}
+
+.open-room-actions-grid {
+  display: flex;
+  gap: 8px;
+}
+
+.open-room-actions-grid .btn-start-stream {
+  flex: 2;
+  margin: 0;
+}
+
+.btn-pause-stream {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #FBBF24;
+  padding: 10px 14px;
+  border-radius: 9px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-pause-stream:hover {
+  background: rgba(245, 158, 11, 0.3);
+  color: #FDE68A;
+  border-color: #F59E0B;
+}
+
+.btn-close-room {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #F87171;
+  padding: 10px 14px;
+  border-radius: 9px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-close-room:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #FFFFFF;
+}
+
+.open-room-links-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-room-link-action {
+  flex: 1;
+  min-width: 120px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #CBD5E1;
+  padding: 6px 10px;
+  border-radius: 7px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-room-link-action:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+}
+
+.host-launch-buttons-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.host-launch-buttons-row .btn-start-stream {
+  flex: 3;
+}
+
+.btn-create-lobby {
+  flex: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38BDF8;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-create-lobby:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #FFFFFF;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+
+/* Lobby Waiting Views in StreamViewer & Web */
+.lobby-waiting-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, rgba(168, 85, 247, 0.08) 0%, rgba(11, 14, 20, 0.95) 75%);
+  padding: 30px;
+  text-align: center;
+  z-index: 10;
+}
+
+.lobby-icon-bubble {
+  width: 70px;
+  height: 70px;
+  border-radius: 20px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.lobby-dot {
+  background: #F59E0B !important;
+  box-shadow: 0 0 10px #F59E0B !important;
+}
+
+.lobby-stats-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: #CBD5E1;
+  margin-top: 10px;
+}
+

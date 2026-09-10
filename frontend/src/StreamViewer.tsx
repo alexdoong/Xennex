@@ -3,9 +3,33 @@ import { Peer, type MediaConnection } from 'peerjs';
 import { 
   Volume2, VolumeX, Maximize, Minimize, Pin, RefreshCw, 
   Tv, Wifi, AlertCircle, Sparkles, Activity, ScreenShare,
-  Users, Check, Eye, ChevronRight, ChevronLeft
+  Users, Check, Eye, ChevronRight, ChevronLeft, Radio
 } from 'lucide-react';
 import type { DataConnection } from 'peerjs';
+
+export const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:openrelay.metered.ca:80' },
+  {
+    urls: 'turn:openrelay.metered.ca:80',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  }
+];
 
 interface StreamItem {
   id: string;
@@ -34,6 +58,7 @@ const StreamViewer: React.FC = () => {
 
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
+  const [isHostInLobby, setIsHostInLobby] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showHud, setShowHud] = useState(true);
   
@@ -99,7 +124,6 @@ const StreamViewer: React.FC = () => {
     };
   }, []);
 
-  // WebRTC Connection Logic
   // Helper to create a valid dummy stream with tracks so WebRTC SDP includes audio and video m-lines
   const createDummyStream = (): MediaStream => {
     const canvas = document.createElement('canvas');
@@ -108,7 +132,7 @@ const StreamViewer: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 2, 2, 2);
+      ctx.fillRect(0, 0, 2, 2);
     }
     const canvasStream = canvas.captureStream ? canvas.captureStream(1) : (canvas as any).mozCaptureStream(1);
     const videoTrack = canvasStream.getVideoTracks()[0];
@@ -155,6 +179,7 @@ const StreamViewer: React.FC = () => {
     });
 
     setActiveStreamId(prev => prev || sourceId);
+    setIsHostInLobby(false);
 
     if (videoRef.current && (!activeStreamId || activeStreamId === sourceId)) {
       videoRef.current.srcObject = remoteStream;
@@ -217,7 +242,6 @@ const StreamViewer: React.FC = () => {
     if (!targetId) return;
 
     if (targetId === roomId) {
-      // Host stream
       if (streams.some(s => s.peerId === roomId)) {
         switchActiveStream(roomId);
       } else {
@@ -262,10 +286,7 @@ const StreamViewer: React.FC = () => {
       const myCoId = `${roomId}_co_${Math.floor(1000 + Math.random() * 9000)}`;
       const coPeer = new Peer(myCoId, {
         config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
+          iceServers: ICE_SERVERS
         }
       });
       ownCoPeerRef.current = coPeer;
@@ -350,18 +371,14 @@ const StreamViewer: React.FC = () => {
     try {
       const peer = new Peer({
         config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' }
-          ]
+          iceServers: ICE_SERVERS
         }
       });
       peerRef.current = peer;
 
       peer.on('open', (myId) => {
         myPeerIdRef.current = myId;
-        console.log('[Viewer] Conectado ao servidor de sinalização P2P com ID:', myId);
+        console.log('[Viewer] Conectado ao servidor P2P com ID:', myId);
         
         // Initiate call with dummy stream containing tracks for valid WebRTC SDP m-lines
         const dummyStream = createDummyStream();
@@ -373,7 +390,6 @@ const StreamViewer: React.FC = () => {
           handleIncomingStream(remoteStream, roomId, streamTitle);
         });
 
-        // Also hook native WebRTC ontrack for maximum browser compatibility
         if (call.peerConnection) {
           call.peerConnection.ontrack = (ev) => {
             if (ev.streams && ev.streams[0]) {
@@ -412,11 +428,30 @@ const StreamViewer: React.FC = () => {
           if (data.type === 'room-presence' && Array.isArray(data.participants)) {
             console.log('[Viewer] Presença da sala recebida:', data.participants);
             setParticipants(data.participants);
+            const host = data.participants.find((p: any) => p.isHost);
+            if (host && !host.isStreaming) {
+              setIsHostInLobby(true);
+              setIsConnecting(false);
+            } else if (host && host.isStreaming) {
+              setIsHostInLobby(false);
+            }
+          } else if (data.type === 'host-video-started') {
+            console.log('[Viewer] Host iniciou transmissão de vídeo na sala!');
+            setIsHostInLobby(false);
+            const dummy = createDummyStream();
+            const newCall = peer.call(roomId, dummy);
+            callRef.current = newCall;
+            newCall.on('stream', (s) => handleIncomingStream(s, roomId, data.streamTitle));
+          } else if (data.type === 'host-video-stopped') {
+            console.log('[Viewer] Host pausou vídeo (permanece no lobby).');
+            setIsHostInLobby(true);
+          } else if (data.type === 'room-closed') {
+            console.log('[Viewer] Sala fechada pelo host.');
+            setIsConnected(false);
+            setErrorMessage('O host encerrou a sala.');
           } else if (data.type === 'co-streamer-added') {
-            console.log('[Viewer] Novo co-streamer na sala anunciado:', data);
             callCoStreamer(data.peerId, data.title);
           } else if ((data.type === 'streamers-list' || data.type === 'streamer-list') && Array.isArray(data.streamers)) {
-            console.log('[Viewer] Lista de streamers recebida:', data.streamers);
             data.streamers.forEach((s: any) => {
               const streamId = s.peerId || s.id;
               const title = s.title || s.label;
@@ -424,32 +459,32 @@ const StreamViewer: React.FC = () => {
                 callCoStreamer(streamId, title);
               }
             });
-          } else if (data.type === 'streamer-removed') {
-            setStreams(prev => prev.filter(s => s.peerId !== data.peerId));
           }
         });
 
         call.on('close', () => {
-          console.log('[Viewer] Chamada fechada pelo host.');
-          setIsConnected(false);
-          setErrorMessage('O host finalizou o compartilhamento de tela.');
+          console.log('[Viewer] Chamada fechada.');
+          if (!isHostInLobby) {
+            setIsHostInLobby(true);
+          }
         });
 
         call.on('error', (err) => {
-          console.error('[Viewer] Erro na chamada:', err);
-          setIsConnected(false);
-          setErrorMessage('Erro na transmissão: ' + (err?.message || 'Falha de conexão'));
+          console.warn('[Viewer] Aviso na chamada:', err);
         });
+      });
+
+      peer.on('disconnected', () => {
+        console.warn('[Viewer] Socket desconectado. Reconectando...');
+        try { peer.reconnect(); } catch {}
       });
 
       peer.on('error', (err) => {
         console.error('[Viewer] Peer error:', err);
-        setIsConnecting(false);
-        setIsConnected(false);
         if (err.type === 'peer-unavailable') {
-          setErrorMessage(`Sala "${roomId}" não encontrada. Verifique se o host está transmitindo.`);
-        } else {
-          setErrorMessage(`Falha na conexão P2P: ${err.type || err.message}`);
+          setErrorMessage(`Sala "${roomId}" não encontrada. Verifique se o host está com a sala aberta.`);
+          setIsConnecting(false);
+          setIsConnected(false);
         }
       });
     } catch (err: any) {
@@ -504,9 +539,7 @@ const StreamViewer: React.FC = () => {
             }
           }
         });
-      } catch {
-        // Stats not available or unsupported
-      }
+      } catch {}
     }, 1500);
 
     return () => window.clearInterval(interval);
@@ -566,8 +599,8 @@ const StreamViewer: React.FC = () => {
           <div className="stream-hub-header">
             <div className="hub-room-info">
               <div className="live-pill">
-                <span className="live-dot"></span>
-                LIVE
+                <span className={isHostInLobby ? "live-dot lobby-dot" : "live-dot"}></span>
+                {isHostInLobby ? 'LOBBY' : 'LIVE'}
               </div>
               <span className="hud-title">{streamTitle}</span>
               <span className="hub-room-badge">{roomId}</span>
@@ -668,17 +701,34 @@ const StreamViewer: React.FC = () => {
               autoPlay
               playsInline
               className={`stream-viewer-video ${fitMode}`}
+              style={{ display: isHostInLobby ? 'none' : 'block' }}
             />
+
+            {/* Lobby Waiting Overlay */}
+            {isHostInLobby && (
+              <div className="lobby-waiting-view">
+                <div className="lobby-icon-bubble">
+                  <Radio size={32} color="#F59E0B" />
+                  <span className="pulse-dot lobby-dot"></span>
+                </div>
+                <h3>Sala Aberta: <span className="room-code-tag">{roomId}</span></h3>
+                <p>O Host está conectado na sala preparando a transmissão.<br />O vídeo e o som começarão automaticamente assim que ele iniciar!</p>
+                <div className="lobby-stats-badge">
+                  <Users size={14} />
+                  <span>{participants.length} participante(s) aguardando na sala</span>
+                </div>
+              </div>
+            )}
 
             {/* Connecting Overlay */}
             {isConnecting && (
               <div className="stream-viewer-overlay-loading">
                 <div className="loading-radar-ring"></div>
                 <Tv size={38} className="loading-icon-pulse" />
-                <h3>Conectando à Transmissão</h3>
+                <h3>Conectando à Transmissão P2P</h3>
                 <p>Buscando host da sala <span className="room-code-tag">{roomId}</span>...</p>
                 <div className="connecting-badge">
-                  <Wifi size={14} className="spin-icon" /> Aguardando Handshake WebRTC
+                  <Wifi size={14} className="spin-icon" /> Estabelecendo Handshake ICE (STUN/TURN)
                 </div>
               </div>
             )}
@@ -712,7 +762,6 @@ const StreamViewer: React.FC = () => {
 
           <div className="hub-participants-scroll">
             {participants.length === 0 ? (
-              // Default fallback if no presence received yet: host item
               <div className="participant-card is-streaming">
                 <div className="participant-header-row">
                   <div className="participant-avatar-group">
@@ -743,7 +792,7 @@ const StreamViewer: React.FC = () => {
             ) : (
               participants.map((p) => {
                 const targetStreamId = p.streamPeerId || p.peerId;
-                const isStreaming = p.isStreaming || (p.isHost && isConnected);
+                const isStreaming = p.isStreaming || (p.isHost && isConnected && !isHostInLobby);
                 const isCurrent = activeStreamId === targetStreamId || (!activeStreamId && p.isHost);
 
                 return (
@@ -814,7 +863,24 @@ const StreamViewer: React.FC = () => {
         autoPlay
         playsInline
         className={`stream-viewer-video ${fitMode}`}
+        style={{ display: isHostInLobby ? 'none' : 'block' }}
       />
+
+      {/* Lobby Waiting Overlay */}
+      {isHostInLobby && (
+        <div className="lobby-waiting-view">
+          <div className="lobby-icon-bubble">
+            <Radio size={32} color="#F59E0B" />
+            <span className="pulse-dot lobby-dot"></span>
+          </div>
+          <h3>Sala Aberta: <span className="room-code-tag">{roomId}</span></h3>
+          <p>O Host está no lobby organizando a transmissão.<br />O vídeo e o som começarão automaticamente assim que ele iniciar!</p>
+          <div className="lobby-stats-badge">
+            <Users size={14} />
+            <span>{participants.length} participante(s) na sala</span>
+          </div>
+        </div>
+      )}
 
       {/* Connecting & Loading Overlay */}
       {isConnecting && (
@@ -824,7 +890,7 @@ const StreamViewer: React.FC = () => {
           <h3>Conectando à Transmissão P2P</h3>
           <p>Buscando host da sala <span className="room-code-tag">{roomId}</span>...</p>
           <div className="connecting-badge">
-            <Wifi size={14} className="spin-icon" /> Aguardando Handshake WebRTC
+            <Wifi size={14} className="spin-icon" /> Aguardando Handshake WebRTC (STUN/TURN)
           </div>
         </div>
       )}
@@ -851,8 +917,8 @@ const StreamViewer: React.FC = () => {
         <div className="hud-top-bar">
           <div className="hud-left">
             <div className="live-pill">
-              <span className="live-dot"></span>
-              LIVE
+              <span className={isHostInLobby ? "live-dot lobby-dot" : "live-dot"}></span>
+              {isHostInLobby ? 'LOBBY' : 'LIVE'}
             </div>
             <span className="hud-title">{streamTitle}</span>
             <span className="hud-room-badge">{roomId}</span>
@@ -898,7 +964,7 @@ const StreamViewer: React.FC = () => {
             {remoteHasAudio !== null && (
               <span 
                 className="hud-stat-badge" 
-                title={remoteHasAudio ? 'Áudio do sistema ativo' : 'O host não compartilhou áudio (Janela selecionada ou sem som)'}
+                title={remoteHasAudio ? 'Áudio do sistema ativo' : 'Sem som compartilhado'}
                 style={remoteHasAudio ? { color: '#34D399', borderColor: 'rgba(52, 211, 153, 0.3)' } : { color: '#94A3B8' }}
               >
                 {remoteHasAudio ? <Volume2 size={12} /> : <VolumeX size={12} />}
@@ -913,7 +979,7 @@ const StreamViewer: React.FC = () => {
             {fps !== null && (
               <span 
                 className="hud-stat-badge"
-                title={fps <= 1 ? "Tela estática (economia de banda inteligente do Chromium). Sobe para 60 FPS ao se movimentar." : `${fps} FPS em tempo real`}
+                title={fps <= 1 ? "Tela estática (repouso)" : `${fps} FPS em tempo real`}
               >
                 {fps} FPS {fps <= 1 && <span style={{ opacity: 0.6, fontSize: '10px' }}>(Repouso)</span>}
               </span>
