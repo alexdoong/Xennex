@@ -116,6 +116,9 @@ const StreamTab: React.FC = () => {
   const [myRoomId, setMyRoomId] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
+  const [isDiscordPickerOpen, setIsDiscordPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<'apps' | 'screens'>('apps');
+  const [pickerSearch, setPickerSearch] = useState('');
   const [participantsList, setParticipantsList] = useState<{ peerId: string; name: string; isHost: boolean; isStreaming: boolean; streamTitle?: string; streamPeerId?: string }[]>([]);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
   const [cloudflareUrl, setCloudflareUrl] = useState<string>(() => {
@@ -245,15 +248,22 @@ const StreamTab: React.FC = () => {
 
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       const audioCtx = new AudioContextClass({ sampleRate: 48000 });
+      if (audioCtx.state === 'suspended') {
+        try { await audioCtx.resume(); } catch {}
+      }
       processAudioContextRef.current = audioCtx;
 
       const mediaStreamDest = audioCtx.createMediaStreamDestination();
       let nextPlayTime = audioCtx.currentTime;
 
-      ws.onmessage = (event) => {
+      ws.onmessage = async (event) => {
         if (!(event.data instanceof ArrayBuffer)) return;
         const rawBytes = event.data;
         if (rawBytes.byteLength === 0) return;
+
+        if (audioCtx.state === 'suspended') {
+          try { await audioCtx.resume(); } catch {}
+        }
 
         const floatArray = new Float32Array(rawBytes);
         const numChannels = 2;
@@ -271,6 +281,9 @@ const StreamTab: React.FC = () => {
         const sourceNode = audioCtx.createBufferSource();
         sourceNode.buffer = audioBuffer;
         sourceNode.connect(mediaStreamDest);
+        sourceNode.onended = () => {
+          try { sourceNode.disconnect(); } catch {}
+        };
 
         if (nextPlayTime < audioCtx.currentTime) {
           nextPlayTime = audioCtx.currentTime;
@@ -608,13 +621,16 @@ const StreamTab: React.FC = () => {
 
         const canvasStream = canvas.captureStream ? canvas.captureStream(targetFps) : (canvas as any).mozCaptureStream(targetFps);
 
+        const tracksToBundle: MediaStreamTrack[] = [canvasStream.getVideoTracks()[0]];
         if (processAudioTrack) {
-          canvasStream.addTrack(processAudioTrack);
-        } else {
-          stream.getAudioTracks().forEach((track: MediaStreamTrack) => canvasStream.addTrack(track));
+          tracksToBundle.push(processAudioTrack);
+          setHasCapturedAudio(true);
+        } else if (stream.getAudioTracks().length > 0) {
+          tracksToBundle.push(stream.getAudioTracks()[0]);
+          setHasCapturedAudio(true);
         }
 
-        streamToSend = canvasStream;
+        streamToSend = new MediaStream(tracksToBundle);
         canvasRendererRef.current = {
           stop: () => {
             isRendering = false;
@@ -630,10 +646,16 @@ const StreamTab: React.FC = () => {
           fps: targetFps
         });
       } else {
+        const tracksToBundle: MediaStreamTrack[] = [stream.getVideoTracks()[0]];
         if (processAudioTrack) {
-          streamToSend = new MediaStream([stream.getVideoTracks()[0], processAudioTrack]);
+          tracksToBundle.push(processAudioTrack);
+          setHasCapturedAudio(true);
+        } else if (stream.getAudioTracks().length > 0) {
+          tracksToBundle.push(stream.getAudioTracks()[0]);
           setHasCapturedAudio(true);
         }
+
+        streamToSend = new MediaStream(tracksToBundle);
         const trackSettings = stream.getVideoTracks()[0]?.getSettings();
         setCapturedStats({
           width: trackSettings?.width,
@@ -693,13 +715,20 @@ const StreamTab: React.FC = () => {
             const senders = pc.getSenders();
             const vTrack = streamToSend.getVideoTracks()[0];
             const aTrack = streamToSend.getAudioTracks()[0];
+            
+            let audioReplaced = false;
             senders.forEach(sender => {
               if (sender.track && sender.track.kind === 'video' && vTrack) {
                 sender.replaceTrack(vTrack).catch(() => {});
               } else if (sender.track && sender.track.kind === 'audio' && aTrack) {
                 sender.replaceTrack(aTrack).catch(() => {});
+                audioReplaced = true;
               }
             });
+
+            if (!audioReplaced && aTrack) {
+              try { pc.addTrack(aTrack, streamToSend); } catch {}
+            }
           }
         } catch (e) {}
       });
@@ -824,6 +853,16 @@ const StreamTab: React.FC = () => {
     const m = Math.floor(totalSeconds / 60);
     const s = totalSeconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+    const handleOpenPicker = () => {
+    fetchAudioProcesses();
+    setIsDiscordPickerOpen(true);
+  };
+
+  const handleConfirmPickerStream = () => {
+    setIsDiscordPickerOpen(false);
+    startStream(myRoomId);
   };
 
   const handleOpenViewer = async (targetRoom?: string, title?: string) => {
@@ -1013,7 +1052,7 @@ const StreamTab: React.FC = () => {
                 )}
                 <div className="open-room-actions-grid">
                   {!isStreaming ? (
-                    <button className="btn-start-stream" onClick={() => startStream(myRoomId)}>
+                    <button className="btn-start-stream" onClick={handleOpenPicker}>
                       <Play size={16} fill="currentColor" /> Iniciar Transmissão nesta Sala
                     </button>
                   ) : (
@@ -1243,7 +1282,7 @@ const StreamTab: React.FC = () => {
 
                 {!isRoomOpen ? (
                   <div className="host-launch-buttons-row">
-                    <button className="btn-start-stream" onClick={() => startStream()}>
+                    <button className="btn-start-stream" onClick={handleOpenPicker}>
                       <Play size={18} fill="currentColor" /> Iniciar Transmissão Imediata
                     </button>
                     <button 
@@ -1360,6 +1399,173 @@ const StreamTab: React.FC = () => {
         </div>
 
       </div>
+    
+      {/* Modal Estilo Discord: Partilhar a sua tela */}
+      {isDiscordPickerOpen && (
+        <div className="discord-picker-overlay" onClick={() => setIsDiscordPickerOpen(false)}>
+          <div className="discord-picker-modal" onClick={e => e.stopPropagation()}>
+            <div className="discord-picker-header">
+              <h3>Compartilhar a sua tela</h3>
+              <button className="discord-picker-close" onClick={() => setIsDiscordPickerOpen(false)}>✕</button>
+            </div>
+
+            {/* Navigation Tabs (Aplicações vs Ecrãs) */}
+            <div className="discord-picker-tabs">
+              <button 
+                className={`discord-picker-tab ${pickerTab === 'apps' ? 'active' : ''}`}
+                onClick={() => setPickerTab('apps')}
+              >
+                🎮 Aplicações & Jogos
+              </button>
+              <button 
+                className={`discord-picker-tab ${pickerTab === 'screens' ? 'active' : ''}`}
+                onClick={() => setPickerTab('screens')}
+              >
+                🖥️ Telas Inteiras
+              </button>
+            </div>
+
+            {/* Content Tab 1: Aplicações & Jogos */}
+            {pickerTab === 'apps' && (
+              <div className="discord-picker-body">
+                <div className="discord-picker-search-row">
+                  <input 
+                    type="text" 
+                    placeholder="Pesquisar jogo ou janela aberta..." 
+                    value={pickerSearch}
+                    onChange={e => setPickerSearch(e.target.value)}
+                    className="discord-picker-search"
+                  />
+                  <button 
+                    className="discord-picker-refresh-btn" 
+                    onClick={fetchAudioProcesses} 
+                    title="Atualizar lista de janelas"
+                  >
+                    <RefreshCw size={14} className={isLoadingProcesses ? "spin" : ""} />
+                  </button>
+                </div>
+
+                <div className="discord-apps-grid">
+                  {audioProcesses
+                    .filter(p => !pickerSearch || p.Name.toLowerCase().includes(pickerSearch.toLowerCase()) || p.Title.toLowerCase().includes(pickerSearch.toLowerCase()))
+                    .map(p => {
+                      const isSelected = selectedProcessPid === p.Pid && audioMode === 'process';
+                      return (
+                        <div 
+                          key={p.Pid} 
+                          className={`discord-app-card ${isSelected ? 'selected' : ''}`}
+                          onClick={() => {
+                            setSelectedProcessPid(p.Pid);
+                            setCapturedProcessName(p.Name);
+                            setAudioMode('process');
+                          }}
+                        >
+                          <div className="discord-app-card-top">
+                            <div className="discord-app-icon-bubble">
+                              {p.Name.slice(0, 2).toUpperCase()}
+                            </div>
+                            {p.HasActiveAudio && (
+                              <span className="discord-audio-badge" title="Emitindo áudio no momento">
+                                🔊 Áudio Ativo
+                              </span>
+                            )}
+                          </div>
+                          <div className="discord-app-title" title={p.Title || p.Name}>
+                            {p.Title || p.Name}
+                          </div>
+                          <div className="discord-app-proc">
+                            {p.Name} • PID: {p.Pid}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Content Tab 2: Telas Inteiras */}
+            {pickerTab === 'screens' && (
+              <div className="discord-picker-body">
+                <div className="discord-screens-grid">
+                  <div 
+                    className={`discord-screen-card ${audioMode === 'system' ? 'selected' : ''}`}
+                    onClick={() => {
+                      setAudioMode('system');
+                      setSelectedProcessPid(null);
+                    }}
+                  >
+                    <div className="discord-screen-preview-mock">
+                      <Tv size={36} color="#A855F7" />
+                      <span>Monitor Principal</span>
+                    </div>
+                    <div className="discord-screen-title">Tela Inteira (Sistema Completo)</div>
+                    <div className="discord-screen-subtitle">Captura a área de trabalho inteira e o som do Windows</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Configurações Rápidas no Modal */}
+            <div className="discord-picker-settings">
+              <div className="picker-setting-row">
+                <span className="picker-setting-label">Qualidade da Transmissão</span>
+                <div className="picker-resolutions-pill">
+                  {RESOLUTIONS.map(r => (
+                    <button 
+                      key={r.id} 
+                      className={`picker-res-btn ${selectedResolution === r.id ? 'active' : ''}`}
+                      onClick={() => handleResolutionChange(r.id)}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="picker-setting-row">
+                <span className="picker-setting-label">Taxa de Quadros (FPS)</span>
+                <div className="picker-resolutions-pill">
+                  {[30, 60].map(fps => (
+                    <button 
+                      key={fps} 
+                      className={`picker-res-btn ${selectedFps === fps ? 'active' : ''}`}
+                      onClick={() => handleFpsChange(fps)}
+                    >
+                      {fps} FPS
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="picker-setting-row">
+                <span className="picker-setting-label">Captura de Áudio</span>
+                <div className="picker-audio-choice">
+                  {selectedProcessPid && audioMode === 'process' ? (
+                    <span className="picker-audio-active-badge">
+                      🎯 Áudio Exclusivo do Jogo/App: <strong>{capturedProcessName || 'Processo'} (PID {selectedProcessPid})</strong>
+                    </span>
+                  ) : (
+                    <span className="picker-audio-active-badge system">
+                      🔊 Áudio do Sistema Windows
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="discord-picker-footer">
+              <button className="btn-secondary" onClick={() => setIsDiscordPickerOpen(false)}>
+                Cancelar
+              </button>
+              <button className="btn-primary btn-discord-go-live" onClick={handleConfirmPickerStream}>
+                🚀 Entrar em Direto
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

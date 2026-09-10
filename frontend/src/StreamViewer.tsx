@@ -3,7 +3,8 @@ import { Peer, type MediaConnection } from 'peerjs';
 import { 
   Volume2, VolumeX, Maximize, Minimize, Pin, RefreshCw, 
   Tv, Wifi, AlertCircle, Sparkles, Activity, ScreenShare,
-  Users, Check, Eye, ChevronRight, ChevronLeft, Radio
+  Users, Check, Eye, ChevronRight, ChevronLeft, Radio,
+  AppWindow
 } from 'lucide-react';
 import type { DataConnection } from 'peerjs';
 
@@ -74,6 +75,10 @@ const StreamViewer: React.FC = () => {
   const [fitMode, setFitMode] = useState<'contain' | 'cover'>('contain');
   const [isPinned, setIsPinned] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPiP, setIsPiP] = useState(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
   // Multi-Stream & Participants States
   const [streams, setStreams] = useState<StreamItem[]>([]);
@@ -121,6 +126,90 @@ const StreamViewer: React.FC = () => {
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       if (hudTimeoutRef.current) window.clearTimeout(hudTimeoutRef.current);
+    };
+  }, []);
+
+
+  const resetAudioGain = () => {
+    try { sourceNodeRef.current?.disconnect(); } catch {}
+    try { gainNodeRef.current?.disconnect(); } catch {}
+    sourceNodeRef.current = null;
+    gainNodeRef.current = null;
+  };
+
+  const applyVolumeBoost = (targetVolume: number, muted: boolean, targetStream?: MediaStream | null) => {
+    const stream = targetStream || (videoRef.current?.srcObject as MediaStream | null);
+    const effectiveVol = muted ? 0 : targetVolume;
+
+    const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioCtxClass && stream && stream.getAudioTracks().length > 0) {
+      try {
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new AudioCtxClass();
+        }
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+
+        if (!gainNodeRef.current || !sourceNodeRef.current) {
+          try { sourceNodeRef.current?.disconnect(); } catch {}
+          try { gainNodeRef.current?.disconnect(); } catch {}
+
+          const src = ctx.createMediaStreamSource(stream);
+          const gain = ctx.createGain();
+          src.connect(gain);
+          gain.connect(ctx.destination);
+
+          sourceNodeRef.current = src;
+          gainNodeRef.current = gain;
+        }
+
+        if (gainNodeRef.current) {
+          gainNodeRef.current.gain.value = effectiveVol;
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+          }
+          return;
+        }
+      } catch (e) {
+        console.warn('[StreamViewer] AudioContext boost exception, falling back to standard video volume:', e);
+      }
+    }
+
+    if (videoRef.current) {
+      videoRef.current.volume = Math.min(1, Math.max(0, effectiveVol));
+      videoRef.current.muted = muted || effectiveVol === 0;
+    }
+  };
+
+  const togglePictureInPicture = async () => {
+    if (!videoRef.current) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        setIsPiP(false);
+      } else if (document.pictureInPictureEnabled && !videoRef.current.disablePictureInPicture) {
+        await videoRef.current.requestPictureInPicture();
+        setIsPiP(true);
+      } else {
+        alert('Picture-in-Picture não suportado neste navegador.');
+      }
+    } catch (err) {
+      console.warn('Erro ao alternar Picture-in-Picture:', err);
+    }
+  };
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onEnterPiP = () => setIsPiP(true);
+    const onLeavePiP = () => setIsPiP(false);
+    video.addEventListener('enterpictureinpicture', onEnterPiP);
+    video.addEventListener('leavepictureinpicture', onLeavePiP);
+    return () => {
+      video.removeEventListener('enterpictureinpicture', onEnterPiP);
+      video.removeEventListener('leavepictureinpicture', onLeavePiP);
     };
   }, []);
 
@@ -182,6 +271,8 @@ const StreamViewer: React.FC = () => {
     setIsHostInLobby(false);
 
     if (videoRef.current && (!activeStreamId || activeStreamId === sourceId)) {
+      resetAudioGain();
+      applyVolumeBoost(volume, isMuted, remoteStream);
       videoRef.current.srcObject = remoteStream;
       videoRef.current.play().catch(e => {
         console.warn('Autoplay catch, retrying muted:', e);
@@ -583,25 +674,21 @@ const StreamViewer: React.FC = () => {
   }, [isConnected]);
 
   // Controls Handlers
-  const toggleMute = () => {
-    if (!videoRef.current) return;
+    const toggleMute = () => {
     const next = !isMuted;
     setIsMuted(next);
-    videoRef.current.muted = next;
+    applyVolumeBoost(volume, next);
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     setVolume(val);
-    if (videoRef.current) {
-      videoRef.current.volume = val;
-      if (val === 0) {
-        setIsMuted(true);
-        videoRef.current.muted = true;
-      } else if (isMuted) {
-        setIsMuted(false);
-        videoRef.current.muted = false;
-      }
+    if (val === 0) {
+      setIsMuted(true);
+      applyVolumeBoost(0, true);
+    } else {
+      if (isMuted) setIsMuted(false);
+      applyVolumeBoost(val, false);
     }
   };
 
@@ -704,18 +791,24 @@ const StreamViewer: React.FC = () => {
               <input 
                 type="range" 
                 min="0" 
-                max="1" 
+                max="2" 
                 step="0.05"
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
                 className="hud-volume-slider"
-                style={{ width: '60px' }}
-                title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+                style={{ width: '65px' }}
+                title={'Volume: ' + Math.round((isMuted ? 0 : volume) * 100) + '%'}
               />
+              <span style={{ fontSize: '11px', fontFamily: 'monospace', minWidth: '34px', color: volume > 1 ? '#A855F7' : '#38BDF8', fontWeight: volume > 1 ? 700 : 500 }}>
+                {Math.round((isMuted ? 0 : volume) * 100)}%
+              </span>
               <button className="hud-btn" onClick={toggleFitMode} title={fitMode === 'contain' ? 'Ajustar Tela' : 'Manter Proporção'}>
                 <span style={{ fontSize: '11px', fontWeight: 600 }}>{fitMode === 'contain' ? '16:9' : 'FILL'}</span>
               </button>
-              <button className={`hud-btn ${isPinned ? 'active' : ''}`} onClick={toggleAlwaysOnTop} title="Fixar no Topo">
+              <button className={'hud-btn ' + (isPiP ? 'active' : '')} onClick={togglePictureInPicture} title={isPiP ? 'Fechar Janela Flutuante (PiP)' : 'Janela Flutuante (Picture-in-Picture)'}>
+                <AppWindow size={16} />
+              </button>
+              <button className={'hud-btn ' + (isPinned ? 'active' : '')} onClick={toggleAlwaysOnTop} title="Fixar no Topo">
                 <Pin size={16} />
               </button>
               <button className="hud-btn" onClick={toggleFullscreen} title="Tela Cheia">
@@ -856,16 +949,36 @@ const StreamViewer: React.FC = () => {
                     </div>
 
                     {isStreaming && (
-                      <button 
-                        className={`btn-watch-stream ${isCurrent ? 'active-watching' : ''}`}
-                        onClick={() => handleWatchParticipant(p)}
-                      >
-                        {isCurrent ? (
-                          <><Check size={14} /> Assistindo Tela</>
-                        ) : (
-                          <><Eye size={14} /> Assistir Tela</>
+                      <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <button 
+                          className={'btn-watch-stream ' + (isCurrent ? 'active-watching' : '')}
+                          onClick={() => handleWatchParticipant(p)}
+                        >
+                          {isCurrent ? (
+                            <><Check size={14} /> Assistindo Tela</>
+                          ) : (
+                            <><Eye size={14} /> Assistir Tela</>
+                          )}
+                        </button>
+                        {isCurrent && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <Volume2 size={12} color={volume > 1 ? "#A855F7" : "#94A3B8"} />
+                            <input 
+                              type="range" 
+                              min="0" 
+                              max="2" 
+                              step="0.05" 
+                              value={isMuted ? 0 : volume} 
+                              onChange={handleVolumeChange} 
+                              style={{ flex: 1, accentColor: volume > 1 ? '#A855F7' : '#38BDF8', cursor: 'pointer', height: '4px' }} 
+                              title={'Volume do Participante: ' + Math.round((isMuted ? 0 : volume) * 100) + '%'}
+                            />
+                            <span style={{ fontSize: '10px', fontFamily: 'monospace', minWidth: '32px', color: volume > 1 ? '#A855F7' : '#38BDF8', fontWeight: volume > 1 ? 700 : 500 }}>
+                              {Math.round((isMuted ? 0 : volume) * 100)}%
+                            </span>
+                          </div>
                         )}
-                      </button>
+                      </div>
                     )}
                   </div>
                 );
@@ -1049,13 +1162,16 @@ const StreamViewer: React.FC = () => {
             <input 
               type="range" 
               min="0" 
-              max="1" 
+              max="2" 
               step="0.05"
               value={isMuted ? 0 : volume}
               onChange={handleVolumeChange}
               className="hud-volume-slider"
-              title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+              title={'Volume: ' + Math.round((isMuted ? 0 : volume) * 100) + '%'}
             />
+            <span style={{ fontSize: '11px', fontFamily: 'monospace', minWidth: '36px', color: volume > 1 ? '#A855F7' : '#38BDF8', fontWeight: volume > 1 ? 700 : 500 }}>
+              {Math.round((isMuted ? 0 : volume) * 100)}%
+            </span>
           </div>
 
           <div className="hud-controls-right">
@@ -1067,6 +1183,14 @@ const StreamViewer: React.FC = () => {
               <span style={{ fontSize: '11px', fontWeight: 600 }}>
                 {fitMode === 'contain' ? '16:9' : 'FILL'}
               </span>
+            </button>
+
+            <button 
+              className={'hud-btn ' + (isPiP ? 'active' : '')}
+              onClick={togglePictureInPicture}
+              title={isPiP ? 'Fechar Janela Flutuante (PiP)' : 'Janela Flutuante (Picture-in-Picture)'}
+            >
+              <AppWindow size={16} />
             </button>
 
             <button 

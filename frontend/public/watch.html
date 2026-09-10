@@ -1298,6 +1298,103 @@
     let reconnectAttempts = 0;
     let reconnectTimer = null;
 
+
+    let viewerAudioCtx = null;
+    let viewerGainNode = null;
+    let viewerSourceNode = null;
+    let currentVolumeVal = 1.0;
+
+    function resetWebAudioBoost() {
+      if (viewerSourceNode) {
+        try { viewerSourceNode.disconnect(); } catch {}
+        viewerSourceNode = null;
+      }
+      if (viewerGainNode) {
+        try { viewerGainNode.disconnect(); } catch {}
+        viewerGainNode = null;
+      }
+    }
+
+    function setupWebAudioBoost(stream) {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx || !stream || stream.getAudioTracks().length === 0) return;
+        if (!viewerAudioCtx) {
+          viewerAudioCtx = new AudioCtx();
+        }
+        if (viewerAudioCtx.state === 'suspended') {
+          viewerAudioCtx.resume().catch(() => {});
+        }
+        resetWebAudioBoost();
+
+        const src = viewerAudioCtx.createMediaStreamSource(stream);
+        const gain = viewerAudioCtx.createGain();
+        gain.gain.value = currentVolumeVal;
+        src.connect(gain);
+        gain.connect(viewerAudioCtx.destination);
+        viewerSourceNode = src;
+        viewerGainNode = gain;
+
+        if (videoCinema) videoCinema.muted = true;
+        if (videoHub) videoHub.muted = true;
+      } catch (err) {
+        console.warn('Audio boost setup error, using standard video volume:', err);
+        if (videoCinema) videoCinema.volume = Math.min(1, currentVolumeVal);
+        if (videoHub) videoHub.volume = Math.min(1, currentVolumeVal);
+      }
+    }
+
+    function handleViewerVolume(val) {
+      currentVolumeVal = parseFloat(val);
+      const percent = Math.round(currentVolumeVal * 100);
+      const percentEls = document.querySelectorAll('.viewerVolumePercent');
+      percentEls.forEach(el => {
+        el.innerText = percent + '%';
+        if (percent > 100) {
+          el.style.color = '#A855F7';
+          el.style.fontWeight = 'bold';
+        } else {
+          el.style.color = '#38BDF8';
+          el.style.fontWeight = 'normal';
+        }
+      });
+
+      const sliders = document.querySelectorAll('.viewerVolumeSliderInput');
+      sliders.forEach(s => { s.value = currentVolumeVal; });
+
+      if (viewerGainNode) {
+        viewerGainNode.gain.value = currentVolumeVal;
+      } else {
+        if (videoCinema) videoCinema.volume = Math.min(1, currentVolumeVal);
+        if (videoHub) videoHub.volume = Math.min(1, currentVolumeVal);
+        if (currentVolumeVal > 1.0 && activeStream) {
+          setupWebAudioBoost(activeStream);
+        }
+      }
+
+      if (currentVolumeVal === 0) {
+        updateMuteButtons(true);
+      } else {
+        updateMuteButtons(false);
+      }
+    }
+
+    async function togglePictureInPicture() {
+      const activeVideo = currentTheme === 'cinema' ? videoCinema : videoHub;
+      if (!activeVideo) return;
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else if (document.pictureInPictureEnabled && !activeVideo.disablePictureInPicture) {
+          await activeVideo.requestPictureInPicture();
+        } else {
+          alert('Picture-in-Picture não suportado ou bloqueado no navegador.');
+        }
+      } catch (err) {
+        console.warn('Erro ao alternar Picture-in-Picture:', err);
+      }
+    }
+
     // Multi-stream & Presence
     let participants = [];
     let knownStreams = {}; // { [peerId]: MediaStream }
