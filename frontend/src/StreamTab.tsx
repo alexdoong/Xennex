@@ -123,6 +123,7 @@ const StreamTab: React.FC = () => {
   const [pickerTab, setPickerTab] = useState<'apps' | 'screens'>('apps');
   const [selectedProcessHwnd, setSelectedProcessHwnd] = useState<number>(0);
   const nativeCaptureSocketRef = useRef<WebSocket | null>(null);
+  const nativeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
   const [participantsList, setParticipantsList] = useState<{ peerId: string; name: string; isHost: boolean; isStreaming: boolean; streamTitle?: string; streamPeerId?: string }[]>([]);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
@@ -546,6 +547,7 @@ const StreamTab: React.FC = () => {
         const canvas = document.createElement('canvas');
         canvas.width = width || 1920;
         canvas.height = height || 1080;
+        nativeCanvasRef.current = canvas;
         const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
         const ws = new WebSocket('ws://127.0.0.1:59124/videostream/');
@@ -597,7 +599,7 @@ const StreamTab: React.FC = () => {
             console.warn('[NativeVideo] Timeout aguardando primeiro frame do CaptureWorker.');
             resolve(null);
           }
-        }, 3000);
+        }, 6000);
       } catch (err) {
         console.error('[NativeVideo] Exceção:', err);
         resolve(null);

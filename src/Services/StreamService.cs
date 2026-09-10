@@ -123,9 +123,7 @@ namespace Xennex.Services
                         FileName = exePath,
                         Arguments = args,
                         UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true
+                        CreateNoWindow = true
                     };
 
                     _captureWorkerProcess = System.Diagnostics.Process.Start(psi);

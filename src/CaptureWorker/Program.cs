@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
@@ -96,7 +96,13 @@ namespace Xennex.CaptureWorker
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         delegate void UnmapDelegate(IntPtr thisPtr, IntPtr pResource, uint Subresource);
 
-        private static readonly ConcurrentDictionary<string, WebSocket> _clients = new();
+        private class ClientSession
+        {
+            public WebSocket Socket;
+            public int IsSending;
+        }
+
+        private static readonly ConcurrentDictionary<string, ClientSession> _clients = new();
         private static readonly object _syncLock = new();
         private static bool _isRunning = true;
         private static int _parentPid = 0;
@@ -110,7 +116,16 @@ namespace Xennex.CaptureWorker
 
         static void Log(string msg)
         {
-            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [CaptureWorker] {msg}");
+            string line = $"[{DateTime.Now:HH:mm:ss.fff}] [CaptureWorker] {msg}";
+            Console.WriteLine(line);
+            try
+            {
+                string baseDir = AppContext.BaseDirectory;
+                string logDir = Path.Combine(baseDir, "logs");
+                if (!Directory.Exists(logDir)) Directory.CreateDirectory(logDir);
+                File.AppendAllText(Path.Combine(logDir, "capture_worker.log"), line + Environment.NewLine);
+            }
+            catch { }
         }
 
         static async Task Main(string[] args)
@@ -389,11 +404,30 @@ namespace Xennex.CaptureWorker
             var buffer = new ArraySegment<byte>(jpegBytes);
             foreach (var kvp in _clients)
             {
-                var ws = kvp.Value;
-                if (ws.State == WebSocketState.Open)
+                var client = kvp.Value;
+                if (client.Socket.State == WebSocketState.Open)
                 {
-                    // Fire-and-forget async broadcast (drops frame automatically if client is congested)
-                    _ = ws.SendAsync(buffer, WebSocketMessageType.Binary, true, CancellationToken.None);
+                    if (Interlocked.CompareExchange(ref client.IsSending, 1, 0) == 0)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                if (client.Socket.State == WebSocketState.Open)
+                                {
+                                    await client.Socket.SendAsync(buffer, WebSocketMessageType.Binary, true, CancellationToken.None);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"Erro ao transmitir frame: {ex.Message}");
+                            }
+                            finally
+                            {
+                                Interlocked.Exchange(ref client.IsSending, 0);
+                            }
+                        });
+                    }
                 }
                 else
                 {
@@ -413,7 +447,8 @@ namespace Xennex.CaptureWorker
                     {
                         var wsContext = await context.AcceptWebSocketAsync(null);
                         string clientId = Guid.NewGuid().ToString();
-                        _clients[clientId] = wsContext.WebSocket;
+                        var session = new ClientSession { Socket = wsContext.WebSocket, IsSending = 0 };
+                        _clients[clientId] = session;
                         Log($"Cliente conectado ao stream de vídeo ({clientId})");
 
                         _ = Task.Run(async () =>
@@ -450,7 +485,7 @@ namespace Xennex.CaptureWorker
 
         private static ImageCodecInfo GetEncoder(ImageFormat format)
         {
-            var codecs = ImageCodecInfo.GetImageDecoders();
+            var codecs = ImageCodecInfo.GetImageEncoders();
             foreach (var codec in codecs)
             {
                 if (codec.FormatID == format.Guid) return codec;
