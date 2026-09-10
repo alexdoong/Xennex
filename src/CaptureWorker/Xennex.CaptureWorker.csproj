@@ -6,7 +6,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Xennex.CaptureWorker</AssemblyName>
-    <Version>0.2.1</Version>
+    <Version>0.2.2</Version>
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>false</SelfContained>
   </PropertyGroup>
