@@ -126,6 +126,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         setUpdateMessage(res.ErrorMessage || 'Erro ao consultar atualizações.');
       } else if (res.HasUpdate) {
         setUpdateStatus('available');
+        if (res.ErrorMessage) {
+          setUpdateMessage(res.ErrorMessage);
+        }
       } else {
         setUpdateStatus('up-to-date');
         setUpdateMessage(res.ErrorMessage || 'Você já está utilizando a versão mais recente.');
@@ -450,8 +453,19 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-                {updateData.DownloadUrl && (
+              {updateMessage && (
+                <div style={{
+                  padding: '8px 12px', borderRadius: '8px',
+                  background: 'rgba(234, 179, 8, 0.12)',
+                  border: '1px solid rgba(234, 179, 8, 0.3)',
+                  fontSize: '12px', color: '#FDE047'
+                }}>
+                  {updateMessage}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '4px' }}>
+                {updateData.DownloadUrl ? (
                   <button
                     className="btn primary"
                     onClick={handleStartAutoUpdate}
@@ -460,6 +474,10 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                     <Download size={16} />
                     Atualizar Agora Automaticamente
                   </button>
+                ) : (
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', alignSelf: 'center' }}>
+                    (Pacote de instalação ainda não anexado ao GitHub)
+                  </div>
                 )}
 
                 <button

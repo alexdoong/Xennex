@@ -180,16 +180,28 @@ if (Test-Path $dataSrc) {
 }
 Write-Host " -> Dados limpos de configuracao montados." -ForegroundColor Green
 
-# 5. Assinatura Authenticode
-Write-Host "`n[5/6] Aplicando assinatura digital Authenticode..." -ForegroundColor Yellow
+# 5. Assinatura Authenticode Oficial (alexdoong)
+Write-Host "`n[5/6] Aplicando assinatura digital Authenticode oficial (alexdoong)..." -ForegroundColor Yellow
 $exePath = Join-Path $stagingDir "Xennex.exe"
+$workerPath = Join-Path $stagingDir "Xennex.CaptureWorker.exe"
 try {
-    $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Subject -like "*Xennex*" } | Select-Object -First 1
+    $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Subject -like "*alexdoong*" } | Select-Object -First 1
     if (-not $cert) {
-        $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Xennex (Alex Doong)" -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(5)
+        $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=alexdoong, O=alexdoong, OU=Xennex Project, C=BR" -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(10) -KeyUsage DigitalSignature -KeySpec Signature
     }
     Set-AuthenticodeSignature -FilePath $exePath -Certificate $cert -TimestampServer "http://timestamp.digicert.com" -ErrorAction SilentlyContinue | Out-Null
-    Write-Host " -> Executavel assinado digitalmente." -ForegroundColor Green
+    if (Test-Path $workerPath) {
+        Set-AuthenticodeSignature -FilePath $workerPath -Certificate $cert -TimestampServer "http://timestamp.digicert.com" -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    # Incluir o certificado publico (.cer) e o instalador de 1 clique na raiz do pacote
+    $cerPath = Join-Path $stagingDir "alexdoong.cer"
+    Export-Certificate -Cert $cert -FilePath $cerPath -Force | Out-Null
+    $batchSrc = Join-Path $rootDir "scripts\instalar_certificado_alexdoong.cmd"
+    if (Test-Path $batchSrc) {
+        Copy-Item $batchSrc (Join-Path $stagingDir "instalar_certificado_alexdoong.cmd") -Force
+    }
+    Write-Host " -> Executaveis assinados com o distribuidor oficial 'alexdoong' e certificado anexado." -ForegroundColor Green
 }
 catch {
     Write-Host " -> Assinatura opcional ignorada: $($_.Exception.Message)" -ForegroundColor Gray
