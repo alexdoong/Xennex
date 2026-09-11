@@ -75,4 +75,7 @@ Data/
 
 # Frontend
 frontend/node_modules/
-wwwroot/
+wwwroot/*
+!wwwroot/skins/
+wwwroot/skins/*
+!wwwroot/skins/default/
