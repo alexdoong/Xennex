@@ -392,13 +392,8 @@ namespace Xennex.Services
             {
                 StopCapture();
 
-                if (pid <= 0)
-                {
-                    Log("PID inválido especificado.");
-                    return false;
-                }
-
-                Log($"Iniciando captura de áudio exclusiva para PID {pid}...");
+                bool isSystem = (pid <= 0);
+                Log(isSystem ? "Iniciando captura de áudio do sistema completo (WASAPI Loopback)..." : $"Iniciando captura de áudio exclusiva para PID {pid}...");
 
                 _cts = new CancellationTokenSource();
                 var startedEvent = new ManualResetEvent(false);
@@ -406,12 +401,19 @@ namespace Xennex.Services
 
                 _captureThread = new Thread(() =>
                 {
-                    RunMtaCaptureWorker(pid, startedEvent, ref success, _cts.Token);
+                    if (isSystem)
+                    {
+                        RunSystemCaptureWorker(startedEvent, ref success, _cts.Token);
+                    }
+                    else
+                    {
+                        RunMtaCaptureWorker(pid, startedEvent, ref success, _cts.Token);
+                    }
                 })
                 {
                     IsBackground = true,
                     Priority = ThreadPriority.AboveNormal,
-                    Name = $"ProcessAudioCapture_{pid}"
+                    Name = isSystem ? "SystemAudioCapture" : $"ProcessAudioCapture_{pid}"
                 };
 
                 _captureThread.SetApartmentState(ApartmentState.MTA);
@@ -424,15 +426,71 @@ namespace Xennex.Services
                 {
                     IsCapturing = true;
                     CapturedPid = pid;
-                    Log($"Captura de áudio para PID {pid} iniciada com sucesso no MTA!");
+                    Log(isSystem ? "Captura de áudio do sistema iniciada com sucesso!" : $"Captura de áudio para PID {pid} iniciada com sucesso no MTA!");
                     return true;
                 }
                 else
                 {
-                    Log($"Falha ao inicializar captura no worker MTA para PID {pid}.");
+                    Log(isSystem ? "Falha ao inicializar captura de áudio do sistema." : $"Falha ao inicializar captura no worker MTA para PID {pid}.");
                     StopCapture();
                     return false;
                 }
+            }
+        }
+
+        private void RunSystemCaptureWorker(ManualResetEvent startedEvent, ref bool success, CancellationToken token)
+        {
+            WasapiLoopbackCapture capture = null;
+            try
+            {
+                capture = new WasapiLoopbackCapture();
+                SampleRate = capture.WaveFormat.SampleRate;
+                Channels = 2;
+                int inChannels = capture.WaveFormat.Channels;
+                int bitsPerSample = capture.WaveFormat.BitsPerSample;
+                bool isFloat = capture.WaveFormat.Encoding == WaveFormatEncoding.IeeeFloat ||
+                               (capture.WaveFormat is WaveFormatExtensible wex && wex.SubFormat == MEDIASUBTYPE_IEEE_FLOAT);
+
+                capture.DataAvailable += (s, a) =>
+                {
+                    if (token.IsCancellationRequested || a.BytesRecorded == 0) return;
+                    int bytesPerFrame = capture.WaveFormat.BlockAlign;
+                    if (bytesPerFrame <= 0) return;
+                    int numFrames = a.BytesRecorded / bytesPerFrame;
+                    IntPtr unmanaged = Marshal.AllocHGlobal(a.BytesRecorded);
+                    try
+                    {
+                        Marshal.Copy(a.Buffer, 0, unmanaged, a.BytesRecorded);
+                        byte[] stereoFloatBytes = ConvertToStereoFloat32(unmanaged, numFrames, inChannels, bitsPerSample, isFloat);
+                        if (stereoFloatBytes != null && stereoFloatBytes.Length > 0)
+                        {
+                            OnAudioChunkAvailable?.Invoke(stereoFloatBytes, SampleRate, Channels);
+                        }
+                    }
+                    finally
+                    {
+                        Marshal.FreeHGlobal(unmanaged);
+                    }
+                };
+
+                capture.StartRecording();
+                success = true;
+                startedEvent.Set();
+
+                while (!token.IsCancellationRequested)
+                {
+                    Thread.Sleep(50);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Erro na captura de áudio do sistema: {ex.Message}");
+            }
+            finally
+            {
+                startedEvent.Set();
+                try { capture?.StopRecording(); } catch { }
+                try { capture?.Dispose(); } catch { }
             }
         }
 
@@ -619,10 +677,16 @@ namespace Xennex.Services
                 {
                     if (inChannels == 2)
                     {
-                        // Estéreo IEEE Float direto
-                        int byteCount = numFrames * 2 * sizeof(float);
-                        byte[] result = new byte[byteCount];
-                        Marshal.Copy(bufferPtr, result, 0, byteCount);
+                        // Estéreo IEEE Float direto com ganho de áudio para clareza em jogos (1.5x)
+                        float[] floats = new float[numFrames * 2];
+                        Marshal.Copy(bufferPtr, floats, 0, floats.Length);
+                        for (int i = 0; i < floats.Length; i++)
+                        {
+                            float amplified = floats[i] * 1.5f;
+                            floats[i] = amplified > 1.0f ? 1.0f : (amplified < -1.0f ? -1.0f : amplified);
+                        }
+                        byte[] result = new byte[floats.Length * sizeof(float)];
+                        Buffer.BlockCopy(floats, 0, result, 0, result.Length);
                         return result;
                     }
                     else if (inChannels == 1)

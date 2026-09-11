@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="alternate icon" href="favicon.ico">
   <title>Xennex Live - Transmissão & Visualização P2P</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <style>
@@ -1096,6 +1098,65 @@
       object-fit: contain;
       display: block;
     }
+  
+    /* Stream Fit Mode & Paused Overlay */
+    .stream-paused-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(11, 14, 20, 0.88);
+      backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 15;
+      padding: 16px;
+    }
+
+    .btn-change-name {
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      color: #C084FC;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-change-name:hover {
+      background: rgba(168, 85, 247, 0.3);
+      color: #FFF;
+      border-color: #A855F7;
+    }
+
+    .fit-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      color: #FFF;
+      padding: 9px 20px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 999;
+      pointer-events: none;
+      animation: fadeInOut 2.2s forwards;
+    }
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translate(-50%, 10px); }
+      15% { opacity: 1; transform: translate(-50%, 0); }
+      80% { opacity: 1; transform: translate(-50%, 0); }
+      100% { opacity: 0; transform: translate(-50%, -10px); }
+    }
+
   </style>
 </head>
 <body>
@@ -1135,7 +1196,13 @@
           Digite o código da sala gerado pelo host para assistir à tela em tempo real com áudio e ultrabaixa latência.
         </p>
 
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label class="form-label" style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 6px; font-weight: 600;">Seu Nome na Sala</label>
+          <input type="text" id="displayNameInput" placeholder="Ex: Xenphi, Lucas, Player..." maxlength="24" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; padding: 10px 14px; color: #FFF; font-size: 0.9rem;">
+        </div>
+
         <div class="form-group">
+          <label class="form-label" style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 6px; font-weight: 600;">Código da Sala</label>
           <div class="input-row">
             <input type="text" id="roomInput" placeholder="Ex: XNX-1234" maxlength="16">
             <button class="btn-primary" style="width: auto; padding: 11px 22px;" id="connectBtn" onclick="startWatch()">
@@ -1255,10 +1322,13 @@
 
         <!-- Sidebar (Discord Participants) -->
         <div class="stream-hub-sidebar" id="hubSidebar">
-          <div class="hub-sidebar-top">
+          <div class="hub-sidebar-top" style="display: flex; align-items: center; justify-content: space-between;">
             <div class="hub-sidebar-title">
               👥 PARTICIPANTES (<span id="participantCount">1</span>)
             </div>
+            <button class="btn-change-name" onclick="promptChangeDisplayName()" title="Alterar seu nome de exibição">
+              ✏️ Nome
+            </button>
           </div>
 
           <div class="hub-participants-scroll" id="participantsList">
@@ -1645,11 +1715,26 @@
         .replace(/'/g, '&#039;');
     }
 
+    const storedLastRoom = localStorage.getItem('xennex_last_room') || '';
+    const storedName = localStorage.getItem('xennex_display_name') || '';
+    const nameInputInit = document.getElementById('displayNameInput');
+    if (nameInputInit && storedName) {
+      nameInputInit.value = storedName;
+    }
+
     if (initialRoom) {
       roomInput.value = initialRoom.toUpperCase();
+      localStorage.setItem('xennex_last_room', initialRoom.toUpperCase());
       switchTab('watch');
       startWatch();
+    } else if (storedLastRoom && roomInput) {
+      roomInput.value = storedLastRoom;
     }
+
+    // Auto-unmute audio on first user gesture anywhere on page
+    document.addEventListener('click', () => {
+      unmuteAllVideos();
+    }, { once: true });
 
     function createDummyStream() {
       const canvas = document.createElement('canvas');
@@ -1723,11 +1808,19 @@
         const dataConn = viewerPeer.connect(room);
         currentDataConn = dataConn;
 
+        const displayNameEl = document.getElementById('displayNameInput');
+        let myDisplayName = (displayNameEl ? displayNameEl.value.trim() : '') || localStorage.getItem('xennex_display_name') || '';
+        if (!myDisplayName) {
+          myDisplayName = 'Espectador (' + id.slice(-4) + ')';
+        }
+        localStorage.setItem('xennex_display_name', myDisplayName);
+        localStorage.setItem('xennex_last_room', room);
+
         const sendJoin = () => {
           dataConn.send({
             type: 'join-room',
             peerId: id,
-            name: 'Espectador (' + id.slice(-4) + ')'
+            name: myDisplayName
           });
           dataConn.send({ type: 'get-presence' });
         };
@@ -1745,6 +1838,13 @@
           if (data.type === 'room-presence' && Array.isArray(data.participants)) {
             participants = data.participants;
             syncRoomStreams();
+          } else if (data.type === 'update-name' && data.name && data.peerId) {
+            const p = participants.find(x => x.peerId === data.peerId);
+            if (p) p.name = data.name;
+            const ks = knownStreams[data.peerId];
+            if (ks) ks.name = data.name;
+            renderParticipants();
+            updateMultiStreamGrid();
           } else if (data.type === 'host-video-started') {
             console.log('[Viewer Web] Host iniciou vídeo!');
             isHostLive = true;
@@ -2061,7 +2161,13 @@
                   <button class="stream-card-btn mute-btn" id="mute-btn-${sId}" title="Mutar / Desmutar Áudio" onclick="toggleIndividualMute('${sId}', event)">
                     🔊
                   </button>
+                  <button class="stream-card-btn pause-stream-btn" id="pause-stream-btn-${sId}" title="Pausar Stream (Economizar Banda)" onclick="toggleStreamPause('${sId}', event)">
+                    ⏸️
+                  </button>
                 ` : ''}
+                <button class="stream-card-btn fit-btn" id="fit-btn-${sId}" title="Ajuste de Tela: Conter / Preencher / Zoom" onclick="cycleStreamFitMode('${sId}', event)">
+                  📐
+                </button>
                 <button class="stream-card-btn spotlight-btn" id="spotlight-btn-${sId}" title="Focar / Expandir Tela" onclick="toggleSpotlightStream('${sId}', event)">
                   🔍
                 </button>
@@ -2078,8 +2184,8 @@
             ${!isSelf ? `
               <div class="stream-card-vol-control" onclick="event.stopPropagation()">
                 <span id="vol-icon-${sId}" style="font-size: 0.75rem;">🔊</span>
-                <input type="range" min="0" max="1" step="0.05" value="${info.volume ?? 1}" oninput="setIndividualStreamVolume('${sId}', this.value)">
-                <span id="vol-pct-${sId}" style="font-size: 0.7rem; color: #94A3B8; min-width: 28px;">${Math.round((info.volume ?? 1) * 100)}%</span>
+                <input type="range" min="0" max="2" step="0.05" value="${info.volume ?? 1}" oninput="setIndividualStreamVolume('${sId}', this.value)">
+                <span id="vol-pct-${sId}" style="font-size: 0.7rem; color: #94A3B8; min-width: 34px;">${Math.round((info.volume ?? 1) * 100)}%</span>
               </div>
             ` : `
               <div class="stream-card-self-badge">
@@ -2190,6 +2296,36 @@
       if (icon) icon.innerText = s.muted ? '🔇' : '🔊';
     }
 
+    let boostNodes = {}; // { [streamId]: { ctx, src, gain } }
+
+    function setupIndividualAudioBoost(streamId, vol) {
+      const s = knownStreams[streamId];
+      if (!s || !s.stream || s.stream.getAudioTracks().length === 0) return;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      try {
+        if (!boostNodes[streamId]) {
+          const ctx = new AudioCtx();
+          const src = ctx.createMediaStreamSource(s.stream);
+          const gain = ctx.createGain();
+          src.connect(gain);
+          gain.connect(ctx.destination);
+          boostNodes[streamId] = { ctx, src, gain };
+        }
+        const node = boostNodes[streamId];
+        if (node.ctx.state === 'suspended') node.ctx.resume().catch(() => {});
+        node.gain.gain.value = vol > 1.0 ? (vol - 1.0) : 0;
+      } catch (e) {
+        console.warn('Audio boost error:', e);
+      }
+    }
+
+    function removeIndividualAudioBoost(streamId) {
+      if (boostNodes[streamId]) {
+        try { boostNodes[streamId].gain.gain.value = 0; } catch {}
+      }
+    }
+
     function setIndividualStreamVolume(streamId, val) {
       const s = knownStreams[streamId];
       if (!s || s.isSelf) return;
@@ -2203,13 +2339,149 @@
       const btn = document.getElementById('mute-btn-' + streamId);
       const icon = document.getElementById('vol-icon-' + streamId);
 
+      if (pctEl) {
+        pctEl.innerText = Math.round(num * 100) + '%';
+        if (num > 1.0) {
+          pctEl.style.color = '#A855F7';
+          pctEl.style.fontWeight = 'bold';
+        } else {
+          pctEl.style.color = '#94A3B8';
+          pctEl.style.fontWeight = 'normal';
+        }
+      }
+
       if (v) {
         v.muted = s.muted;
         v.volume = Math.min(1, num);
       }
-      if (pctEl) pctEl.innerText = Math.round(num * 100) + '%';
-      if (btn) btn.innerText = s.muted ? '🔇' : '🔊';
-      if (icon) icon.innerText = s.muted ? '🔇' : '🔊';
+
+      if (num > 1.0) {
+        setupIndividualAudioBoost(streamId, num);
+      } else {
+        removeIndividualAudioBoost(streamId);
+      }
+
+      const isMute = (num === 0 || s.muted);
+      if (icon) icon.innerText = isMute ? '🔇' : (num > 1.0 ? '📢' : '🔊');
+      if (btn) btn.innerText = isMute ? '🔇' : '🔊';
+    }
+
+    // Stream Fit Modes (contain, fill, cover)
+    let streamFitModes = {};
+
+    function cycleStreamFitMode(streamId, ev) {
+      if (ev) ev.stopPropagation();
+      const current = streamFitModes[streamId] || 'contain';
+      const next = (current === 'contain') ? 'fill' : (current === 'fill' ? 'cover' : 'contain');
+      streamFitModes[streamId] = next;
+
+      const v = document.getElementById('stream-video-' + streamId);
+      if (v) {
+        v.style.objectFit = next;
+      }
+      if (videoCinema && (spotlightStreamId === streamId || !spotlightStreamId)) {
+        videoCinema.style.objectFit = next;
+      }
+
+      const btn = document.getElementById('fit-btn-' + streamId);
+      if (btn) {
+        const labels = {
+          contain: '📐 Ajuste: Conter (16:9)',
+          fill: '📐 Ajuste: Preencher (Esticar)',
+          cover: '📐 Ajuste: Zoom (Sem barras)'
+        };
+        btn.title = labels[next];
+      }
+      const toastLabels = {
+        contain: '📐 Modo: Conter (16:9 completo)',
+        fill: '📐 Modo: Preencher (Esticar tela)',
+        cover: '📐 Modo: Zoom (Sem barras pretas)'
+      };
+      showFitToast(toastLabels[next]);
+    }
+
+    function showFitToast(msg) {
+      const t = document.getElementById('fitToast');
+      if (!t) return;
+      t.innerText = msg;
+      t.style.display = 'flex';
+      setTimeout(() => { t.style.display = 'none'; }, 2200);
+    }
+
+    // Stream Ignore / Pause (Economizar Banda)
+    let streamPaused = {};
+
+    function toggleStreamPause(streamId, ev) {
+      if (ev) ev.stopPropagation();
+      const isPaused = !streamPaused[streamId];
+      streamPaused[streamId] = isPaused;
+
+      const s = knownStreams[streamId];
+      const v = document.getElementById('stream-video-' + streamId);
+      const btn = document.getElementById('pause-stream-btn-' + streamId);
+      let overlay = document.getElementById('paused-overlay-' + streamId);
+
+      if (s && s.stream) {
+        s.stream.getVideoTracks().forEach(t => { t.enabled = !isPaused; });
+      }
+
+      if (isPaused) {
+        if (v) v.pause();
+        if (btn) {
+          btn.innerText = '▶️';
+          btn.title = 'Retomar esta transmissão';
+        }
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'paused-overlay-' + streamId;
+          overlay.className = 'stream-paused-overlay';
+          overlay.innerHTML = `
+            <div style="font-size: 2.2rem; margin-bottom: 8px;">⏸️</div>
+            <div style="font-weight: 700; color: #FFF; font-size: 1rem;">Transmissão Pausada</div>
+            <div style="font-size: 0.8rem; color: #94A3B8; margin-top: 4px; text-align: center; max-width: 220px;">Economizando banda e processamento</div>
+            <button class="btn-primary" style="margin-top: 14px; padding: 7px 18px; font-size: 0.82rem; width: auto; background: linear-gradient(135deg, #10B981, #059669);" onclick="toggleStreamPause('${streamId}', event)">▶️ Retomar Stream</button>
+          `;
+          const wrap = document.querySelector('#stream-card-' + streamId + ' .stream-card-video-wrap');
+          if (wrap) wrap.appendChild(overlay);
+        } else {
+          overlay.style.display = 'flex';
+        }
+      } else {
+        if (v) v.play().catch(() => {});
+        if (btn) {
+          btn.innerText = '⏸️';
+          btn.title = 'Pausar esta transmissão (Economizar Banda)';
+        }
+        if (overlay) overlay.style.display = 'none';
+      }
+    }
+
+    // Alterar Nome de Exibição em Tempo Real
+    function promptChangeDisplayName() {
+      const current = localStorage.getItem('xennex_display_name') || 'Jogador';
+      const entered = prompt('Digite seu novo nome na sala:', current);
+      if (entered && entered.trim()) {
+        const clean = entered.trim().slice(0, 24);
+        localStorage.setItem('xennex_display_name', clean);
+        const nameInput = document.getElementById('displayNameInput');
+        if (nameInput) nameInput.value = clean;
+
+        if (viewerPeer) {
+          const myId = viewerPeer.id;
+          const selfP = participants.find(p => p.peerId === myId);
+          if (selfP) selfP.name = clean;
+          renderParticipants();
+
+          if (currentDataConn && currentDataConn.open) {
+            currentDataConn.send({
+              type: 'update-name',
+              name: clean,
+              peerId: myId
+            });
+          }
+        }
+        showFitToast('Nome alterado para: ' + clean);
+      }
     }
 
     function fullscreenStream(streamId, ev) {
@@ -2914,5 +3186,6 @@
       });
     }
   </script>
+  <div class="fit-toast" id="fitToast"></div>
 </body>
 </html>

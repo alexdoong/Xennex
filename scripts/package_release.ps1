@@ -33,12 +33,18 @@ finally {
     Pop-Location
 }
 
-# Sincronizar watch.html com cloudflare_pages/index.html
+# Sincronizar watch.html e favicons com cloudflare_pages
 $watchHtml = Join-Path $rootDir "frontend\public\watch.html"
 $cfIndexHtml = Join-Path $rootDir "cloudflare_pages\index.html"
 if (Test-Path $watchHtml) {
     Copy-Item $watchHtml $cfIndexHtml -Force
     Write-Host " -> Sincronizado watch.html para cloudflare_pages/index.html" -ForegroundColor Green
+}
+$favSvg = Join-Path $rootDir "frontend\public\favicon.svg"
+if (Test-Path $favSvg) {
+    Copy-Item $favSvg (Join-Path $rootDir "cloudflare_pages\favicon.svg") -Force
+    Copy-Item $favSvg (Join-Path $rootDir "cloudflare_pages\favicon.ico") -Force
+    Write-Host " -> Sincronizado favicons para cloudflare_pages" -ForegroundColor Green
 }
 
 # 2. Validacao rigorosa dos arquivos em wwwroot

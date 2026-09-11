@@ -264,7 +264,23 @@ const StreamTab: React.FC = () => {
       processAudioContextRef.current = audioCtx;
 
       const mediaStreamDest = audioCtx.createMediaStreamDestination();
-      let nextPlayTime = audioCtx.currentTime;
+
+      // Digital gain boost for rich, audible game sound
+      const hostGainNode = audioCtx.createGain();
+      hostGainNode.gain.value = 1.4;
+      hostGainNode.connect(mediaStreamDest);
+
+      // Keep AudioContext alive and prevent Chromium from throttling
+      try {
+        const dummyOsc = audioCtx.createOscillator();
+        const dummyGain = audioCtx.createGain();
+        dummyGain.gain.value = 0.00001;
+        dummyOsc.connect(dummyGain);
+        dummyGain.connect(mediaStreamDest);
+        dummyOsc.start();
+      } catch (e) {}
+
+      let nextPlayTime = audioCtx.currentTime + 0.03;
 
       ws.onmessage = async (event) => {
         if (!(event.data instanceof ArrayBuffer)) return;
@@ -290,13 +306,14 @@ const StreamTab: React.FC = () => {
 
         const sourceNode = audioCtx.createBufferSource();
         sourceNode.buffer = audioBuffer;
-        sourceNode.connect(mediaStreamDest);
+        sourceNode.connect(hostGainNode);
         sourceNode.onended = () => {
           try { sourceNode.disconnect(); } catch {}
         };
 
-        if (nextPlayTime < audioCtx.currentTime) {
-          nextPlayTime = audioCtx.currentTime;
+        const curTime = audioCtx.currentTime;
+        if (nextPlayTime < curTime || nextPlayTime > curTime + 0.20) {
+          nextPlayTime = curTime + 0.02;
         }
         sourceNode.start(nextPlayTime);
         nextPlayTime += audioBuffer.duration;
@@ -396,6 +413,7 @@ const StreamTab: React.FC = () => {
         setMyRoomId(id);
         setIsRoomOpen(true);
         saveRecentRoom(id);
+        localStorage.setItem('xennex_last_room', id);
 
         participantsRef.current = [{
           peerId: id,
@@ -450,7 +468,8 @@ const StreamTab: React.FC = () => {
             const pName = data.name || `Espectador (${pId.slice(-4)})`;
             console.log('[Host Hub] Participante entrou na sala:', pName, pId);
             
-            if (!participantsRef.current.some(p => p.peerId === pId)) {
+            const existing = participantsRef.current.find(p => p.peerId === pId);
+            if (!existing) {
               participantsRef.current.push({
                 peerId: pId,
                 name: pName,
@@ -459,8 +478,18 @@ const StreamTab: React.FC = () => {
                 streamTitle: data.streamTitle,
                 streamPeerId: data.streamPeerId
               });
+            } else {
+              existing.name = pName;
             }
             broadcastRoomPresence();
+          } 
+          else if (data.type === 'update-name' && data.name) {
+            const pId = data.peerId || conn.peer;
+            const p = participantsRef.current.find(x => x.peerId === pId);
+            if (p) {
+              p.name = data.name;
+              broadcastRoomPresence();
+            }
           } 
           else if (data.type === 'get-presence') {
             sendCurrentState();
@@ -783,6 +812,8 @@ const StreamTab: React.FC = () => {
             let processAudioTrack: MediaStreamTrack | null = null;
             if (audioMode === 'process' && selectedProcessPid) {
               processAudioTrack = await startProcessAudioCapture(selectedProcessPid);
+            } else if (audioMode === 'system') {
+              processAudioTrack = await startProcessAudioCapture(0);
             }
 
             const tracks: MediaStreamTrack[] = [nativeVideoStream.getVideoTracks()[0]];
@@ -1092,7 +1123,8 @@ const StreamTab: React.FC = () => {
 
   const handleConfirmPickerStream = () => {
     setIsDiscordPickerOpen(false);
-    const roomToUse = myRoomId || customRoomId.trim().toUpperCase() || generateRandomRoomId();
+    const lastRoom = localStorage.getItem('xennex_last_room') || '';
+    const roomToUse = myRoomId || customRoomId.trim().toUpperCase() || lastRoom || generateRandomRoomId();
     startStream(roomToUse);
   };
 

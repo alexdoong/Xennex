@@ -196,7 +196,6 @@ namespace Xennex.Interop
         {
             try
             {
-                _processAudioCaptureService.StartCapture(pid);
                 return _streamService.StartNativeCapture(hwnd, pid, fps, resolution);
             }
             catch (Exception ex)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
@@ -155,7 +155,7 @@ namespace Xennex.UI
 
         private async System.Threading.Tasks.Task<CoreWebView2Environment> CreateWebViewEnvironmentAsync()
         {
-            var envOptions = new CoreWebView2EnvironmentOptions("--enable-usermedia-screen-capturing");
+            var envOptions = new CoreWebView2EnvironmentOptions("--enable-usermedia-screen-capturing --autoplay-policy=no-user-gesture-required");
             string userFolder = Path.Combine(Path.GetTempPath(), "XennexWebView2");
             try
             {
