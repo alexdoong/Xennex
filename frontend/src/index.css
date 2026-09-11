@@ -140,6 +140,8 @@ body { font-family: var(--font-family); background: var(--bg-base); color: var(-
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   overflow: hidden;
   display: flex;
+  flex-direction: column;
+  min-width: 0;
   background-color: #0F131A;
   transition: left var(--transition);
   pointer-events: auto;
@@ -226,11 +228,14 @@ body { font-family: var(--font-family); background: var(--bg-base); color: var(-
   flex: 1; 
   padding: 24px; 
   overflow-y: auto; 
+  overflow-x: hidden; 
   z-index: 10; 
   display: flex; 
   flex-direction: column;
   position: relative; 
   width: 100%; 
+  max-width: 100%;
+  min-width: 0;
   height: 100%; 
   box-sizing: border-box; 
 }
@@ -238,7 +243,10 @@ body { font-family: var(--font-family); background: var(--bg-base); color: var(-
 .tab-content {
   flex: 1;
   width: 100%;
-  height: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 100%; 
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -247,12 +255,15 @@ body { font-family: var(--font-family); background: var(--bg-base); color: var(-
 .glass-panel {
   flex: 1;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   background: rgba(18, 24, 38, 0.95);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-lg);
   padding: 32px;
   overflow-y: auto;
+  overflow-x: hidden;
   box-shadow: 0 10px 30px rgba(0,0,0,0.5);
   animation: fadeIn 0.3s ease-out;
   box-sizing: border-box;
@@ -886,7 +897,11 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
   flex-direction: column;
   gap: 20px;
   height: 100%;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px 6px 24px 6px;
   box-sizing: border-box;
 }
@@ -928,14 +943,18 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
   line-height: 1.4;
 }
 
-/* Grid layout for cards */
+/* Grid layout for cards - Responsive & Fluid */
 .stream-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 18px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 880px) {
   .stream-grid {
     grid-template-columns: 1fr;
   }
@@ -953,6 +972,10 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   transition: border-color 0.2s ease;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .stream-card:hover {
@@ -965,12 +988,25 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
   justify-content: space-between;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   padding-bottom: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .card-title-group {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.card-title-group h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #F1F5F9;
+  min-width: 0;
+  word-break: break-word;
 }
 
 .card-icon-bubble {
@@ -1027,6 +1063,10 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
 }
 
 .stream-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
@@ -1051,10 +1091,19 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
 .input-with-action {
   display: flex;
   gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .input-with-action .stream-input {
   flex: 1;
+  min-width: 0;
+}
+
+.input-with-action .btn-paste-code {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .btn-paste-code {
@@ -1716,9 +1765,11 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
 /* Custom Audio Mode Selector (Discord & OBS Style) */
 .custom-audio-modes-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
   gap: 8px;
   margin-bottom: 10px;
+  width: 100%;
+  min-width: 0;
 }
 
 .process-audio-panel {
@@ -1835,6 +1886,19 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
   display: flex;
   gap: 8px;
   align-items: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.room-chooser-input-group .stream-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.room-chooser-input-group .btn-random-room {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .btn-random-room {
