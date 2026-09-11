@@ -71,6 +71,14 @@ const FPS_OPTIONS: FpsOption[] = [
   { fps: 0,  label: 'Nativo', desc: 'Taxa original fornecida pelo Windows' }
 ];
 
+// Helper to get PeerJS-safe room ID with XNX- prefix so short names never collide on global 0.peerjs.com
+export const toPeerRoomId = (roomId: string): string => {
+  const clean = (roomId || '').trim().toUpperCase();
+  if (!clean) return '';
+  if (clean.startsWith('XNX-')) return clean;
+  return `XNX-${clean}`;
+};
+
 const StreamTab: React.FC = () => {
   // Host state - Loaded from persistent localStorage
   const [selectedResolution, setSelectedResolution] = useState<string>(() => {
@@ -383,25 +391,31 @@ const StreamTab: React.FC = () => {
     setParticipantsList([...participantsRef.current]);
   };
 
+
+
   // Initialize or attach to a Persistent Room
   const initPersistentRoom = (targetRoom: string): Promise<Peer> => {
     return new Promise((resolve, reject) => {
-      if (peerRef.current && myRoomId === targetRoom && !peerRef.current.destroyed) {
+      const cleanTarget = targetRoom.trim().toUpperCase();
+      const peerIdToUse = toPeerRoomId(cleanTarget);
+
+      if (peerRef.current && peerRef.current.id === peerIdToUse && !peerRef.current.destroyed) {
+        setMyRoomId(cleanTarget);
         setIsRoomOpen(true);
         resolve(peerRef.current);
         return;
       }
 
-      setMyRoomId(targetRoom);
+      setMyRoomId(cleanTarget);
       setIsRoomOpen(true);
-      saveRecentRoom(targetRoom);
+      saveRecentRoom(cleanTarget);
 
       if (peerRef.current) {
         try { peerRef.current.destroy(); } catch {}
         peerRef.current = null;
       }
 
-      const peer = new Peer(targetRoom, {
+      const peer = new Peer(peerIdToUse, {
         config: {
           iceServers: ICE_SERVERS
         }
@@ -409,11 +423,11 @@ const StreamTab: React.FC = () => {
       peerRef.current = peer;
 
       peer.on('open', (id) => {
-        console.log('[Host Hub] Sala P2P registrada e pronta no servidor:', id);
-        setMyRoomId(id);
+        console.log('[Host Hub] Sala P2P registrada e pronta no servidor:', id, 'Nome da Sala:', cleanTarget);
+        setMyRoomId(cleanTarget);
         setIsRoomOpen(true);
-        saveRecentRoom(id);
-        localStorage.setItem('xennex_last_room', id);
+        saveRecentRoom(cleanTarget);
+        localStorage.setItem('xennex_last_room', cleanTarget);
 
         participantsRef.current = [{
           peerId: id,
@@ -564,9 +578,15 @@ const StreamTab: React.FC = () => {
       peer.on('error', (err: any) => {
         console.warn('[Host Hub] Peer error:', err);
         if (err.type === 'unavailable-id') {
-          const fallback = `${targetRoom}_${Math.floor(100 + Math.random() * 900)}`;
-          console.log(`[Host Hub] ID ${targetRoom} em uso, usando fallback ${fallback}`);
-          initPersistentRoom(fallback).then(resolve).catch(reject);
+          if (customRoomId && customRoomId.trim().toUpperCase() === cleanTarget) {
+            alert(`A sala "${cleanTarget}" ainda está ativa ou sendo liberada pelo servidor P2P. Aguarde alguns instantes e tente novamente.`);
+            setIsRoomOpen(false);
+            reject(err);
+          } else {
+            const fallback = generateRandomRoomId();
+            console.log(`[Host Hub] ID ${cleanTarget} em uso, usando fallback ${fallback}`);
+            initPersistentRoom(fallback).then(resolve).catch(reject);
+          }
         } else {
           reject(err);
         }
@@ -721,7 +741,7 @@ const StreamTab: React.FC = () => {
     localStreamRef.current = streamToSend;
 
     // Ensure room is active and open
-    const targetRoom = targetRoomOverride || myRoomId || customRoomId.trim().toUpperCase() || generateRandomRoomId();
+    const targetRoom = targetRoomOverride || (customRoomId && customRoomId.trim().toUpperCase()) || myRoomId || generateRandomRoomId();
     await initPersistentRoom(targetRoom);
 
     setIsStreaming(true);
@@ -1124,7 +1144,9 @@ const StreamTab: React.FC = () => {
   const handleConfirmPickerStream = () => {
     setIsDiscordPickerOpen(false);
     const lastRoom = localStorage.getItem('xennex_last_room') || '';
-    const roomToUse = myRoomId || customRoomId.trim().toUpperCase() || lastRoom || generateRandomRoomId();
+    const roomToUse = (customRoomId && customRoomId.trim()) 
+      ? customRoomId.trim().toUpperCase() 
+      : (myRoomId || lastRoom || generateRandomRoomId());
     startStream(roomToUse);
   };
 
@@ -1565,7 +1587,7 @@ const StreamTab: React.FC = () => {
                     </button>
                     <button 
                       className="btn-create-lobby" 
-                      onClick={() => initPersistentRoom(customRoomId.trim().toUpperCase() || generateRandomRoomId())}
+                      onClick={() => initPersistentRoom((customRoomId && customRoomId.trim().toUpperCase()) || generateRandomRoomId())}
                       title="Abre a sala no servidor para os amigos já entrarem no lobby"
                     >
                       <Radio size={16} /> Abrir Sala sem Vídeo (Lobby)

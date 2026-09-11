@@ -1766,6 +1766,13 @@
       return new MediaStream(tracks);
     }
 
+    function toPeerRoomId(roomId) {
+      if (!roomId) return '';
+      const clean = String(roomId).trim().toUpperCase();
+      if (clean.startsWith('XNX-')) return clean;
+      return 'XNX-' + clean;
+    }
+
     function startWatch() {
       const room = roomInput.value.trim().toUpperCase();
       if (!room) return;
@@ -1805,7 +1812,8 @@
         applyTheme();
 
         // Data Connection for real-time presence, lobby, and co-streamers
-        const dataConn = viewerPeer.connect(room);
+        const peerTarget = toPeerRoomId(room);
+        const dataConn = viewerPeer.connect(peerTarget);
         currentDataConn = dataConn;
 
         const displayNameEl = document.getElementById('displayNameInput');
@@ -1897,9 +1905,10 @@
       if (knownStreams[currentRoom] || pendingCalls[currentRoom]) return;
       pendingCalls[currentRoom] = true;
 
-      console.log('[Viewer Web] Solicitando transmissão do Host:', currentRoom);
+      const peerTarget = toPeerRoomId(currentRoom);
+      console.log('[Viewer Web] Solicitando transmissão do Host:', peerTarget, 'Sala:', currentRoom);
       const dummy = createDummyStream();
-      const call = viewerPeer.call(currentRoom, dummy);
+      const call = viewerPeer.call(peerTarget, dummy);
       currentCall = call;
 
       const onStream = (remoteStream) => {

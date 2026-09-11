@@ -8,6 +8,13 @@ import {
 } from 'lucide-react';
 import type { DataConnection } from 'peerjs';
 
+export const toPeerRoomId = (roomId: string): string => {
+  const clean = (roomId || '').trim().toUpperCase();
+  if (!clean) return '';
+  if (clean.startsWith('XNX-')) return clean;
+  return `XNX-${clean}`;
+};
+
 export const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
@@ -561,6 +568,8 @@ const StreamViewer: React.FC = () => {
       return;
     }
 
+    const peerTarget = toPeerRoomId(roomId);
+
     setIsConnecting(true);
     setErrorMessage(null);
 
@@ -588,7 +597,7 @@ const StreamViewer: React.FC = () => {
         
         // Initiate call with dummy stream containing tracks for valid WebRTC SDP m-lines
         const dummyStream = createDummyStream();
-        const call = peer.call(roomId, dummyStream);
+        const call = peer.call(peerTarget, dummyStream);
         callRef.current = call;
 
         // Listen for standard PeerJS stream event
@@ -608,7 +617,7 @@ const StreamViewer: React.FC = () => {
         }
 
         // Conectar ao DataChannel do Host da sala para presença em tempo real
-        const dataConn = peer.connect(roomId);
+        const dataConn = peer.connect(peerTarget);
         dataConnRef.current = dataConn;
 
         const sendJoinNotification = () => {
@@ -645,7 +654,7 @@ const StreamViewer: React.FC = () => {
             console.log('[Viewer] Host iniciou transmissão de vídeo na sala!');
             setIsHostInLobby(false);
             const dummy = createDummyStream();
-            const newCall = peer.call(roomId, dummy);
+            const newCall = peer.call(peerTarget, dummy);
             callRef.current = newCall;
             newCall.on('stream', (s) => handleIncomingStream(s, roomId, data.streamTitle));
           } else if (data.type === 'host-video-stopped') {
