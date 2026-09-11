@@ -40,7 +40,7 @@ namespace Xennex.Services
                 if (!File.Exists(jsonPath))
                 {
                     var defaultSkin = new SkinConfig();
-                    string json = JsonSerializer.Serialize(defaultSkin, new JsonSerializerOptions { WriteIndented = true });
+                    string json = JsonSerializer.Serialize(defaultSkin, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                     File.WriteAllText(jsonPath, json);
                 }
             }
@@ -90,7 +90,7 @@ namespace Xennex.Services
             }
 
             var fallback = new SkinConfig { Name = skinName };
-            return JsonSerializer.Serialize(fallback, new JsonSerializerOptions { WriteIndented = true });
+            return JsonSerializer.Serialize(fallback, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
         }
 
         public bool SaveSkinConfig(string skinName, string json)

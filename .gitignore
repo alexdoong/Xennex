@@ -66,6 +66,7 @@ nunit-*.xml
 *.log
 *.tmp
 publish_temp/
+publish_temp_package/
 runtimes/
 Backup/
 *src_backup*/
@@ -79,3 +80,23 @@ wwwroot/*
 !wwwroot/skins/
 wwwroot/skins/*
 !wwwroot/skins/default/
+# Pasta temporaria usada pelo empacotamento
+publish_temp_package/
+
+# Arquivos locais do Visual Studio
+.vs/
+*.user
+*.suo
+
+# Variacoes de arquivos de ambiente
+.env.*
+!.env.example
+
+# Arquivos de certificado que podem conter chaves privadas
+*.pfx
+*.p12
+
+# Ambiente e cache Python
+.venv/
+__pycache__/
+*.py[cod]

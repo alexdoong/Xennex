@@ -1,3 +1,4 @@
+using System.Reflection;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -13,7 +14,7 @@ namespace Xennex.Services
     {
         public bool Success { get; set; }
         public bool HasUpdate { get; set; }
-        public string CurrentVersion { get; set; } = "v0.2.2";
+        public string CurrentVersion { get; set; } = UpdateService.CurrentVersion;
         public string LatestVersion { get; set; } = "";
         public string ReleaseTitle { get; set; } = "";
         public string ReleaseNotes { get; set; } = "";
@@ -25,7 +26,30 @@ namespace Xennex.Services
 
     public class UpdateService
     {
-        public const string CurrentVersion = "v0.2.2";
+        public static string CurrentVersion
+        {
+            get
+            {
+                try
+                {
+                    var asm = Assembly.GetExecutingAssembly();
+                    var infoVer = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+                    if (!string.IsNullOrWhiteSpace(infoVer))
+                    {
+                        int plusIdx = infoVer.IndexOf('+');
+                        string ver = plusIdx >= 0 ? infoVer.Substring(0, plusIdx) : infoVer;
+                        return ver.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? ver : "v" + ver;
+                    }
+                    var v = asm.GetName().Version;
+                    if (v != null)
+                    {
+                        return $"v{v.Major}.{v.Minor}.{v.Build}";
+                    }
+                }
+                catch { }
+                return "v0.2.2";
+            }
+        }
         private const string RepoOwner = "alexdoong";
         private const string RepoName = "Xennex";
         private readonly HttpClient _httpClient;
@@ -204,7 +228,18 @@ if ($UpdateFile.EndsWith('.zip', [System.StringComparison]::OrdinalIgnoreCase)) 
                 }
             } elseif ($_.PSIsContainer -and $_.Name -eq 'wwwroot') {
                 New-Item -ItemType Directory -Path $dest -Force | Out-Null
-                Copy-Item -Recurse -Path (Join-Path $_.FullName '*') -Destination $dest -Force
+                Get-ChildItem -Path $_.FullName | ForEach-Object {
+                    $subDest = Join-Path $dest $_.Name
+                    if ($_.PSIsContainer -and $_.Name -eq 'skins') {
+                        New-Item -ItemType Directory -Path $subDest -Force | Out-Null
+                        Get-ChildItem -Path $_.FullName | ForEach-Object {
+                            # Atualiza a skin default sem tocar em skins customizadas adicionadas pelo usuario
+                            Copy-Item -Recurse -Path $_.FullName -Destination $subDest -Force
+                        }
+                    } else {
+                        Copy-Item -Recurse -Path $_.FullName -Destination $dest -Force
+                    }
+                }
             } else {
                 Copy-Item -Recurse -Path $_.FullName -Destination $dest -Force
             }

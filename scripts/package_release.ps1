@@ -162,23 +162,31 @@ if (Test-Path $scriptsDir) {
     Write-Host " -> Scripts copiados." -ForegroundColor Green
 }
 
-# Criar pasta Data de distribuicao sem caminhos locais do dev
+# Criar pasta Data de distribuicao com whitelist estrita (zero vazamento de dados locais/pessoais)
 $stagingData = Join-Path $stagingDir "Data"
 New-Item -ItemType Directory -Path $stagingData -Force | Out-Null
 
+# 1. Config.txt padrao limpo
 $cleanConfig = @"
 REAL.exe
 CloseToTray=false,AutoStart=false,SidebarMonitor=0,HideSidebarPullTab=false,SidebarPosition=Right,HandMotionCameraIndex=0,WindowLeft=375,WindowTop=197,AutoHideSidebar=false,AutoHideTitlebar=false
 "@
 Set-Content -Path (Join-Path $stagingData "config.txt") -Value $cleanConfig -Encoding UTF8
 
+# 2. Whitelist estrita de arquivos publicos permitidos em Data/
+# Bloqueio absoluto de dados de usuario (ex: wuwa_build.txt, logs *.txt/*.log, configs locais)
+$allowedDataFiles = @("gestures.json", "swipe_config.json", "team_config.txt")
 $dataSrc = Join-Path $rootDir "Data"
 if (Test-Path $dataSrc) {
-    Get-ChildItem -Path $dataSrc | Where-Object { $_.Name -notlike "*.log" -and $_.Name -ne "config.txt" } | ForEach-Object {
-        Copy-Item $_.FullName (Join-Path $stagingData $_.Name) -Force
+    foreach ($fileName in $allowedDataFiles) {
+        $sourceFile = Join-Path $dataSrc $fileName
+        if (Test-Path $sourceFile) {
+            Copy-Item $sourceFile (Join-Path $stagingData $fileName) -Force
+            Write-Host "    + Incluido template publico em Data: $fileName" -ForegroundColor Gray
+        }
     }
 }
-Write-Host " -> Dados limpos de configuracao montados." -ForegroundColor Green
+Write-Host " -> Dados limpos de configuracao montados (whitelist estrita aplicada)." -ForegroundColor Green
 
 # 5. Assinatura Authenticode Oficial (alexdoong)
 Write-Host "`n[5/6] Aplicando assinatura digital Authenticode oficial (alexdoong)..." -ForegroundColor Yellow
