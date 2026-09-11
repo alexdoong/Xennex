@@ -671,6 +671,30 @@
       justify-content: space-between;
       z-index: 10;
       pointer-events: none;
+      transition: opacity 0.35s ease, transform 0.35s ease, visibility 0.35s ease;
+    }
+    .stream-card.is-idle .stream-card-header {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transform: translateY(-8px);
+    }
+    .stream-card.is-idle .stream-card-vol-control {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transform: translateY(8px);
+    }
+    .stream-card.is-idle,
+    .stream-card.is-idle .stream-card-video-wrap {
+      cursor: none;
+    }
+    #viewer-cinema-container.is-idle #hud-viewer,
+    #viewer-cinema-container.is-idle #viewer-controls {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transform: translateY(8px);
+    }
+    #viewer-cinema-container.is-idle {
+      cursor: none;
     }
     .stream-card-user {
       display: inline-flex;
@@ -710,11 +734,8 @@
       align-items: center;
       gap: 6px;
       pointer-events: auto;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
-    .stream-card:hover .stream-card-actions {
       opacity: 1;
+      transition: opacity 0.3s ease;
     }
     .stream-card-btn {
       background: rgba(11, 15, 25, 0.85);
@@ -778,6 +799,9 @@
       pointer-events: auto;
     }
     .stream-card:hover .stream-card-vol-control {
+      opacity: 1;
+    }
+    .stream-card:not(.is-idle) .stream-card-vol-control {
       opacity: 1;
     }
     .stream-card-vol-control input[type="range"] {
@@ -1544,17 +1568,37 @@
         if (currentTheme === 'cinema') {
           hubContainer.style.display = 'none';
           cinemaContainer.style.display = 'flex';
-          if (activeStream && videoCinema.srcObject !== activeStream) {
-            videoCinema.srcObject = activeStream;
+          // Mute all card videos in grid to prevent double audio
+          Object.keys(knownStreams).forEach(sId => {
+            const v = document.getElementById('stream-video-' + sId);
+            if (v) v.muted = true;
+          });
+          if (activeStream && videoCinema) {
+            if (videoCinema.srcObject !== activeStream) {
+              videoCinema.srcObject = activeStream;
+            }
+            videoCinema.muted = false;
             videoCinema.play().catch(() => {});
           }
         } else {
           cinemaContainer.style.display = 'none';
           hubContainer.style.display = 'flex';
-          if (activeStream && videoHub.srcObject !== activeStream) {
-            videoHub.srcObject = activeStream;
-            videoHub.play().catch(() => {});
+          // CRITICAL: videoCinema MUST be muted & paused in Hub mode to prevent duplicate audio!
+          if (videoCinema) {
+            videoCinema.muted = true;
+            videoCinema.pause();
+            videoCinema.srcObject = null;
           }
+          // Unmute card videos according to their settings
+          Object.keys(knownStreams).forEach(sId => {
+            const s = knownStreams[sId];
+            const v = document.getElementById('stream-video-' + sId);
+            if (v && s && !s.isSelf) {
+              v.muted = !!s.muted;
+              v.volume = Math.min(1, s.volume ?? 1);
+              v.play().catch(() => {});
+            }
+          });
         }
       }
     }
@@ -2206,6 +2250,25 @@
           grid.appendChild(card);
         }
 
+        // Attach idle mouse tracking to hide overlays when mouse is still
+        if (!card.dataset.idleBound) {
+          card.dataset.idleBound = 'true';
+          const resetCardIdle = () => {
+            card.classList.remove('is-idle');
+            if (cardIdleTimers[sId]) clearTimeout(cardIdleTimers[sId]);
+            cardIdleTimers[sId] = setTimeout(() => {
+              card.classList.add('is-idle');
+            }, 2500);
+          };
+          card.addEventListener('mousemove', resetCardIdle);
+          card.addEventListener('mouseenter', resetCardIdle);
+          card.addEventListener('mouseleave', () => {
+            if (cardIdleTimers[sId]) clearTimeout(cardIdleTimers[sId]);
+            card.classList.add('is-idle');
+          });
+          resetCardIdle();
+        }
+
         // Spotlight state
         const isSpotlight = (spotlightStreamId === sId);
         card.classList.toggle('is-spotlight', isSpotlight);
@@ -2222,7 +2285,7 @@
           if (videoEl.srcObject !== info.stream) {
             videoEl.srcObject = info.stream;
           }
-          if (info.isSelf) {
+          if (info.isSelf || currentTheme === 'cinema') {
             videoEl.muted = true;
           } else {
             videoEl.muted = !!info.muted;
@@ -2306,10 +2369,33 @@
     }
 
     let boostNodes = {}; // { [streamId]: { ctx, src, gain } }
+    let cardIdleTimers = {};
+    let cinemaIdleTimer = null;
+
+    const cinemaContainerEl = document.getElementById('viewer-cinema-container');
+    if (cinemaContainerEl) {
+      const resetCinemaIdle = () => {
+        cinemaContainerEl.classList.remove('is-idle');
+        if (cinemaIdleTimer) clearTimeout(cinemaIdleTimer);
+        cinemaIdleTimer = setTimeout(() => {
+          cinemaContainerEl.classList.add('is-idle');
+        }, 2500);
+      };
+      cinemaContainerEl.addEventListener('mousemove', resetCinemaIdle);
+      cinemaContainerEl.addEventListener('mouseenter', resetCinemaIdle);
+      cinemaContainerEl.addEventListener('mouseleave', () => {
+        if (cinemaIdleTimer) clearTimeout(cinemaIdleTimer);
+        cinemaContainerEl.classList.add('is-idle');
+      });
+    }
 
     function setupIndividualAudioBoost(streamId, vol) {
       const s = knownStreams[streamId];
       if (!s || !s.stream || s.stream.getAudioTracks().length === 0) return;
+      if (vol <= 1.0) {
+        removeIndividualAudioBoost(streamId);
+        return;
+      }
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       try {
@@ -2323,7 +2409,7 @@
         }
         const node = boostNodes[streamId];
         if (node.ctx.state === 'suspended') node.ctx.resume().catch(() => {});
-        node.gain.gain.value = vol > 1.0 ? (vol - 1.0) : 0;
+        node.gain.gain.value = (vol - 1.0);
       } catch (e) {
         console.warn('Audio boost error:', e);
       }
@@ -2772,9 +2858,22 @@
           if (btn) btn.innerText = '🔊';
         }
       });
-      if (videoCinema && activeStream) {
-        videoCinema.muted = false;
-        videoCinema.play().catch(() => {});
+      if (currentTheme === 'cinema') {
+        if (videoCinema && activeStream) {
+          videoCinema.muted = false;
+          videoCinema.play().catch(() => {});
+        }
+        Object.keys(knownStreams).forEach(sId => {
+          const v = document.getElementById('stream-video-' + sId);
+          if (v) v.muted = true;
+        });
+      } else {
+        // Hub mode: ensure videoCinema is muted so audio never plays twice
+        if (videoCinema) {
+          videoCinema.muted = true;
+          videoCinema.pause();
+          videoCinema.srcObject = null;
+        }
       }
       unmuteOverlay.style.display = 'none';
       updateMuteButtons(false);
