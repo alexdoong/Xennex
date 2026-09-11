@@ -39,6 +39,14 @@ namespace Xennex.UI
 
         public const int WM_NCLBUTTONDOWN = 0xA1;
         public const int HT_CAPTION = 0x2;
+        public const int HTLEFT = 10;
+        public const int HTRIGHT = 11;
+        public const int HTTOP = 12;
+        public const int HTTOPLEFT = 13;
+        public const int HTTOPRIGHT = 14;
+        public const int HTBOTTOM = 15;
+        public const int HTBOTTOMLEFT = 16;
+        public const int HTBOTTOMRIGHT = 17;
 
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern int RegisterWindowMessage(string lpString);
@@ -171,6 +179,29 @@ namespace Xennex.UI
         private void CoreWebView2_WebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             string msg = e.TryGetWebMessageAsString();
+            if (msg != null && msg.StartsWith("resizeWindow:") && !sidebarService.IsSidebarMode)
+            {
+                string dir = msg.Substring("resizeWindow:".Length).ToLowerInvariant();
+                int ht = dir switch
+                {
+                    "left" => HTLEFT,
+                    "right" => HTRIGHT,
+                    "top" => HTTOP,
+                    "topleft" => HTTOPLEFT,
+                    "topright" => HTTOPRIGHT,
+                    "bottom" => HTBOTTOM,
+                    "bottomleft" => HTBOTTOMLEFT,
+                    "bottomright" => HTBOTTOMRIGHT,
+                    _ => 0
+                };
+                if (ht > 0)
+                {
+                    ReleaseCapture();
+                    SendMessage(new WindowInteropHelper(this).Handle, WM_NCLBUTTONDOWN, ht, 0);
+                    return;
+                }
+            }
+
             if (msg == "dragWindow" && !sidebarService.IsSidebarMode)
             {
                 ReleaseCapture();
@@ -210,6 +241,15 @@ namespace Xennex.UI
         }
         private void RestoreWindowPosition()
         {
+            if (configService.Config.WindowWidth >= 400)
+            {
+                this.Width = configService.Config.WindowWidth;
+            }
+            if (configService.Config.WindowHeight >= 300)
+            {
+                this.Height = configService.Config.WindowHeight;
+            }
+
             if (configService.Config.WindowLeft >= 0 && configService.Config.WindowLeft < SystemParameters.VirtualScreenWidth - 200 &&
                 configService.Config.WindowTop >= 0 && configService.Config.WindowTop < SystemParameters.VirtualScreenHeight - 200)
             {
@@ -285,10 +325,12 @@ namespace Xennex.UI
         {
             isForceExiting = true;
 
-            if (!sidebarService.IsSidebarMode)
+            if (!sidebarService.IsSidebarMode && this.WindowState == WindowState.Normal)
             {
                 configService.Config.WindowLeft = this.Left;
                 configService.Config.WindowTop = this.Top;
+                configService.Config.WindowWidth = this.ActualWidth > 0 ? this.ActualWidth : this.Width;
+                configService.Config.WindowHeight = this.ActualHeight > 0 ? this.ActualHeight : this.Height;
                 configService.SaveConfig();
             }
 

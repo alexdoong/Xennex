@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using Xennex.Models;
@@ -134,6 +134,16 @@ namespace Xennex.Services
                 Config.ActiveSkin = item.Substring("ActiveSkin=".Length).Trim();
                 return;
             }
+            if (item.StartsWith("WindowWidth=", StringComparison.OrdinalIgnoreCase) && double.TryParse(item.Substring("WindowWidth=".Length).Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double ww))
+            {
+                Config.WindowWidth = ww;
+                return;
+            }
+            if (item.StartsWith("WindowHeight=", StringComparison.OrdinalIgnoreCase) && double.TryParse(item.Substring("WindowHeight=".Length).Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double wh))
+            {
+                Config.WindowHeight = wh;
+                return;
+            }
         }
 
         public void SaveConfig()
@@ -141,7 +151,7 @@ namespace Xennex.Services
             try
             {
                 string line2 = string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                    "CloseToTray={0},AutoStart={1},SidebarMonitor={2},HideSidebarPullTab={3},SidebarPosition={4},HandMotionCameraIndex={5},WindowLeft={6},WindowTop={7},AutoHideSidebar={8},AutoHideTitlebar={9}",
+                    "CloseToTray={0},AutoStart={1},SidebarMonitor={2},HideSidebarPullTab={3},SidebarPosition={4},HandMotionCameraIndex={5},WindowLeft={6},WindowTop={7},AutoHideSidebar={8},AutoHideTitlebar={9},ActiveSkin={10},WindowWidth={11},WindowHeight={12}",
                     Config.CloseToTray ? "true" : "false",
                     Config.AutoStart ? "true" : "false",
                     Config.SidebarMonitorIndex,
@@ -151,7 +161,10 @@ namespace Xennex.Services
                     Config.WindowLeft,
                     Config.WindowTop,
                     Config.AutoHideSidebar ? "true" : "false",
-                    Config.AutoHideTitlebar ? "true" : "false");
+                    Config.AutoHideTitlebar ? "true" : "false",
+                    Config.ActiveSkin,
+                    Config.WindowWidth,
+                    Config.WindowHeight);
 
                 File.WriteAllLines(configPath, new[] { Config.RealExePath, line2 });
                 OnConfigChanged?.Invoke();

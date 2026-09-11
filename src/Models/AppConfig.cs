@@ -21,9 +21,11 @@ namespace Xennex
         public bool AutoHideSidebar { get; set; } = true;
         public bool AutoHideTitlebar { get; set; } = true;
 
-        // Window Position
+        // Window Position & Size
         public double WindowLeft { get; set; } = -1;
         public double WindowTop { get; set; } = -1;
+        public double WindowWidth { get; set; } = 800;
+        public double WindowHeight { get; set; } = 600;
     }
 }
 

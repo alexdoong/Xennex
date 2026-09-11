@@ -35,6 +35,9 @@ namespace Xennex.Services
             _configService = configService;
             _onSidebarModeChanged = onSidebarModeChanged;
 
+            if (_configService.Config.WindowWidth >= 400) _normalWidth = _configService.Config.WindowWidth;
+            if (_configService.Config.WindowHeight >= 300) _normalHeight = _configService.Config.WindowHeight;
+
             _slideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
             _slideTimer.Tick += SlideTimer_Tick;
             _slideTimer.Start();
@@ -64,6 +67,8 @@ namespace Xennex.Services
         {
             _configService.Config.WindowLeft = _window.Left;
             _configService.Config.WindowTop = _window.Top;
+            _configService.Config.WindowWidth = _window.Width;
+            _configService.Config.WindowHeight = _window.Height;
             _configService.SaveConfig();
 
             _normalLeft = _window.Left;

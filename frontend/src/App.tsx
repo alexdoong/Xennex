@@ -41,6 +41,12 @@ const App: React.FC = () => {
   const titlebarLeaveTimerRef = useRef<number | null>(null);
   const api = window.chrome?.webview?.hostObjects?.api;
 
+  const handleResize = (dir: string) => {
+    if (window.chrome?.webview) {
+      window.chrome.webview.postMessage(`resizeWindow:${dir}`);
+    }
+  };
+
   const applySkin = useCallback((cfg: SkinConfig) => {
     if (!cfg) return;
     const root = document.documentElement;
@@ -151,6 +157,18 @@ const App: React.FC = () => {
       className={`app-container ${sidebarMode ? 'sidebar-mode' : ''} pos-${sidebarPosition.toLowerCase()}`} 
       id="app-container"
     >
+      {!sidebarMode && (
+        <>
+          <div className="window-resize-edge edge-top" onMouseDown={() => handleResize('top')} />
+          <div className="window-resize-edge edge-bottom" onMouseDown={() => handleResize('bottom')} />
+          <div className="window-resize-edge edge-left" onMouseDown={() => handleResize('left')} />
+          <div className="window-resize-edge edge-right" onMouseDown={() => handleResize('right')} />
+          <div className="window-resize-corner corner-topleft" onMouseDown={() => handleResize('topleft')} />
+          <div className="window-resize-corner corner-topright" onMouseDown={() => handleResize('topright')} />
+          <div className="window-resize-corner corner-bottomleft" onMouseDown={() => handleResize('bottomleft')} />
+          <div className="window-resize-corner corner-bottomright" onMouseDown={() => handleResize('bottomright')} />
+        </>
+      )}
       <div className="app-frame" id="app-frame">
         {/* Trigger Zone for Auto-Hide Sidebar */}
         {autoHideSidebar && !showSidebar && (
@@ -302,6 +320,22 @@ const App: React.FC = () => {
               />
             )}
           </div>
+
+          {/* Window Resize Grip */}
+          {!sidebarMode && (
+            <div 
+              className="window-resize-grip"
+              title="Redimensionar janela"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                handleResize('bottomright');
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 3L3 10M10 7L7 10M10 10.5H10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </div>
+          )}
         </div>
 
         {/* Modal de Confirmação ao Fechar */}

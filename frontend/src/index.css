@@ -3048,3 +3048,102 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
     font-size: 0.72rem !important;
   }
 }
+
+
+/* ==========================================================================
+   Window Resize Handles & Grip (Zen Browser / Fluid Window Control)
+   ========================================================================== */
+.window-resize-edge {
+  position: absolute;
+  z-index: 999;
+  background: transparent;
+  pointer-events: auto;
+}
+.window-resize-edge.edge-top {
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 8px;
+  cursor: ns-resize;
+}
+.window-resize-edge.edge-bottom {
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  height: 8px;
+  cursor: ns-resize;
+}
+.window-resize-edge.edge-left {
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 8px;
+  cursor: ew-resize;
+}
+.window-resize-edge.edge-right {
+  right: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.window-resize-corner {
+  position: absolute;
+  z-index: 1000;
+  background: transparent;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+}
+.window-resize-corner.corner-topleft {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+.window-resize-corner.corner-topright {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+.window-resize-corner.corner-bottomleft {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+.window-resize-corner.corner-bottomright {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}
+
+.window-resize-grip {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: nwse-resize;
+  z-index: 120;
+  color: rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+  user-select: none;
+}
+.window-resize-grip:hover {
+  color: var(--primary, #a855f7);
+  background-color: rgba(255, 255, 255, 0.08);
+  transform: scale(1.1);
+}
+.window-resize-grip:active {
+  transform: scale(0.95);
+}
+
+.app-container.sidebar-mode .window-resize-edge,
+.app-container.sidebar-mode .window-resize-corner,
+.app-container.sidebar-mode .window-resize-grip {
+  display: none !important;
+}
