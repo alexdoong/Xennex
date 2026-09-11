@@ -28,6 +28,7 @@ declare global {
           api: {
             EnableWacom(): Promise<void>;
             DisableWacom(): Promise<void>;
+            IsWacomActive(): Promise<boolean>;
             StartReal(): Promise<void>;
             StopReal(): Promise<void>;
             StartHandMotion(): Promise<void>;

@@ -1,3 +1,4 @@
+import { useToast } from './components/ToastContainer';
 ﻿import React, { useState, useEffect, useRef } from 'react';
 import { Peer, type MediaConnection } from 'peerjs';
 import { 
@@ -80,6 +81,7 @@ export const toPeerRoomId = (roomId: string): string => {
 };
 
 const StreamTab: React.FC = () => {
+  const { showToast } = useToast();
   // Host state - Loaded from persistent localStorage
   const [selectedResolution, setSelectedResolution] = useState<string>(() => {
     return localStorage.getItem('xennex_stream_resolution') || '1080p';
@@ -860,7 +862,7 @@ const StreamTab: React.FC = () => {
 
       const mediaDevices = navigator.mediaDevices || (navigator as any).webkitMediaDevices;
       if (!mediaDevices || !mediaDevices.getDisplayMedia) {
-        alert('Seu navegador ou ambiente WebView não suporta compartilhamento de tela.');
+        showToast('Seu navegador ou ambiente WebView não suporta compartilhamento de tela.', 'error');
         return;
       }
 
@@ -1100,6 +1102,7 @@ const StreamTab: React.FC = () => {
     if (!myRoomId) return;
     navigator.clipboard.writeText(myRoomId);
     setCopiedCode(true);
+    showToast(`Código da sala copiado: ${myRoomId}`, 'success');
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
@@ -1110,6 +1113,7 @@ const StreamTab: React.FC = () => {
     const fullUrl = `${baseUrl.replace(/\/+$/, '')}${baseUrl.includes('?') ? '&' : '?'}room=${myRoomId}`;
     navigator.clipboard.writeText(fullUrl);
     setCopiedWebLink(true);
+    showToast('🔗 Link da transmissão copiado para a área de transferência!', 'success');
     setTimeout(() => setCopiedWebLink(false), 2000);
   };
 
@@ -1153,7 +1157,7 @@ const StreamTab: React.FC = () => {
   const handleOpenViewer = async (targetRoom?: string, title?: string) => {
     const rId = targetRoom || joinRoomId.trim().toUpperCase();
     if (!rId) {
-      alert('Por favor, digite o código da sala.');
+      showToast('Por favor, digite o código da sala.', 'warning');
       return;
     }
 

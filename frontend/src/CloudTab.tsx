@@ -1,6 +1,8 @@
+import { useToast } from './components/ToastContainer';
 import React, { useState, useEffect } from 'react';
 
 const CloudTab: React.FC = () => {
+  const { showToast } = useToast();
   const [projectId, setProjectId] = useState('');
   const [apiKey, setApiKey] = useState('');
 
@@ -20,7 +22,7 @@ const CloudTab: React.FC = () => {
     if (api) {
       api.SetCloudProjectId(projectId);
       api.SetCloudApiKey(apiKey);
-      alert("Cloud Config Saved!");
+      showToast("Conexão Cloud salva com sucesso!", "success");
     }
   };
 

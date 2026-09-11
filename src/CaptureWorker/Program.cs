@@ -99,7 +99,7 @@ namespace Xennex.CaptureWorker
 
         private class ClientSession
         {
-            public WebSocket Socket;
+            public WebSocket? Socket;
             public int IsSending;
         }
 
@@ -161,7 +161,7 @@ namespace Xennex.CaptureWorker
             // Start Parent Watchdog Thread
             if (_parentPid > 0)
             {
-                Task.Run(async () =>
+                _ = Task.Run(async () =>
                 {
                     while (_isRunning)
                     {
@@ -224,7 +224,7 @@ namespace Xennex.CaptureWorker
             var interop = (IGraphicsCaptureItemInterop)Marshal.GetObjectForIUnknown(factoryPtr);
 
             // 3. Create GraphicsCaptureItem for Target Window (or Monitor fallback)
-            GraphicsCaptureItem item = null;
+            GraphicsCaptureItem? item = null;
             Guid itemGuid = new Guid("79C3F95B-31F7-4EC2-A464-632EF5D30760");
 
             if (_targetHwnd != 0 && IsWindow((IntPtr)_targetHwnd))
@@ -284,6 +284,11 @@ namespace Xennex.CaptureWorker
             try { session.IsCursorCaptureEnabled = true; } catch { }
 
             var encoder = GetEncoder(ImageFormat.Jpeg);
+            if (encoder == null)
+            {
+                Log("FALHA: Encoder JPEG nao encontrado.");
+                return;
+            }
             var encParams = new EncoderParameters(1);
             encParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)_quality);
 
@@ -327,7 +332,7 @@ namespace Xennex.CaptureWorker
                             int height = item.Size.Height;
                             int pitch = (int)mapped.RowPitch;
 
-                            byte[] jpegBytes = null;
+                            byte[]? jpegBytes = null;
 
                             using (var bmp = new Bitmap(width, height, pitch, PixelFormat.Format32bppArgb, mapped.pData))
                             {
@@ -415,7 +420,8 @@ namespace Xennex.CaptureWorker
             foreach (var kvp in _clients)
             {
                 var client = kvp.Value;
-                if (client.Socket.State == WebSocketState.Open)
+                var socket = client.Socket;
+                if (socket != null && socket.State == WebSocketState.Open)
                 {
                     if (Interlocked.CompareExchange(ref client.IsSending, 1, 0) == 0)
                     {
@@ -423,9 +429,9 @@ namespace Xennex.CaptureWorker
                         {
                             try
                             {
-                                if (client.Socket.State == WebSocketState.Open)
+                                if (socket.State == WebSocketState.Open)
                                 {
-                                    await client.Socket.SendAsync(buffer, WebSocketMessageType.Binary, true, CancellationToken.None);
+                                    await socket.SendAsync(buffer, WebSocketMessageType.Binary, true, CancellationToken.None);
                                 }
                             }
                             catch (Exception ex)
@@ -493,7 +499,7 @@ namespace Xennex.CaptureWorker
             }
         }
 
-        private static ImageCodecInfo GetEncoder(ImageFormat format)
+        private static ImageCodecInfo? GetEncoder(ImageFormat format)
         {
             var codecs = ImageCodecInfo.GetImageEncoders();
             foreach (var codec in codecs)

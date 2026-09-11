@@ -18,7 +18,7 @@ const App: React.FC = () => {
     return <StreamViewer />;
   }
 
-  const [activeTab, setActiveTab] = useState<'osu' | 'wuwa-db' | 'cloud' | 'settings' | 'hand-motion' | 'stream'>('osu');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'wuwa-db' | 'cloud' | 'settings' | 'hand-motion' | 'stream'>('dashboard');
   const [realStatus, setRealStatus] = useState(false);
   const [handMotionStatus, setHandMotionStatus] = useState(false);
   const [sidebarMode, setSidebarMode] = useState(false);
@@ -198,8 +198,8 @@ const App: React.FC = () => {
 
           <div className="tabs">
             <button
-              className={`tab-btn ${activeTab === 'osu' ? 'active' : ''}`}
-              onClick={() => setActiveTab('osu')}
+              className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+              onClick={() => setActiveTab('dashboard')}
               title="Dashboard"
             >
               <LayoutDashboard size={24} />
@@ -298,7 +298,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="content-wrapper" id="content">
-            {activeTab === 'osu' && <DashboardTab realStatus={realStatus} />}
+            {(activeTab === 'dashboard' || (activeTab as string) === 'osu') && <DashboardTab realStatus={realStatus} />}
             {activeTab === 'wuwa-db' && <WuWaTab />}
             {activeTab === 'cloud' && <CloudTab />}
             {activeTab === 'hand-motion' && <HandMotionTab handMotionStatus={handMotionStatus} />}

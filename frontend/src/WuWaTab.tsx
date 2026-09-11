@@ -1,8 +1,10 @@
+import { useToast } from './components/ToastContainer';
 import React from 'react';
 
 const WuWaTab: React.FC = () => {
+  const { showToast } = useToast();
   const handleScrape = () => {
-    alert("Wuthering Waves build scraper will be implemented soon!");
+    showToast("Sincronização de builds do Wuthering Waves em desenvolvimento.", "info");
   };
 
   return (

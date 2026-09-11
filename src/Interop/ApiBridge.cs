@@ -37,6 +37,7 @@ namespace Xennex.Interop
         // Wacom
         public void EnableWacom() => _wacomService.EnableDrivers();
         public void DisableWacom() => _wacomService.DisableDrivers();
+        public bool IsWacomActive() => _wacomService.QueryWacomActive();
 
         // Real Engine
         public void StartReal() => _realEngineService.Start(_configService.Config.RealExePath);
