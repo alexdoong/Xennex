@@ -568,11 +568,235 @@
       background: #05070B;
     }
 
-    #videoHub {
+    /* Dynamic Multi-Stream Grid (Discord / Google Meet Style) */
+    .multi-stream-grid {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+      box-sizing: border-box;
+      overflow: hidden;
+      align-content: center;
+      justify-content: center;
+      background: #05070B;
+    }
+
+    .multi-stream-grid.grid-count-1 {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr;
+      padding: 6px;
+    }
+
+    .multi-stream-grid.grid-count-2 {
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: 1fr;
+    }
+    @media (max-width: 768px) {
+      .multi-stream-grid.grid-count-2 {
+        grid-template-columns: 1fr;
+        grid-template-rows: repeat(2, 1fr);
+      }
+    }
+
+    .multi-stream-grid.grid-count-3,
+    .multi-stream-grid.grid-count-4 {
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+    }
+
+    .multi-stream-grid.grid-count-many {
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-auto-rows: minmax(200px, 1fr);
+      overflow-y: auto;
+    }
+
+    /* Spotlight / Focus Layout */
+    .multi-stream-grid.grid-spotlight {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 10px;
+      overflow: hidden;
+    }
+    .multi-stream-grid.grid-spotlight .stream-card.is-spotlight {
+      flex: 1 1 0;
+      min-height: 0;
+      width: 100%;
+      border-color: #A855F7;
+      box-shadow: 0 0 24px rgba(168, 85, 247, 0.35);
+    }
+    .multi-stream-grid.grid-spotlight .spotlight-strip {
+      display: flex;
+      gap: 10px;
+      height: 120px;
+      flex-shrink: 0;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .spotlight-strip .stream-card {
+      width: 200px;
+      height: 100%;
+      flex-shrink: 0;
+    }
+
+    /* Stream Card */
+    .stream-card {
+      position: relative;
+      background: #070A0F;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      height: 100%;
+      width: 100%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .stream-card:hover {
+      border-color: rgba(168, 85, 247, 0.45);
+    }
+
+    .stream-card-header {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .stream-card-user {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #FFF;
+      pointer-events: auto;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    }
+    .stream-card-tag {
+      font-size: 0.66rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      background: rgba(168, 85, 247, 0.2);
+      color: #C084FC;
+    }
+    .stream-card-tag.tag-host {
+      background: rgba(56, 189, 248, 0.2);
+      color: #38BDF8;
+    }
+    .stream-card-tag.tag-you {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34D399;
+    }
+
+    .stream-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      pointer-events: auto;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .stream-card:hover .stream-card-actions {
+      opacity: 1;
+    }
+    .stream-card-btn {
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #FFF;
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 0.82rem;
+      transition: all 0.2s ease;
+    }
+    .stream-card-btn:hover {
+      background: #A855F7;
+      border-color: #C084FC;
+      transform: translateY(-1px);
+    }
+    .stream-card-btn.active {
+      background: #A855F7;
+      border-color: #C084FC;
+    }
+
+    .stream-card-video-wrap {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      cursor: pointer;
+    }
+    .stream-card-video-wrap video {
       width: 100%;
       height: 100%;
       object-fit: contain;
       display: block;
+    }
+
+    .stream-card-vol-control {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 4px 8px;
+      border-radius: 7px;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: auto;
+    }
+    .stream-card:hover .stream-card-vol-control {
+      opacity: 1;
+    }
+    .stream-card-vol-control input[type="range"] {
+      width: 65px;
+      height: 4px;
+      accent-color: #A855F7;
+      cursor: pointer;
+    }
+
+    .stream-card-self-badge {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #34D399;
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      pointer-events: none;
+      z-index: 5;
     }
 
     /* Sidebar in Hub Mode */
@@ -1009,8 +1233,11 @@
           </div>
 
           <!-- Video Area -->
-          <div class="stream-hub-video-area">
-            <video id="videoHub" autoplay playsinline onclick="unmuteAllVideos()"></video>
+          <div class="stream-hub-video-area" id="streamHubVideoArea">
+            <!-- Dynamic Multi-Stream Grid Container -->
+            <div class="multi-stream-grid grid-count-1" id="multiStreamGrid">
+              <!-- Dynamically populated by updateMultiStreamGrid() -->
+            </div>
 
             <!-- Lobby Waiting View in Hub -->
             <div class="lobby-waiting-view" id="lobbyHubView" style="display: none;">
@@ -1399,10 +1626,24 @@
 
     // Multi-stream & Presence
     let participants = [];
-    let knownStreams = {}; // { [peerId]: MediaStream }
+    let knownStreams = {}; // { [streamId]: { stream, name, isHost, isSelf, volume, muted } }
+    let pendingCalls = {};
+    let activeCallsCo = {};
+    let spotlightStreamId = null;
     let isSharingOwnScreen = false;
     let ownCoPeer = null;
     let ownStream = null;
+    let isGlobalMuted = false;
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
 
     if (initialRoom) {
       roomInput.value = initialRoom.toUpperCase();
@@ -1503,33 +1744,27 @@
 
           if (data.type === 'room-presence' && Array.isArray(data.participants)) {
             participants = data.participants;
-            const host = data.participants.find(p => p.isHost);
-            isHostLive = !!(host && host.isStreaming);
-
-            const isWatchingCoStream = activeStreamerId && activeStreamerId !== currentRoom && knownStreams[activeStreamerId];
-            const isLocalSharing = isSharingOwnScreen && ownStream;
-
-            if (isHostLive || isWatchingCoStream || isLocalSharing) {
-              setLobbyState(false);
-            } else {
-              setLobbyState(true);
-            }
-            renderParticipants();
+            syncRoomStreams();
           } else if (data.type === 'host-video-started') {
             console.log('[Viewer Web] Host iniciou vídeo!');
-            setLobbyState(false);
+            isHostLive = true;
             callHostVideo();
           } else if (data.type === 'host-video-stopped') {
-            console.log('[Viewer Web] Host pausou vídeo (está no lobby).');
-            setLobbyState(true);
+            console.log('[Viewer Web] Host pausou vídeo.');
+            isHostLive = false;
+            delete knownStreams[currentRoom];
+            updateMultiStreamGrid();
+            renderParticipants();
           } else if (data.type === 'room-closed') {
             disconnectViewer("Sala Encerrada", "O host encerrou esta sala.");
           } else if (data.type === 'co-streamer-added') {
-            callCoStreamer(data.peerId, data.title);
+            if (data.peerId && data.peerId !== viewerPeer.id && (!ownCoPeer || data.peerId !== ownCoPeer.id)) {
+              callCoStreamer(data.peerId, data.title);
+            }
           } else if ((data.type === 'streamers-list' || data.type === 'streamer-list') && Array.isArray(data.streamers)) {
             data.streamers.forEach(s => {
               const streamId = s.peerId || s.id;
-              if (streamId && streamId !== room && streamId !== id) {
+              if (streamId && streamId !== currentRoom && streamId !== viewerPeer.id && (!ownCoPeer || streamId !== ownCoPeer.id)) {
                 callCoStreamer(streamId, s.title || s.label);
               }
             });
@@ -1559,36 +1794,57 @@
 
     function callHostVideo() {
       if (!viewerPeer || !currentRoom) return;
+      if (knownStreams[currentRoom] || pendingCalls[currentRoom]) return;
+      pendingCalls[currentRoom] = true;
+
+      console.log('[Viewer Web] Solicitando transmissão do Host:', currentRoom);
       const dummy = createDummyStream();
       const call = viewerPeer.call(currentRoom, dummy);
       currentCall = call;
 
-      call.on('stream', (remoteStream) => {
+      const onStream = (remoteStream) => {
+        delete pendingCalls[currentRoom];
         console.log('[Viewer Web] Stream de vídeo recebido do Host!');
-        knownStreams[currentRoom] = remoteStream;
-        setLobbyState(false);
-        showViewerStream(remoteStream, currentRoom);
-      });
+        isHostLive = true;
+        knownStreams[currentRoom] = {
+          stream: remoteStream,
+          name: 'Host (' + currentRoom + ')',
+          isHost: true,
+          isSelf: false,
+          volume: 1,
+          muted: false
+        };
+        activeStream = remoteStream;
+        activeStreamerId = currentRoom;
+        updateMultiStreamGrid();
+        renderParticipants();
+      };
+
+      call.on('stream', onStream);
 
       if (call.peerConnection) {
         call.peerConnection.ontrack = (ev) => {
           if (ev.streams && ev.streams[0]) {
-            knownStreams[currentRoom] = ev.streams[0];
-            setLobbyState(false);
-            showViewerStream(ev.streams[0], currentRoom);
+            onStream(ev.streams[0]);
           }
         };
       }
 
       call.on('close', () => {
+        delete pendingCalls[currentRoom];
         console.log('[Viewer Web] Chamada com o host fechada.');
-        if (!isHostLive) {
-          setLobbyState(true);
+        delete knownStreams[currentRoom];
+        if (activeStreamerId === currentRoom) {
+          activeStream = null;
+          activeStreamerId = null;
         }
+        updateMultiStreamGrid();
+        renderParticipants();
       });
 
       call.on('error', (err) => {
-        console.warn('[Viewer Web] Aviso na chamada:', err);
+        delete pendingCalls[currentRoom];
+        console.warn('[Viewer Web] Aviso na chamada do host:', err);
       });
     }
 
@@ -1607,12 +1863,12 @@
     }
 
     function setLobbyState(inLobby) {
-      isHostLive = !inLobby;
       if (inLobby) {
         lobbyCinemaView.style.display = 'flex';
         lobbyHubView.style.display = 'flex';
         videoCinema.style.display = 'none';
-        videoHub.style.display = 'none';
+        const grid = document.getElementById('multiStreamGrid');
+        if (grid) grid.style.display = 'none';
 
         document.getElementById('cinemaLiveDot').className = 'pulse-dot-yellow';
         document.getElementById('cinemaLiveText').innerText = 'LOBBY';
@@ -1622,7 +1878,8 @@
         lobbyCinemaView.style.display = 'none';
         lobbyHubView.style.display = 'none';
         videoCinema.style.display = 'block';
-        videoHub.style.display = 'block';
+        const grid = document.getElementById('multiStreamGrid');
+        if (grid) grid.style.display = (spotlightStreamId ? 'flex' : 'grid');
 
         document.getElementById('cinemaLiveDot').className = 'pulse-dot';
         document.getElementById('cinemaLiveText').innerText = 'AO VIVO';
@@ -1635,18 +1892,26 @@
       if (!viewerPeer || !streamerPeerId) return;
       if (streamerPeerId === viewerPeer.id) return;
       if (ownCoPeer && streamerPeerId === ownCoPeer.id) return;
+      if (knownStreams[streamerPeerId] || pendingCalls[streamerPeerId]) return;
 
-      console.log('[Viewer Web] Solicitando transmissão do participante:', streamerPeerId, title);
+      pendingCalls[streamerPeerId] = true;
+      console.log('[Viewer Web] Solicitando transmissão do co-streamer:', streamerPeerId, title);
       const dummy = createDummyStream();
       const call = viewerPeer.call(streamerPeerId, dummy);
+      activeCallsCo[streamerPeerId] = call;
 
       const attachStream = (stream) => {
+        delete pendingCalls[streamerPeerId];
         console.log('[Viewer Web] Stream recebido com sucesso de:', streamerPeerId);
-        knownStreams[streamerPeerId] = stream;
-        if (activeStreamerId === streamerPeerId || !activeStream || (!isHostLive && activeStreamerId === currentRoom)) {
-          setLobbyState(false);
-          showViewerStream(stream, streamerPeerId);
-        }
+        knownStreams[streamerPeerId] = {
+          stream: stream,
+          name: title || ('Tela ' + streamerPeerId.slice(-4)),
+          isHost: false,
+          isSelf: false,
+          volume: 1,
+          muted: false
+        };
+        updateMultiStreamGrid();
         renderParticipants();
       };
 
@@ -1661,73 +1926,319 @@
       }
 
       call.on('close', () => {
+        delete pendingCalls[streamerPeerId];
+        delete activeCallsCo[streamerPeerId];
         delete knownStreams[streamerPeerId];
-        if (activeStreamerId === streamerPeerId) {
-          activeStream = null;
-          activeStreamerId = null;
-          if (isHostLive && knownStreams[currentRoom]) {
-            showViewerStream(knownStreams[currentRoom], currentRoom);
-          } else {
-            setLobbyState(true);
-          }
+        if (spotlightStreamId === streamerPeerId) {
+          spotlightStreamId = null;
         }
+        updateMultiStreamGrid();
         renderParticipants();
+      });
+
+      call.on('error', (err) => {
+        delete pendingCalls[streamerPeerId];
+        delete activeCallsCo[streamerPeerId];
+        console.warn('[Viewer Web] Erro na chamada com co-streamer:', streamerPeerId, err);
       });
     }
 
-    function showViewerStream(remoteStream, streamerId) {
-      activeStream = remoteStream;
-      activeStreamerId = streamerId;
+    function syncRoomStreams() {
+      if (!viewerPeer || !currentRoom) return;
 
-      hudCinemaRoomText.innerText = currentRoom;
-      hubRoomBadge.innerText = currentRoom;
+      const host = participants.find(p => p.isHost);
+      isHostLive = !!(host && host.isStreaming);
 
-      videoCinema.srcObject = remoteStream;
-      videoHub.srcObject = remoteStream;
+      // 1. Auto-connect to Host if live
+      if (isHostLive && !knownStreams[currentRoom] && !pendingCalls[currentRoom]) {
+        callHostVideo();
+      } else if (!isHostLive && knownStreams[currentRoom]) {
+        delete knownStreams[currentRoom];
+      }
 
-      const isOwnStream = (ownCoPeer && streamerId === ownCoPeer.id);
-
-      const playAttempt = (v) => {
-        // Se for a própria tela transmitida, mutar localmente para não dar microfonia/eco no usuário
-        if (isOwnStream) {
-          v.muted = true;
-        } else {
-          v.muted = false;
-        }
-
-        v.play().catch(() => {
-          v.muted = true;
-          if (!isOwnStream) {
-            unmuteOverlay.style.display = 'flex';
+      // 2. Auto-connect to all active streamers in participants
+      participants.forEach(p => {
+        const sId = p.streamPeerId;
+        if (p.isStreaming && sId) {
+          if (sId !== viewerPeer.id && (!ownCoPeer || sId !== ownCoPeer.id)) {
+            if (!knownStreams[sId] && !pendingCalls[sId]) {
+              callCoStreamer(sId, p.streamTitle || p.name);
+            }
           }
-          v.play().catch(() => {});
-        });
-      };
-      playAttempt(videoCinema);
-      playAttempt(videoHub);
+        }
+      });
 
-      applyTheme();
+      // 3. Remove any stream from knownStreams if the participant is no longer streaming
+      Object.keys(knownStreams).forEach(streamId => {
+        if (streamId === currentRoom) {
+          if (!isHostLive) {
+            delete knownStreams[streamId];
+          }
+        } else if (ownCoPeer && streamId === ownCoPeer.id) {
+          if (!isSharingOwnScreen) {
+            delete knownStreams[streamId];
+          }
+        } else {
+          const p = participants.find(x => x.streamPeerId === streamId);
+          if (!p || !p.isStreaming) {
+            delete knownStreams[streamId];
+            if (activeCallsCo[streamId]) {
+              try { activeCallsCo[streamId].close(); } catch {}
+              delete activeCallsCo[streamId];
+            }
+          }
+        }
+      });
+
+      updateMultiStreamGrid();
       renderParticipants();
     }
 
-    function watchParticipantById(targetStreamId) {
-      activeStreamerId = targetStreamId;
+    function updateMultiStreamGrid() {
+      const grid = document.getElementById('multiStreamGrid');
+      if (!grid) return;
 
-      // Se for a própria tela compartilhada localmente
-      if (ownCoPeer && targetStreamId === ownCoPeer.id && ownStream) {
-        setLobbyState(false);
-        showViewerStream(ownStream, targetStreamId);
-        renderParticipants();
+      const streamKeys = Object.keys(knownStreams);
+      const totalStreams = streamKeys.length;
+
+      if (totalStreams === 0) {
+        setLobbyState(true);
+        grid.innerHTML = '';
         return;
       }
 
-      if (knownStreams[targetStreamId]) {
-        setLobbyState(false);
-        showViewerStream(knownStreams[targetStreamId], targetStreamId);
-      } else {
-        const p = participants.find(x => (x.streamPeerId || x.peerId) === targetStreamId);
-        callCoStreamer(targetStreamId, p ? (p.streamTitle || p.name) : 'Transmissão');
+      setLobbyState(false);
+
+      if (spotlightStreamId && !knownStreams[spotlightStreamId]) {
+        spotlightStreamId = null;
       }
+
+      // Configure layout class
+      grid.className = 'multi-stream-grid';
+      if (spotlightStreamId) {
+        grid.classList.add('grid-spotlight');
+        grid.style.display = 'flex';
+      } else {
+        grid.classList.add('grid-count-' + Math.min(totalStreams, 4));
+        if (totalStreams > 4) grid.classList.add('grid-count-many');
+        grid.style.display = 'grid';
+      }
+
+      // 1. Remove cards that are no longer active
+      const existingCards = grid.querySelectorAll('.stream-card');
+      existingCards.forEach(card => {
+        const sId = card.getAttribute('data-stream-id');
+        if (!knownStreams[sId]) {
+          card.remove();
+        }
+      });
+
+      // 2. Add or update stream cards
+      streamKeys.forEach(sId => {
+        const info = knownStreams[sId];
+        let card = document.getElementById('stream-card-' + sId);
+
+        if (!card) {
+          card = document.createElement('div');
+          card.className = 'stream-card';
+          card.id = 'stream-card-' + sId;
+          card.setAttribute('data-stream-id', sId);
+
+          const isSelf = info.isSelf;
+          const isHost = info.isHost;
+          const tagClass = isSelf ? 'tag-you' : (isHost ? 'tag-host' : '');
+          const tagText = isSelf ? 'VOCÊ' : (isHost ? 'HOST' : 'AO VIVO');
+
+          card.innerHTML = `
+            <div class="stream-card-header">
+              <div class="stream-card-user">
+                <span class="pulse-dot"></span>
+                <span class="stream-card-name">${escapeHtml(info.name)}</span>
+                <span class="stream-card-tag ${tagClass}">${tagText}</span>
+              </div>
+              <div class="stream-card-actions">
+                ${!isSelf ? `
+                  <button class="stream-card-btn mute-btn" id="mute-btn-${sId}" title="Mutar / Desmutar Áudio" onclick="toggleIndividualMute('${sId}', event)">
+                    🔊
+                  </button>
+                ` : ''}
+                <button class="stream-card-btn spotlight-btn" id="spotlight-btn-${sId}" title="Focar / Expandir Tela" onclick="toggleSpotlightStream('${sId}', event)">
+                  🔍
+                </button>
+                <button class="stream-card-btn fs-btn" title="Tela Cheia desta Transmissão" onclick="fullscreenStream('${sId}', event)">
+                  ⛶
+                </button>
+              </div>
+            </div>
+
+            <div class="stream-card-video-wrap" onclick="toggleSpotlightStream('${sId}', event)">
+              <video id="stream-video-${sId}" autoplay playsinline></video>
+            </div>
+
+            ${!isSelf ? `
+              <div class="stream-card-vol-control" onclick="event.stopPropagation()">
+                <span id="vol-icon-${sId}" style="font-size: 0.75rem;">🔊</span>
+                <input type="range" min="0" max="1" step="0.05" value="${info.volume ?? 1}" oninput="setIndividualStreamVolume('${sId}', this.value)">
+                <span id="vol-pct-${sId}" style="font-size: 0.7rem; color: #94A3B8; min-width: 28px;">${Math.round((info.volume ?? 1) * 100)}%</span>
+              </div>
+            ` : `
+              <div class="stream-card-self-badge">
+                Sua tela (mutada para você)
+              </div>
+            `}
+          `;
+
+          grid.appendChild(card);
+        }
+
+        // Spotlight state
+        const isSpotlight = (spotlightStreamId === sId);
+        card.classList.toggle('is-spotlight', isSpotlight);
+        const spotBtn = card.querySelector('.spotlight-btn');
+        if (spotBtn) {
+          spotBtn.classList.toggle('active', isSpotlight);
+          spotBtn.innerText = isSpotlight ? '🗗' : '🔍';
+          spotBtn.title = isSpotlight ? 'Voltar para Modo Grade' : 'Focar nesta Tela';
+        }
+
+        // Video playback
+        const videoEl = card.querySelector('video');
+        if (videoEl) {
+          if (videoEl.srcObject !== info.stream) {
+            videoEl.srcObject = info.stream;
+          }
+          if (info.isSelf) {
+            videoEl.muted = true;
+          } else {
+            videoEl.muted = !!info.muted;
+            videoEl.volume = Math.min(1, info.volume ?? 1);
+          }
+          videoEl.play().catch(() => {
+            if (!info.isSelf) {
+              unmuteOverlay.style.display = 'flex';
+            }
+          });
+        }
+      });
+
+      // Manage spotlight thumbnail strip if spotlight is active
+      if (spotlightStreamId && totalStreams > 1) {
+        let strip = document.getElementById('spotlightThumbsStrip');
+        if (!strip) {
+          strip = document.createElement('div');
+          strip.id = 'spotlightThumbsStrip';
+          strip.className = 'spotlight-strip';
+          grid.appendChild(strip);
+        }
+        // Move non-spotlight cards into strip
+        streamKeys.forEach(sId => {
+          const card = document.getElementById('stream-card-' + sId);
+          if (card) {
+            if (sId === spotlightStreamId) {
+              grid.insertBefore(card, strip);
+            } else {
+              strip.appendChild(card);
+            }
+          }
+        });
+      } else {
+        const strip = document.getElementById('spotlightThumbsStrip');
+        if (strip) {
+          const cardsInStrip = strip.querySelectorAll('.stream-card');
+          cardsInStrip.forEach(c => grid.appendChild(c));
+          strip.remove();
+        }
+      }
+
+      // Update Cinema Mode video
+      if (currentTheme === 'cinema' && videoCinema) {
+        const focusKey = spotlightStreamId || streamKeys[0];
+        if (focusKey && knownStreams[focusKey]) {
+          const sObj = knownStreams[focusKey];
+          if (videoCinema.srcObject !== sObj.stream) {
+            videoCinema.srcObject = sObj.stream;
+            videoCinema.muted = sObj.isSelf;
+            videoCinema.play().catch(() => {});
+          }
+        }
+      }
+    }
+
+    function toggleSpotlightStream(streamId, ev) {
+      if (ev) ev.stopPropagation();
+      if (spotlightStreamId === streamId) {
+        spotlightStreamId = null;
+      } else {
+        spotlightStreamId = streamId;
+      }
+      updateMultiStreamGrid();
+      renderParticipants();
+    }
+
+    function toggleIndividualMute(streamId, ev) {
+      if (ev) ev.stopPropagation();
+      const s = knownStreams[streamId];
+      if (!s || s.isSelf) return;
+
+      s.muted = !s.muted;
+      const v = document.getElementById('stream-video-' + streamId);
+      const btn = document.getElementById('mute-btn-' + streamId);
+      const icon = document.getElementById('vol-icon-' + streamId);
+
+      if (v) v.muted = s.muted;
+      if (btn) btn.innerText = s.muted ? '🔇' : '🔊';
+      if (icon) icon.innerText = s.muted ? '🔇' : '🔊';
+    }
+
+    function setIndividualStreamVolume(streamId, val) {
+      const s = knownStreams[streamId];
+      if (!s || s.isSelf) return;
+
+      const num = parseFloat(val);
+      s.volume = num;
+      s.muted = (num === 0);
+
+      const v = document.getElementById('stream-video-' + streamId);
+      const pctEl = document.getElementById('vol-pct-' + streamId);
+      const btn = document.getElementById('mute-btn-' + streamId);
+      const icon = document.getElementById('vol-icon-' + streamId);
+
+      if (v) {
+        v.muted = s.muted;
+        v.volume = Math.min(1, num);
+      }
+      if (pctEl) pctEl.innerText = Math.round(num * 100) + '%';
+      if (btn) btn.innerText = s.muted ? '🔇' : '🔊';
+      if (icon) icon.innerText = s.muted ? '🔇' : '🔊';
+    }
+
+    function fullscreenStream(streamId, ev) {
+      if (ev) ev.stopPropagation();
+      const card = document.getElementById('stream-card-' + streamId);
+      if (!card) return;
+      if (!document.fullscreenElement) {
+        if (card.requestFullscreen) card.requestFullscreen().catch(() => {});
+        else if (card.webkitRequestFullscreen) card.webkitRequestFullscreen();
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    function watchParticipantById(targetStreamId) {
+      if (spotlightStreamId === targetStreamId) {
+        spotlightStreamId = null;
+      } else {
+        spotlightStreamId = targetStreamId;
+      }
+
+      if (!knownStreams[targetStreamId]) {
+        const p = participants.find(x => (x.streamPeerId || x.peerId) === targetStreamId);
+        if (p && p.isStreaming) {
+          callCoStreamer(targetStreamId, p.streamTitle || p.name);
+        }
+      }
+
+      updateMultiStreamGrid();
       renderParticipants();
     }
 
@@ -1767,16 +2278,16 @@
         const targetId = p.streamPeerId || p.peerId;
         const isStreaming = p.isStreaming || (p.isHost && isHostLive);
         const isSelf = (viewerPeer && p.peerId === viewerPeer.id) || (ownCoPeer && targetId === ownCoPeer.id);
-        const isWatchingThis = activeStreamerId === targetId || (!activeStreamerId && p.isHost && isHostLive);
+        const isFocused = (spotlightStreamId === targetId);
         const initial = (p.name || 'M').charAt(0).toUpperCase();
 
-        let buttonText = '👁️ Assistir Tela';
+        let buttonText = '🔍 Focar Tela';
         let buttonClass = 'btn-watch-stream';
-        if (isWatchingThis) {
-          buttonText = isSelf ? '✓ Transmitindo Sua Tela' : '✓ Assistindo Tela';
+        if (isFocused) {
+          buttonText = isSelf ? '✓ Sua Tela em Foco' : '✓ Em Foco no Centro';
           buttonClass += ' active-watching';
         } else if (isSelf) {
-          buttonText = '👁️ Ver Minha Tela';
+          buttonText = '🔍 Focar Minha Tela';
         }
 
         return `
@@ -1856,11 +2367,15 @@
             topBtn.classList.add('active');
           }
 
-          // Armazenar o stream próprio localmente e exibir IMEDIATAMENTE no player local!
-          knownStreams[id] = ownStream;
-          activeStreamerId = id;
-          setLobbyState(false);
-          showViewerStream(ownStream, id);
+          // Armazenar o stream próprio localmente e exibir no grid imediatamente
+          knownStreams[id] = {
+            stream: ownStream,
+            name: 'Sua Tela (Você)',
+            isHost: false,
+            isSelf: true,
+            volume: 0,
+            muted: true
+          };
 
           // Atualizar participante próprio na lista local
           const myId = viewerPeer ? viewerPeer.id : 'web_' + id;
@@ -1879,6 +2394,8 @@
               streamTitle: 'Sua Tela (Ao Vivo)'
             });
           }
+
+          updateMultiStreamGrid();
           renderParticipants();
 
           if (currentDataConn && currentDataConn.open && viewerPeer) {
@@ -1916,6 +2433,11 @@
         ownStream = null;
       }
       if (ownCoPeer) {
+        const id = ownCoPeer.id;
+        delete knownStreams[id];
+        if (spotlightStreamId === id) {
+          spotlightStreamId = null;
+        }
         try { ownCoPeer.destroy(); } catch {}
         ownCoPeer = null;
       }
@@ -1932,19 +2454,6 @@
         topBtn.classList.remove('active');
       }
 
-      // Se estávamos assistindo a nossa própria tela, voltar para o Host se estiver ao vivo
-      if (activeStreamerId && (activeStreamerId.includes('_webco_') || activeStreamerId.includes('_co_'))) {
-        if (knownStreams[currentRoom] && isHostLive) {
-          showViewerStream(knownStreams[currentRoom], currentRoom);
-        } else {
-          activeStream = null;
-          activeStreamerId = null;
-          videoCinema.srcObject = null;
-          videoHub.srcObject = null;
-          setLobbyState(true);
-        }
-      }
-
       if (viewerPeer) {
         const myId = viewerPeer.id;
         const p = participants.find(x => x.peerId === myId);
@@ -1953,6 +2462,8 @@
           p.streamPeerId = '';
         }
       }
+
+      updateMultiStreamGrid();
       renderParticipants();
 
       if (currentDataConn && currentDataConn.open && viewerPeer) {
@@ -1967,18 +2478,22 @@
       if (viewerAudioCtx && viewerAudioCtx.state === 'suspended') {
         viewerAudioCtx.resume().catch(() => {});
       }
-      if (activeStream && currentVolumeVal > 1.0) {
-        setupWebAudioBoost(activeStream);
-      }
-      if (videoCinema) {
+      Object.keys(knownStreams).forEach(sId => {
+        const s = knownStreams[sId];
+        if (!s.isSelf) {
+          s.muted = false;
+          const v = document.getElementById('stream-video-' + sId);
+          if (v) {
+            v.muted = false;
+            v.play().catch(() => {});
+          }
+          const btn = document.getElementById('mute-btn-' + sId);
+          if (btn) btn.innerText = '🔊';
+        }
+      });
+      if (videoCinema && activeStream) {
         videoCinema.muted = false;
-        videoCinema.volume = Math.min(1, currentVolumeVal || 1.0);
         videoCinema.play().catch(() => {});
-      }
-      if (videoHub) {
-        videoHub.muted = false;
-        videoHub.volume = Math.min(1, currentVolumeVal || 1.0);
-        videoHub.play().catch(() => {});
       }
       unmuteOverlay.style.display = 'none';
       updateMuteButtons(false);
@@ -1993,12 +2508,20 @@
     }
 
     function toggleViewerAudio() {
-      const current = videoCinema.muted || videoHub.muted;
-      const next = !current;
-      if (videoCinema) videoCinema.muted = next;
-      if (videoHub) videoHub.muted = next;
-      if (!next) unmuteOverlay.style.display = 'none';
-      updateMuteButtons(next);
+      isGlobalMuted = !isGlobalMuted;
+      Object.keys(knownStreams).forEach(sId => {
+        const s = knownStreams[sId];
+        if (!s.isSelf) {
+          s.muted = isGlobalMuted;
+          const v = document.getElementById('stream-video-' + sId);
+          if (v) v.muted = isGlobalMuted;
+          const btn = document.getElementById('mute-btn-' + sId);
+          if (btn) btn.innerText = isGlobalMuted ? '🔇' : '🔊';
+        }
+      });
+      if (videoCinema) videoCinema.muted = isGlobalMuted;
+      if (!isGlobalMuted) unmuteOverlay.style.display = 'none';
+      updateMuteButtons(isGlobalMuted);
     }
 
     function toggleFullscreen() {
@@ -2025,6 +2548,12 @@
         try { currentCall.close(); } catch {}
         currentCall = null;
       }
+      Object.values(activeCallsCo).forEach(c => {
+        try { c.close(); } catch {}
+      });
+      activeCallsCo = {};
+      pendingCalls = {};
+
       if (currentDataConn) {
         try { currentDataConn.close(); } catch {}
         currentDataConn = null;
@@ -2035,8 +2564,12 @@
       }
       activeStream = null;
       activeStreamerId = null;
+      spotlightStreamId = null;
       knownStreams = {};
       participants = [];
+
+      const grid = document.getElementById('multiStreamGrid');
+      if (grid) grid.innerHTML = '';
 
       cinemaContainer.style.display = 'none';
       hubContainer.style.display = 'none';
@@ -2247,8 +2780,25 @@
                 });
               }
               broadcastPresence();
+              // Send streamers-list to new joiner
+              const coStreamers = hostParticipants.filter(p => !p.isHost && p.isStreaming && p.streamPeerId);
+              if (coStreamers.length > 0 && conn.open) {
+                conn.send({
+                  type: 'streamers-list',
+                  streamers: coStreamers.map(p => ({ peerId: p.streamPeerId, title: p.streamTitle || p.name }))
+                });
+              }
             } else if (data.type === 'get-presence') {
-              if (conn.open) conn.send({ type: 'room-presence', participants: hostParticipants });
+              if (conn.open) {
+                conn.send({ type: 'room-presence', participants: hostParticipants });
+                const coStreamers = hostParticipants.filter(p => !p.isHost && p.isStreaming && p.streamPeerId);
+                if (coStreamers.length > 0) {
+                  conn.send({
+                    type: 'streamers-list',
+                    streamers: coStreamers.map(p => ({ peerId: p.streamPeerId, title: p.streamTitle || p.name }))
+                  });
+                }
+              }
             } else if (data.type === 'start-sharing') {
               const p = hostParticipants.find(x => x.peerId === pId);
               if (p) {

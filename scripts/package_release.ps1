@@ -33,6 +33,14 @@ finally {
     Pop-Location
 }
 
+# Sincronizar watch.html com cloudflare_pages/index.html
+$watchHtml = Join-Path $rootDir "frontend\public\watch.html"
+$cfIndexHtml = Join-Path $rootDir "cloudflare_pages\index.html"
+if (Test-Path $watchHtml) {
+    Copy-Item $watchHtml $cfIndexHtml -Force
+    Write-Host " -> Sincronizado watch.html para cloudflare_pages/index.html" -ForegroundColor Green
+}
+
 # 2. Validacao rigorosa dos arquivos em wwwroot
 Write-Host "`n[2/6] Validando integridade dos assets do wwwroot..." -ForegroundColor Yellow
 $wwwroot = Join-Path $rootDir "wwwroot"
