@@ -1222,13 +1222,13 @@
 
         <div class="form-group" style="margin-bottom: 12px;">
           <label class="form-label" style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 6px; font-weight: 600;">Seu Nome na Sala</label>
-          <input type="text" id="displayNameInput" placeholder="Ex: Xenphi, Lucas, Player..." maxlength="24" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; padding: 10px 14px; color: #FFF; font-size: 0.9rem;">
+          <input type="text" id="displayNameInput" placeholder="Ex: Xenphi, Lucas, Player..." onkeydown="if(event.key === 'Enter') startWatch()" maxlength="24" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; padding: 10px 14px; color: #FFF; font-size: 0.9rem;">
         </div>
 
         <div class="form-group">
           <label class="form-label" style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 6px; font-weight: 600;">Código da Sala</label>
           <div class="input-row">
-            <input type="text" id="roomInput" placeholder="Ex: XNX-1234" maxlength="16">
+            <input type="text" id="roomInput" placeholder="Ex: zen ou 1234" maxlength="16" onkeydown="if(event.key === 'Enter') startWatch()">
             <button class="btn-primary" style="width: auto; padding: 11px 22px;" id="connectBtn" onclick="startWatch()">
               Conectar
             </button>
@@ -1395,6 +1395,14 @@
           </select>
         </div>
 
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label" style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 6px; font-weight: 600;">Código da Sala (Opcional)</label>
+          <div class="input-row">
+            <input type="text" id="broadcastRoomInput" placeholder="Ex: zen (ou deixe vazio para gerar automático)" maxlength="16" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; padding: 10px 14px; color: #FFF; font-size: 0.9rem;">
+          </div>
+          <span style="font-size: 0.72rem; color: #64748B; margin-top: 4px; display: block;">Seus amigos entrarão por este código ou pelo link gerado.</span>
+        </div>
+
         <!-- Contextual Current Room Sharing Banner -->
         <div id="broadcastCurrentRoomBox" style="display: none; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: left;">
           <div style="font-size: 0.75rem; color: #C084FC; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Sala Atual Conectada</div>
@@ -1422,7 +1430,7 @@
         </label>
 
         <button class="btn-primary" onclick="startBroadcasting()">
-          📡 Iniciar Compartilhamento em Nova Sala
+          📡 Iniciar Compartilhamento de Tela
         </button>
       </div>
 
@@ -1505,7 +1513,7 @@
     // Navigation Tabs
     function switchTab(tab) {
       // Se o usuário clicar em Transmitir enquanto já está conectado em uma sala ativa
-      if (tab === 'broadcast' && currentRoom && viewerPeer) {
+      if (tab === 'broadcast' && currentRoom && (viewerPeer || hostPeer)) {
         if (isSharingOwnScreen) {
           stopViewerScreenShare();
         } else {
@@ -1525,10 +1533,14 @@
     }
 
     function updateBroadcastCardContext() {
-      const room = currentRoom || (roomInput ? roomInput.value.trim().toUpperCase() : '') || initialRoom;
+      const room = currentRoom || (roomInput ? roomInput.value.trim().toUpperCase() : '') || (initialRoom ? initialRoom.toUpperCase() : '');
       const box = document.getElementById('broadcastCurrentRoomBox');
       const divider = document.getElementById('broadcastOrDivider');
       const label = document.getElementById('broadcastTargetRoomLabel');
+      const bRoomInput = document.getElementById('broadcastRoomInput');
+      if (bRoomInput && !bRoomInput.value && room) {
+        bRoomInput.value = room;
+      }
       if (room && box && divider && label) {
         label.innerText = room;
         box.style.display = 'block';
@@ -1628,7 +1640,11 @@
     const lobbyCinemaCount = document.getElementById('lobbyCinemaCount');
     const lobbyHubCount = document.getElementById('lobbyHubCount');
 
+    // Global WebRTC & Room State
     let viewerPeer = null;
+    let hostPeer = null;
+    let isHostRole = false;
+    let hostConnectTimeout = null;
     let currentCall = null;
     let currentDataConn = null;
     let activeStream = null;
@@ -1638,12 +1654,26 @@
     let isExplicitExit = false;
     let reconnectAttempts = 0;
     let reconnectTimer = null;
-
-
+    let localStream = null;
+    let activeCalls = [];
+    let activeCallsCo = {};
+    let pendingCalls = {};
+    let hostDataConnections = {};
+    let hostParticipants = [];
+    let participants = [];
+    let knownStreams = {};
+    let spotlightStreamId = null;
+    let isSharingOwnScreen = false;
+    let ownCoPeer = null;
+    let ownStream = null;
+    let isGlobalMuted = false;
+    let uptimeInterval = null;
+    let uptimeSeconds = 0;
     let viewerAudioCtx = null;
     let viewerGainNode = null;
     let viewerSourceNode = null;
     let currentVolumeVal = 1.0;
+
 
     function resetWebAudioBoost() {
       if (viewerSourceNode) {
@@ -1738,16 +1768,7 @@
       }
     }
 
-    // Multi-stream & Presence
-    let participants = [];
-    let knownStreams = {}; // { [streamId]: { stream, name, isHost, isSelf, volume, muted } }
-    let pendingCalls = {};
-    let activeCallsCo = {};
-    let spotlightStreamId = null;
-    let isSharingOwnScreen = false;
-    let ownCoPeer = null;
-    let ownStream = null;
-    let isGlobalMuted = false;
+    // Multi-stream & Presence (Variables declared at top)
 
     function escapeHtml(str) {
       if (!str) return '';
@@ -1757,22 +1778,6 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
-    }
-
-    const storedLastRoom = localStorage.getItem('xennex_last_room') || '';
-    const storedName = localStorage.getItem('xennex_display_name') || '';
-    const nameInputInit = document.getElementById('displayNameInput');
-    if (nameInputInit && storedName) {
-      nameInputInit.value = storedName;
-    }
-
-    if (initialRoom) {
-      roomInput.value = initialRoom.toUpperCase();
-      localStorage.setItem('xennex_last_room', initialRoom.toUpperCase());
-      switchTab('watch');
-      startWatch();
-    } else if (storedLastRoom && roomInput) {
-      roomInput.value = storedLastRoom;
     }
 
     // Auto-unmute audio on first user gesture anywhere on page
@@ -1812,28 +1817,45 @@
 
     function toPeerRoomId(roomId) {
       if (!roomId) return '';
-      const clean = String(roomId).trim().toUpperCase();
-      if (clean.startsWith('XNX-')) return clean;
-      return 'XNX-' + clean;
+      return String(roomId).trim().toUpperCase();
     }
 
+
     function startWatch() {
-      const room = roomInput.value.trim().toUpperCase();
-      if (!room) return;
+      const rawRoom = (roomInput ? roomInput.value : '').trim();
+      if (!rawRoom) return;
+      const room = rawRoom.toUpperCase();
       currentRoom = room;
       isExplicitExit = false;
 
-      document.getElementById('watchStatusTitle').innerText = "Conectando à Sala...";
-      document.getElementById('watchStatusDesc').innerText = "Localizando o host " + room + " via WebRTC (STUN/TURN)...";
+      document.getElementById('watchStatusTitle').innerText = "Conectando à Sala " + room + "...";
+      document.getElementById('watchStatusDesc').innerText = "Localizando a sala " + room + " via WebRTC (STUN/TURN)...";
 
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
 
-      if (viewerPeer && !viewerPeer.destroyed) {
-        try { viewerPeer.destroy(); } catch {}
+      cleanupActiveConnections();
+
+      const targetPeerId = toPeerRoomId(room);
+      connectToRoom(targetPeerId, room);
+    }
+
+    function connectToRoom(targetPeerId, room) {
+      isHostRole = false;
+
+      const displayNameEl = document.getElementById('displayNameInput');
+      let myDisplayName = (displayNameEl ? displayNameEl.value.trim() : '');
+      if (!myDisplayName) {
+        myDisplayName = localStorage.getItem('xennex_display_name') || '';
       }
+      if (!myDisplayName || myDisplayName.startsWith('Participante (') || myDisplayName.startsWith('Espectador (')) {
+        const fallback = displayNameEl ? displayNameEl.value.trim() : '';
+        myDisplayName = fallback || myDisplayName || ('Participante (' + Math.floor(100 + Math.random() * 900) + ')');
+      }
+      localStorage.setItem('xennex_display_name', myDisplayName);
+      localStorage.setItem('xennex_last_room', room);
 
       viewerPeer = new Peer({
         config: {
@@ -1841,34 +1863,25 @@
         }
       });
 
+      let hasHostResponded = false;
+
       viewerPeer.on('open', (id) => {
         reconnectAttempts = 0;
         reconnectToast.style.display = 'none';
         console.log('[Viewer Web] Conectado ao servidor P2P com ID:', id);
 
-        // Open Room Viewer HUD/View
-        watchCard.style.display = 'none';
-        hudCinemaRoomText.innerText = currentRoom;
-        hubRoomBadge.innerText = currentRoom;
-        lobbyCinemaRoom.innerText = currentRoom;
-        lobbyHubRoom.innerText = currentRoom;
+        openRoomUI(room, false);
 
-        applyTheme();
-
-        // Data Connection for real-time presence, lobby, and co-streamers
-        const peerTarget = toPeerRoomId(room);
-        const dataConn = viewerPeer.connect(peerTarget);
+        const dataConn = viewerPeer.connect(targetPeerId, { reliable: true });
         currentDataConn = dataConn;
 
-        const displayNameEl = document.getElementById('displayNameInput');
-        let myDisplayName = (displayNameEl ? displayNameEl.value.trim() : '') || localStorage.getItem('xennex_display_name') || '';
-        if (!myDisplayName) {
-          myDisplayName = 'Espectador (' + id.slice(-4) + ')';
-        }
-        localStorage.setItem('xennex_display_name', myDisplayName);
-        localStorage.setItem('xennex_last_room', room);
-
         const sendJoin = () => {
+          hasHostResponded = true;
+          if (hostConnectTimeout) {
+            clearTimeout(hostConnectTimeout);
+            hostConnectTimeout = null;
+          }
+          console.log('[Viewer Web] Conectado ao Host da sala:', targetPeerId);
           dataConn.send({
             type: 'join-room',
             peerId: id,
@@ -1883,48 +1896,24 @@
           dataConn.on('open', sendJoin);
         }
 
-        dataConn.on('data', (data) => {
-          if (!data) return;
-          console.log('[Viewer Web] Mensagem da sala:', data);
+        dataConn.on('data', handleViewerIncomingData);
 
-          if (data.type === 'room-presence' && Array.isArray(data.participants)) {
-            participants = data.participants;
-            syncRoomStreams();
-          } else if (data.type === 'update-name' && data.name && data.peerId) {
-            const p = participants.find(x => x.peerId === data.peerId);
-            if (p) p.name = data.name;
-            const ks = knownStreams[data.peerId];
-            if (ks) ks.name = data.name;
-            renderParticipants();
-            updateMultiStreamGrid();
-          } else if (data.type === 'host-video-started') {
-            console.log('[Viewer Web] Host iniciou vídeo!');
-            isHostLive = true;
-            callHostVideo();
-          } else if (data.type === 'host-video-stopped') {
-            console.log('[Viewer Web] Host pausou vídeo.');
-            isHostLive = false;
-            delete knownStreams[currentRoom];
-            updateMultiStreamGrid();
-            renderParticipants();
-          } else if (data.type === 'room-closed') {
-            disconnectViewer("Sala Encerrada", "O host encerrou esta sala.");
-          } else if (data.type === 'co-streamer-added') {
-            if (data.peerId && data.peerId !== viewerPeer.id && (!ownCoPeer || data.peerId !== ownCoPeer.id)) {
-              callCoStreamer(data.peerId, data.title);
-            }
-          } else if ((data.type === 'streamers-list' || data.type === 'streamer-list') && Array.isArray(data.streamers)) {
-            data.streamers.forEach(s => {
-              const streamId = s.peerId || s.id;
-              if (streamId && streamId !== currentRoom && streamId !== viewerPeer.id && (!ownCoPeer || streamId !== ownCoPeer.id)) {
-                callCoStreamer(streamId, s.title || s.label);
-              }
-            });
+        dataConn.on('close', () => {
+          console.warn('[Viewer Web] Conexão com o host encerrada.');
+          if (!isExplicitExit) {
+            showFitToast('Host desconectado. Assumindo a sala ' + room + '...');
+            promoteToHost(targetPeerId, room);
           }
         });
 
-        // Call Host
-        callHostVideo();
+        // Se após 2.2s o host não responder, este usuário assume a sala como Anfitrião
+        if (hostConnectTimeout) clearTimeout(hostConnectTimeout);
+        hostConnectTimeout = setTimeout(() => {
+          if (!hasHostResponded && !isExplicitExit) {
+            console.log('[Viewer Web] Host não respondeu. Promovendo a Anfitrião de ' + targetPeerId);
+            promoteToHost(targetPeerId, room);
+          }
+        }, 2200);
       });
 
       viewerPeer.on('disconnected', () => {
@@ -1935,13 +1924,273 @@
       viewerPeer.on('error', (err) => {
         console.warn('[Viewer Web] Erro no Peer:', err);
         if (err.type === 'peer-unavailable') {
-          if (reconnectAttempts < 5 && !isExplicitExit) {
-            handleAutoReconnect();
-          } else {
-            disconnectViewer("Host não Encontrado", "A sala " + room + " não foi encontrada. Verifique se o host está com o app aberto.");
+          if (!hasHostResponded && !isExplicitExit) {
+            if (hostConnectTimeout) {
+              clearTimeout(hostConnectTimeout);
+              hostConnectTimeout = null;
+            }
+            console.log('[Viewer Web] Sala ' + targetPeerId + ' sem host ativo. Criando como Anfitrião...');
+            promoteToHost(targetPeerId, room);
           }
         }
       });
+    }
+
+    function promoteToHost(targetPeerId, room) {
+      if (isExplicitExit) return;
+      if (hostConnectTimeout) {
+        clearTimeout(hostConnectTimeout);
+        hostConnectTimeout = null;
+      }
+
+      if (viewerPeer && !viewerPeer.destroyed) {
+        try { viewerPeer.destroy(); } catch {}
+        viewerPeer = null;
+      }
+
+      console.log('[Host Web] Registrando como Anfitrião da sala:', targetPeerId);
+
+      const displayNameEl = document.getElementById('displayNameInput');
+      let myDisplayName = (displayNameEl ? displayNameEl.value.trim() : '') || localStorage.getItem('xennex_display_name') || '';
+      if (!myDisplayName) {
+        myDisplayName = 'Anfitrião (' + room + ')';
+      }
+
+      hostPeer = new Peer(targetPeerId, {
+        config: {
+          iceServers: ICE_SERVERS
+        }
+      });
+
+      hostPeer.on('open', (id) => {
+        isHostRole = true;
+        currentRoom = room;
+        console.log('[Host Web] Sala ' + room + ' aberta como Anfitrião! Peer ID:', id);
+
+        hostParticipants = [
+          {
+            peerId: id,
+            name: myDisplayName,
+            isHost: true,
+            isStreaming: isSharingOwnScreen,
+            streamTitle: isSharingOwnScreen ? 'Sua Tela' : '',
+            streamPeerId: isSharingOwnScreen && ownCoPeer ? ownCoPeer.id : (isSharingOwnScreen ? id : '')
+          }
+        ];
+        participants = hostParticipants;
+
+        openRoomUI(room, true);
+        renderParticipants();
+        updateMultiStreamGrid();
+        showFitToast('👑 Você é o anfitrião da sala ' + room + '!');
+      });
+
+      hostPeer.on('connection', (conn) => {
+        handleHostConnection(conn);
+      });
+
+      hostPeer.on('call', (call) => {
+        handleHostCall(call);
+      });
+
+      hostPeer.on('disconnected', () => {
+        console.warn('[Host Web] Socket do Host oscilou. Reconectando...');
+        try { hostPeer.reconnect(); } catch {}
+      });
+
+      hostPeer.on('error', (err) => {
+        console.warn('[Host Web] Erro no hostPeer:', err);
+        if (err.type === 'unavailable-id') {
+          console.log('[Host Web] ID de sala ocupado por outro host. Conectando como participante...');
+          if (hostPeer && !hostPeer.destroyed) {
+            try { hostPeer.destroy(); } catch {}
+            hostPeer = null;
+          }
+          connectToRoom(targetPeerId, room);
+        }
+      });
+    }
+
+    function openRoomUI(room, isHost) {
+      watchCard.style.display = 'none';
+      hudCinemaRoomText.innerText = room;
+      hubRoomBadge.innerText = room;
+      lobbyCinemaRoom.innerText = room;
+      lobbyHubRoom.innerText = room;
+
+      const roleDesc = isHost ? ' (Anfitrião)' : '';
+      document.getElementById('watchStatusTitle').innerText = 'Sala ' + room + roleDesc;
+
+      applyTheme();
+    }
+
+    function handleHostConnection(conn) {
+      const pId = conn.peer;
+      hostDataConnections[pId] = conn;
+
+      const broadcastPresence = () => {
+        const payload = { type: 'room-presence', participants: hostParticipants };
+        Object.values(hostDataConnections).forEach(c => {
+          if (c.open) c.send(payload);
+        });
+        participants = hostParticipants;
+        renderParticipants();
+        updateMultiStreamGrid();
+      };
+
+      const handleConnData = (data) => {
+        if (!data) return;
+        console.log('[Host Web] Mensagem de ' + pId + ':', data);
+
+        if (data.type === 'join-room') {
+          const name = data.name || ('Participante (' + pId.slice(-4) + ')');
+          let existing = hostParticipants.find(p => p.peerId === pId);
+          if (!existing) {
+            hostParticipants.push({
+              peerId: pId,
+              name: name,
+              isHost: false,
+              isStreaming: !!data.isStreaming,
+              streamTitle: data.streamTitle || '',
+              streamPeerId: data.streamPeerId || ''
+            });
+          } else {
+            existing.name = name;
+          }
+          broadcastPresence();
+
+          const coStreamers = hostParticipants.filter(p => !p.isHost && p.isStreaming && p.streamPeerId);
+          if (coStreamers.length > 0 && conn.open) {
+            conn.send({
+              type: 'streamers-list',
+              streamers: coStreamers.map(p => ({ peerId: p.streamPeerId, title: p.streamTitle || p.name }))
+            });
+          }
+          if (isHostLive) {
+            conn.send({ type: 'host-video-started' });
+          }
+        } else if (data.type === 'get-presence') {
+          if (conn.open) {
+            conn.send({ type: 'room-presence', participants: hostParticipants });
+            const coStreamers = hostParticipants.filter(p => !p.isHost && p.isStreaming && p.streamPeerId);
+            if (coStreamers.length > 0) {
+              conn.send({
+                type: 'streamers-list',
+                streamers: coStreamers.map(p => ({ peerId: p.streamPeerId, title: p.streamTitle || p.name }))
+              });
+            }
+            if (isHostLive) {
+              conn.send({ type: 'host-video-started' });
+            }
+          }
+        } else if (data.type === 'start-sharing') {
+          const p = hostParticipants.find(x => x.peerId === pId);
+          if (p) {
+            p.isStreaming = true;
+            p.streamPeerId = data.streamPeerId;
+            p.streamTitle = data.streamTitle || ('Tela de ' + p.name);
+          }
+          broadcastPresence();
+
+          // Host também se conecta ao co-streamer para exibir a tela dele no grid!
+          if (data.streamPeerId) {
+            callCoStreamer(data.streamPeerId, data.streamTitle || ('Tela de ' + (p ? p.name : 'Participante')));
+          }
+
+          // Avisar os demais participantes
+          Object.values(hostDataConnections).forEach(c => {
+            if (c.open && c.peer !== pId) {
+              c.send({ type: 'co-streamer-added', peerId: data.streamPeerId, title: data.streamTitle });
+            }
+          });
+        } else if (data.type === 'register-co-streamer') {
+          Object.values(hostDataConnections).forEach(c => {
+            if (c.open && c.peer !== pId) {
+              c.send({ type: 'co-streamer-added', peerId: data.peerId, title: data.title });
+            }
+          });
+        } else if (data.type === 'stop-sharing') {
+          const p = hostParticipants.find(x => x.peerId === pId);
+          if (p) {
+            p.isStreaming = false;
+            p.streamPeerId = '';
+          }
+          broadcastPresence();
+        } else if (data.type === 'update-name' && data.name) {
+          const p = hostParticipants.find(x => x.peerId === pId);
+          if (p) p.name = data.name;
+          broadcastPresence();
+        }
+      };
+
+      conn.on('data', handleConnData);
+      conn.on('close', () => {
+        console.log('[Host Web] Conexão encerrada com:', pId);
+        delete hostDataConnections[pId];
+        hostParticipants = hostParticipants.filter(p => p.peerId !== pId);
+        broadcastPresence();
+      });
+      conn.on('error', (err) => {
+        console.warn('[Host Web] Erro na conexão de ' + pId + ':', err);
+      });
+    }
+
+    function handleHostCall(call) {
+      console.log('[Host Web] Recebendo chamada de vídeo de:', call.peer);
+      const streamToAnswer = localStream || createDummyStream();
+      call.answer(streamToAnswer);
+      activeCalls.push(call);
+      updateViewersCount();
+
+      call.on('close', () => {
+        activeCalls = activeCalls.filter(c => c !== call);
+        updateViewersCount();
+      });
+
+      call.on('error', () => {
+        activeCalls = activeCalls.filter(c => c !== call);
+        updateViewersCount();
+      });
+    }
+
+    function handleViewerIncomingData(data) {
+      if (!data) return;
+      console.log('[Viewer Web] Mensagem da sala:', data);
+
+      if (data.type === 'room-presence' && Array.isArray(data.participants)) {
+        participants = data.participants;
+        syncRoomStreams();
+      } else if (data.type === 'update-name' && data.name && data.peerId) {
+        const p = participants.find(x => x.peerId === data.peerId);
+        if (p) p.name = data.name;
+        const ks = knownStreams[data.peerId];
+        if (ks) ks.name = data.name;
+        renderParticipants();
+        updateMultiStreamGrid();
+      } else if (data.type === 'host-video-started') {
+        console.log('[Viewer Web] Host iniciou vídeo!');
+        isHostLive = true;
+        callHostVideo();
+      } else if (data.type === 'host-video-stopped') {
+        console.log('[Viewer Web] Host pausou vídeo.');
+        isHostLive = false;
+        delete knownStreams[currentRoom];
+        updateMultiStreamGrid();
+        renderParticipants();
+      } else if (data.type === 'room-closed') {
+        disconnectViewer("Sala Encerrada", "O host encerrou esta sala.");
+      } else if (data.type === 'co-streamer-added') {
+        if (data.peerId && data.peerId !== (viewerPeer ? viewerPeer.id : '') && (!ownCoPeer || data.peerId !== ownCoPeer.id)) {
+          callCoStreamer(data.peerId, data.title);
+        }
+      } else if ((data.type === 'streamers-list' || data.type === 'streamer-list') && Array.isArray(data.streamers)) {
+        data.streamers.forEach(s => {
+          const streamId = s.peerId || s.id;
+          if (streamId && streamId !== currentRoom && streamId !== (viewerPeer ? viewerPeer.id : '') && (!ownCoPeer || streamId !== ownCoPeer.id)) {
+            callCoStreamer(streamId, s.title || s.label);
+          }
+        });
+      }
     }
 
     function callHostVideo() {
@@ -2006,7 +2255,7 @@
       reconnectAttempts++;
       reconnectToast.style.display = 'flex';
       reconnectToast.innerText = `🔄 Reconectando à sala... Tentativa ${reconnectAttempts} de 5`;
-      
+
       const delay = Math.min(reconnectAttempts * 1500, 5000);
       reconnectTimer = setTimeout(() => {
         if (!isExplicitExit) {
@@ -2042,15 +2291,16 @@
     }
 
     function callCoStreamer(streamerPeerId, title) {
-      if (!viewerPeer || !streamerPeerId) return;
-      if (streamerPeerId === viewerPeer.id) return;
+      const activePeer = viewerPeer || hostPeer;
+      if (!activePeer || !streamerPeerId) return;
+      if (activePeer && streamerPeerId === activePeer.id) return;
       if (ownCoPeer && streamerPeerId === ownCoPeer.id) return;
       if (knownStreams[streamerPeerId] || pendingCalls[streamerPeerId]) return;
 
       pendingCalls[streamerPeerId] = true;
       console.log('[Viewer Web] Solicitando transmissão do co-streamer:', streamerPeerId, title);
       const dummy = createDummyStream();
-      const call = viewerPeer.call(streamerPeerId, dummy);
+      const call = activePeer.call(streamerPeerId, dummy);
       activeCallsCo[streamerPeerId] = call;
 
       const attachStream = (stream) => {
@@ -2097,23 +2347,24 @@
     }
 
     function syncRoomStreams() {
-      if (!viewerPeer || !currentRoom) return;
+      if (!currentRoom) return;
 
       const host = participants.find(p => p.isHost);
       isHostLive = !!(host && host.isStreaming);
 
-      // 1. Auto-connect to Host if live
-      if (isHostLive && !knownStreams[currentRoom] && !pendingCalls[currentRoom]) {
+      // 1. Conectar ao Host se estiver ao vivo (se este cliente for viewer)
+      if (!isHostRole && isHostLive && !knownStreams[currentRoom] && !pendingCalls[currentRoom]) {
         callHostVideo();
-      } else if (!isHostLive && knownStreams[currentRoom]) {
+      } else if (!isHostRole && !isHostLive && knownStreams[currentRoom]) {
         delete knownStreams[currentRoom];
       }
 
-      // 2. Auto-connect to all active streamers in participants
+      // 2. Conectar a todos os streamers ativos
+      const myId = isHostRole ? (hostPeer ? hostPeer.id : '') : (viewerPeer ? viewerPeer.id : '');
       participants.forEach(p => {
         const sId = p.streamPeerId;
         if (p.isStreaming && sId) {
-          if (sId !== viewerPeer.id && (!ownCoPeer || sId !== ownCoPeer.id)) {
+          if (sId !== myId && (!ownCoPeer || sId !== ownCoPeer.id)) {
             if (!knownStreams[sId] && !pendingCalls[sId]) {
               callCoStreamer(sId, p.streamTitle || p.name);
             }
@@ -2121,10 +2372,10 @@
         }
       });
 
-      // 3. Remove any stream from knownStreams if the participant is no longer streaming
+      // 3. Remover streams inativos
       Object.keys(knownStreams).forEach(streamId => {
         if (streamId === currentRoom) {
-          if (!isHostLive) {
+          if (!isHostLive && !isHostRole) {
             delete knownStreams[streamId];
           }
         } else if (ownCoPeer && streamId === ownCoPeer.id) {
@@ -2166,7 +2417,6 @@
         spotlightStreamId = null;
       }
 
-      // Configure layout class
       grid.className = 'multi-stream-grid';
       if (spotlightStreamId) {
         grid.classList.add('grid-spotlight');
@@ -2177,7 +2427,7 @@
         grid.style.display = 'grid';
       }
 
-      // 1. Remove cards that are no longer active
+      // 1. Remover cards inativos
       const existingCards = grid.querySelectorAll('.stream-card');
       existingCards.forEach(card => {
         const sId = card.getAttribute('data-stream-id');
@@ -2186,7 +2436,7 @@
         }
       });
 
-      // 2. Add or update stream cards
+      // 2. Adicionar ou atualizar stream cards
       streamKeys.forEach(sId => {
         const info = knownStreams[sId];
         let card = document.getElementById('stream-card-' + sId);
@@ -2198,152 +2448,64 @@
           card.setAttribute('data-stream-id', sId);
 
           const isSelf = info.isSelf;
-          const isHost = info.isHost;
-          const tagClass = isSelf ? 'tag-you' : (isHost ? 'tag-host' : '');
-          const tagText = isSelf ? 'VOCÊ' : (isHost ? 'HOST' : 'AO VIVO');
 
           card.innerHTML = `
             <div class="stream-card-header">
-              <div class="stream-card-user">
-                <span class="pulse-dot"></span>
-                <span class="stream-card-name">${escapeHtml(info.name)}</span>
-                <span class="stream-card-tag ${tagClass}">${tagText}</span>
-              </div>
+              <span class="stream-user-name">${escapeHtml(info.name)}</span>
               <div class="stream-card-actions">
                 ${!isSelf ? `
-                  <button class="stream-card-btn mute-btn" id="mute-btn-${sId}" title="Mutar / Desmutar Áudio" onclick="toggleIndividualMute('${sId}', event)">
-                    🔊
+                  <button class="btn-card-action" id="mute-btn-${sId}" onclick="toggleStreamAudio('${sId}')" title="Mutar/Desmutar">
+                    ${info.muted ? '🔇' : '🔊'}
                   </button>
-                  <button class="stream-card-btn pause-stream-btn" id="pause-stream-btn-${sId}" title="Pausar Stream (Economizar Banda)" onclick="toggleStreamPause('${sId}', event)">
-                    ⏸️
-                  </button>
+                  <input 
+                    type="range" 
+                    class="stream-vol-slider" 
+                    id="vol-slider-${sId}" 
+                    min="0" 
+                    max="1" 
+                    step="0.05" 
+                    value="${info.volume ?? 1}"
+                    oninput="setStreamVolume('${sId}', this.value)"
+                    title="Volume Individual"
+                  >
                 ` : ''}
-                <button class="stream-card-btn fit-btn" id="fit-btn-${sId}" title="Ajuste de Tela: Conter / Preencher / Zoom" onclick="cycleStreamFitMode('${sId}', event)">
-                  📐
+                <button class="btn-card-action btn-fit-toggle" id="fit-btn-${sId}" onclick="toggleStreamFit('${sId}')" title="Ajustar Escala">
+                  📏
                 </button>
-                <button class="stream-card-btn spotlight-btn" id="spotlight-btn-${sId}" title="Focar / Expandir Tela" onclick="toggleSpotlightStream('${sId}', event)">
-                  🔍
+                <button class="btn-card-action" onclick="toggleSpotlightStream('${sId}')" title="Focar Tela no Centro">
+                  ${spotlightStreamId === sId ? '🗗' : '🔍'}
                 </button>
-                <button class="stream-card-btn fs-btn" title="Tela Cheia desta Transmissão" onclick="fullscreenStream('${sId}', event)">
+                <button class="btn-card-action" onclick="fullscreenStreamCard('${sId}')" title="Tela Cheia">
                   ⛶
                 </button>
               </div>
             </div>
-
-            <div class="stream-card-video-wrap" onclick="toggleSpotlightStream('${sId}', event)">
-              <video id="stream-video-${sId}" autoplay playsinline></video>
+            <div class="stream-video-wrap" id="video-wrap-${sId}">
+              <video 
+                id="stream-video-${sId}" 
+                autoplay 
+                playsinline 
+                ${isSelf ? 'muted' : ''}
+                onclick="unmuteAllVideos()"
+              ></video>
             </div>
-
-            ${!isSelf ? `
-              <div class="stream-card-vol-control" onclick="event.stopPropagation()">
-                <span id="vol-icon-${sId}" style="font-size: 0.75rem;">🔊</span>
-                <input type="range" min="0" max="2" step="0.05" value="${info.volume ?? 1}" oninput="setIndividualStreamVolume('${sId}', this.value)">
-                <span id="vol-pct-${sId}" style="font-size: 0.7rem; color: #94A3B8; min-width: 34px;">${Math.round((info.volume ?? 1) * 100)}%</span>
-              </div>
-            ` : `
-              <div class="stream-card-self-badge">
-                Sua tela (mutada para você)
-              </div>
-            `}
           `;
-
           grid.appendChild(card);
         }
 
-        // Attach idle mouse tracking to hide overlays when mouse is still
-        if (!card.dataset.idleBound) {
-          card.dataset.idleBound = 'true';
-          const resetCardIdle = () => {
-            card.classList.remove('is-idle');
-            if (cardIdleTimers[sId]) clearTimeout(cardIdleTimers[sId]);
-            cardIdleTimers[sId] = setTimeout(() => {
-              card.classList.add('is-idle');
-            }, 2500);
-          };
-          card.addEventListener('mousemove', resetCardIdle);
-          card.addEventListener('mouseenter', resetCardIdle);
-          card.addEventListener('mouseleave', () => {
-            if (cardIdleTimers[sId]) clearTimeout(cardIdleTimers[sId]);
-            card.classList.add('is-idle');
-          });
-          resetCardIdle();
+        const videoEl = document.getElementById('stream-video-' + sId);
+        if (videoEl && videoEl.srcObject !== info.stream) {
+          videoEl.srcObject = info.stream;
+          videoEl.muted = info.isSelf || !!info.muted;
+          videoEl.volume = info.isSelf ? 0 : Math.min(1, info.volume ?? 1);
+          videoEl.play().catch(() => {});
         }
 
-        // Spotlight state
-        const isSpotlight = (spotlightStreamId === sId);
-        card.classList.toggle('is-spotlight', isSpotlight);
-        const spotBtn = card.querySelector('.spotlight-btn');
-        if (spotBtn) {
-          spotBtn.classList.toggle('active', isSpotlight);
-          spotBtn.innerText = isSpotlight ? '🗗' : '🔍';
-          spotBtn.title = isSpotlight ? 'Voltar para Modo Grade' : 'Focar nesta Tela';
-        }
-
-        // Video playback
-        const videoEl = card.querySelector('video');
-        if (videoEl) {
-          if (videoEl.srcObject !== info.stream) {
-            videoEl.srcObject = info.stream;
-          }
-          if (info.isSelf || currentTheme === 'cinema') {
-            videoEl.muted = true;
-          } else {
-            videoEl.muted = !!info.muted;
-            videoEl.volume = Math.min(1, info.volume ?? 1);
-          }
-          videoEl.play().catch(() => {
-            if (!info.isSelf) {
-              unmuteOverlay.style.display = 'flex';
-            }
-          });
-        }
+        card.classList.toggle('is-spotlight', spotlightStreamId === sId);
       });
-
-      // Manage spotlight thumbnail strip if spotlight is active
-      if (spotlightStreamId && totalStreams > 1) {
-        let strip = document.getElementById('spotlightThumbsStrip');
-        if (!strip) {
-          strip = document.createElement('div');
-          strip.id = 'spotlightThumbsStrip';
-          strip.className = 'spotlight-strip';
-          grid.appendChild(strip);
-        }
-        // Move non-spotlight cards into strip
-        streamKeys.forEach(sId => {
-          const card = document.getElementById('stream-card-' + sId);
-          if (card) {
-            if (sId === spotlightStreamId) {
-              grid.insertBefore(card, strip);
-            } else {
-              strip.appendChild(card);
-            }
-          }
-        });
-      } else {
-        const strip = document.getElementById('spotlightThumbsStrip');
-        if (strip) {
-          const cardsInStrip = strip.querySelectorAll('.stream-card');
-          cardsInStrip.forEach(c => grid.appendChild(c));
-          strip.remove();
-        }
-      }
-
-      // Update Cinema Mode video
-      if (currentTheme === 'cinema' && videoCinema) {
-        const focusKey = spotlightStreamId || streamKeys[0];
-        if (focusKey && knownStreams[focusKey]) {
-          const sObj = knownStreams[focusKey];
-          if (videoCinema.srcObject !== sObj.stream) {
-            videoCinema.srcObject = sObj.stream;
-            videoCinema.muted = sObj.isSelf;
-            videoCinema.play().catch(() => {});
-          }
-        }
-      }
     }
 
-    function toggleSpotlightStream(streamId, ev) {
-      if (ev) ev.stopPropagation();
+    function toggleSpotlightStream(streamId) {
       if (spotlightStreamId === streamId) {
         spotlightStreamId = null;
       } else {
@@ -2353,250 +2515,59 @@
       renderParticipants();
     }
 
-    function toggleIndividualMute(streamId, ev) {
-      if (ev) ev.stopPropagation();
-      const s = knownStreams[streamId];
-      if (!s || s.isSelf) return;
+    function fullscreenStreamCard(streamId) {
+      const card = document.getElementById('stream-card-' + streamId);
+      if (card) {
+        if (!document.fullscreenElement) {
+          card.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    }
 
+    function toggleStreamFit(streamId) {
+      const videoEl = document.getElementById('stream-video-' + streamId);
+      const fitBtn = document.getElementById('fit-btn-' + streamId);
+      if (!videoEl) return;
+
+      const curFit = videoEl.style.objectFit || 'contain';
+      const modes = ['contain', 'cover', 'fill'];
+      const labels = { 'contain': 'Ajustar à Tela (Contain)', 'cover': 'Preencher Tela (Cover)', 'fill': 'Esticar Vídeo (Fill)' };
+      const icons = { 'contain': '📏', 'cover': '🖼️', 'fill': '↔️' };
+
+      const next = modes[(modes.indexOf(curFit) + 1) % modes.length];
+      videoEl.style.objectFit = next;
+      if (fitBtn) fitBtn.innerText = icons[next] || '📏';
+      showFitToast(labels[next] || next);
+    }
+
+    function toggleStreamAudio(streamId) {
+      const s = knownStreams[streamId];
+      if (!s) return;
       s.muted = !s.muted;
       const v = document.getElementById('stream-video-' + streamId);
-      const btn = document.getElementById('mute-btn-' + streamId);
-      const icon = document.getElementById('vol-icon-' + streamId);
-
       if (v) v.muted = s.muted;
-      if (btn) btn.innerText = s.muted ? '🔇' : '🔊';
-      if (icon) icon.innerText = s.muted ? '🔇' : '🔊';
-    }
-
-    let boostNodes = {}; // { [streamId]: { ctx, src, gain } }
-    let cardIdleTimers = {};
-    let cinemaIdleTimer = null;
-
-    const cinemaContainerEl = document.getElementById('viewer-cinema-container');
-    if (cinemaContainerEl) {
-      const resetCinemaIdle = () => {
-        cinemaContainerEl.classList.remove('is-idle');
-        if (cinemaIdleTimer) clearTimeout(cinemaIdleTimer);
-        cinemaIdleTimer = setTimeout(() => {
-          cinemaContainerEl.classList.add('is-idle');
-        }, 2500);
-      };
-      cinemaContainerEl.addEventListener('mousemove', resetCinemaIdle);
-      cinemaContainerEl.addEventListener('mouseenter', resetCinemaIdle);
-      cinemaContainerEl.addEventListener('mouseleave', () => {
-        if (cinemaIdleTimer) clearTimeout(cinemaIdleTimer);
-        cinemaContainerEl.classList.add('is-idle');
-      });
-    }
-
-    function setupIndividualAudioBoost(streamId, vol) {
-      const s = knownStreams[streamId];
-      if (!s || !s.stream || s.stream.getAudioTracks().length === 0) return;
-      if (vol <= 1.0) {
-        removeIndividualAudioBoost(streamId);
-        return;
-      }
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      try {
-        if (!boostNodes[streamId]) {
-          const ctx = new AudioCtx();
-          const src = ctx.createMediaStreamSource(s.stream);
-          const gain = ctx.createGain();
-          src.connect(gain);
-          gain.connect(ctx.destination);
-          boostNodes[streamId] = { ctx, src, gain };
-        }
-        const node = boostNodes[streamId];
-        if (node.ctx.state === 'suspended') node.ctx.resume().catch(() => {});
-        node.gain.gain.value = (vol - 1.0);
-      } catch (e) {
-        console.warn('Audio boost error:', e);
-      }
-    }
-
-    function removeIndividualAudioBoost(streamId) {
-      if (boostNodes[streamId]) {
-        try { boostNodes[streamId].gain.gain.value = 0; } catch {}
-      }
-    }
-
-    function setIndividualStreamVolume(streamId, val) {
-      const s = knownStreams[streamId];
-      if (!s || s.isSelf) return;
-
-      const num = parseFloat(val);
-      s.volume = num;
-      s.muted = (num === 0);
-
-      const v = document.getElementById('stream-video-' + streamId);
-      const pctEl = document.getElementById('vol-pct-' + streamId);
       const btn = document.getElementById('mute-btn-' + streamId);
-      const icon = document.getElementById('vol-icon-' + streamId);
-
-      if (pctEl) {
-        pctEl.innerText = Math.round(num * 100) + '%';
-        if (num > 1.0) {
-          pctEl.style.color = '#A855F7';
-          pctEl.style.fontWeight = 'bold';
-        } else {
-          pctEl.style.color = '#94A3B8';
-          pctEl.style.fontWeight = 'normal';
-        }
-      }
-
-      if (v) {
-        v.muted = s.muted;
-        v.volume = Math.min(1, num);
-      }
-
-      if (num > 1.0) {
-        setupIndividualAudioBoost(streamId, num);
-      } else {
-        removeIndividualAudioBoost(streamId);
-      }
-
-      const isMute = (num === 0 || s.muted);
-      if (icon) icon.innerText = isMute ? '🔇' : (num > 1.0 ? '📢' : '🔊');
-      if (btn) btn.innerText = isMute ? '🔇' : '🔊';
+      if (btn) btn.innerText = s.muted ? '🔇' : '🔊';
     }
 
-    // Stream Fit Modes (contain, fill, cover)
-    let streamFitModes = {};
-
-    function cycleStreamFitMode(streamId, ev) {
-      if (ev) ev.stopPropagation();
-      const current = streamFitModes[streamId] || 'contain';
-      const next = (current === 'contain') ? 'fill' : (current === 'fill' ? 'cover' : 'contain');
-      streamFitModes[streamId] = next;
-
-      const v = document.getElementById('stream-video-' + streamId);
-      if (v) {
-        v.style.objectFit = next;
-      }
-      if (videoCinema && (spotlightStreamId === streamId || !spotlightStreamId)) {
-        videoCinema.style.objectFit = next;
-      }
-
-      const btn = document.getElementById('fit-btn-' + streamId);
-      if (btn) {
-        const labels = {
-          contain: '📐 Ajuste: Conter (16:9)',
-          fill: '📐 Ajuste: Preencher (Esticar)',
-          cover: '📐 Ajuste: Zoom (Sem barras)'
-        };
-        btn.title = labels[next];
-      }
-      const toastLabels = {
-        contain: '📐 Modo: Conter (16:9 completo)',
-        fill: '📐 Modo: Preencher (Esticar tela)',
-        cover: '📐 Modo: Zoom (Sem barras pretas)'
-      };
-      showFitToast(toastLabels[next]);
-    }
-
-    function showFitToast(msg) {
-      const t = document.getElementById('fitToast');
-      if (!t) return;
-      t.innerText = msg;
-      t.style.display = 'flex';
-      setTimeout(() => { t.style.display = 'none'; }, 2200);
-    }
-
-    // Stream Ignore / Pause (Economizar Banda)
-    let streamPaused = {};
-
-    function toggleStreamPause(streamId, ev) {
-      if (ev) ev.stopPropagation();
-      const isPaused = !streamPaused[streamId];
-      streamPaused[streamId] = isPaused;
-
+    function setStreamVolume(streamId, val) {
       const s = knownStreams[streamId];
+      if (!s) return;
+      s.volume = parseFloat(val);
       const v = document.getElementById('stream-video-' + streamId);
-      const btn = document.getElementById('pause-stream-btn-' + streamId);
-      let overlay = document.getElementById('paused-overlay-' + streamId);
-
-      if (s && s.stream) {
-        s.stream.getVideoTracks().forEach(t => { t.enabled = !isPaused; });
+      if (v) {
+        v.volume = Math.min(1, s.volume);
+        v.muted = s.volume === 0;
       }
-
-      if (isPaused) {
-        if (v) v.pause();
-        if (btn) {
-          btn.innerText = '▶️';
-          btn.title = 'Retomar esta transmissão';
-        }
-        if (!overlay) {
-          overlay = document.createElement('div');
-          overlay.id = 'paused-overlay-' + streamId;
-          overlay.className = 'stream-paused-overlay';
-          overlay.innerHTML = `
-            <div style="font-size: 2.2rem; margin-bottom: 8px;">⏸️</div>
-            <div style="font-weight: 700; color: #FFF; font-size: 1rem;">Transmissão Pausada</div>
-            <div style="font-size: 0.8rem; color: #94A3B8; margin-top: 4px; text-align: center; max-width: 220px;">Economizando banda e processamento</div>
-            <button class="btn-primary" style="margin-top: 14px; padding: 7px 18px; font-size: 0.82rem; width: auto; background: linear-gradient(135deg, #10B981, #059669);" onclick="toggleStreamPause('${streamId}', event)">▶️ Retomar Stream</button>
-          `;
-          const wrap = document.querySelector('#stream-card-' + streamId + ' .stream-card-video-wrap');
-          if (wrap) wrap.appendChild(overlay);
-        } else {
-          overlay.style.display = 'flex';
-        }
-      } else {
-        if (v) v.play().catch(() => {});
-        if (btn) {
-          btn.innerText = '⏸️';
-          btn.title = 'Pausar esta transmissão (Economizar Banda)';
-        }
-        if (overlay) overlay.style.display = 'none';
-      }
-    }
-
-    // Alterar Nome de Exibição em Tempo Real
-    function promptChangeDisplayName() {
-      const current = localStorage.getItem('xennex_display_name') || 'Jogador';
-      const entered = prompt('Digite seu novo nome na sala:', current);
-      if (entered && entered.trim()) {
-        const clean = entered.trim().slice(0, 24);
-        localStorage.setItem('xennex_display_name', clean);
-        const nameInput = document.getElementById('displayNameInput');
-        if (nameInput) nameInput.value = clean;
-
-        if (viewerPeer) {
-          const myId = viewerPeer.id;
-          const selfP = participants.find(p => p.peerId === myId);
-          if (selfP) selfP.name = clean;
-          renderParticipants();
-
-          if (currentDataConn && currentDataConn.open) {
-            currentDataConn.send({
-              type: 'update-name',
-              name: clean,
-              peerId: myId
-            });
-          }
-        }
-        showFitToast('Nome alterado para: ' + clean);
-      }
-    }
-
-    function fullscreenStream(streamId, ev) {
-      if (ev) ev.stopPropagation();
-      const card = document.getElementById('stream-card-' + streamId);
-      if (!card) return;
-      if (!document.fullscreenElement) {
-        if (card.requestFullscreen) card.requestFullscreen().catch(() => {});
-        else if (card.webkitRequestFullscreen) card.webkitRequestFullscreen();
-      } else {
-        document.exitFullscreen().catch(() => {});
-      }
+      const btn = document.getElementById('mute-btn-' + streamId);
+      if (btn) btn.innerText = s.volume === 0 ? '🔇' : '🔊';
     }
 
     function watchParticipantById(targetStreamId) {
-      if (spotlightStreamId === targetStreamId) {
-        spotlightStreamId = null;
-      } else {
-        spotlightStreamId = targetStreamId;
-      }
+      if (!targetStreamId) return;
+      spotlightStreamId = (spotlightStreamId === targetStreamId) ? null : targetStreamId;
 
       if (!knownStreams[targetStreamId]) {
         const p = participants.find(x => (x.streamPeerId || x.peerId) === targetStreamId);
@@ -2613,27 +2584,30 @@
       if (!participantsList) return;
 
       let effectiveList = [...participants];
-      if (viewerPeer) {
-        const myId = viewerPeer.id;
-        const selfInList = effectiveList.find(p => p.peerId === myId);
+      const myPeerId = isHostRole ? (hostPeer ? hostPeer.id : '') : (viewerPeer ? viewerPeer.id : '');
+
+      if (myPeerId) {
+        const selfInList = effectiveList.find(p => p.peerId === myPeerId);
         if (!selfInList) {
           effectiveList.push({
-            peerId: myId,
-            name: isSharingOwnScreen ? 'Você (Transmissor)' : 'Você',
-            isHost: false,
+            peerId: myPeerId,
+            name: isHostRole ? (localStorage.getItem('xennex_display_name') || 'Anfitrião') : (isSharingOwnScreen ? 'Você (Transmissor)' : (localStorage.getItem('xennex_display_name') || 'Você')),
+            isHost: isHostRole,
             isStreaming: isSharingOwnScreen,
-            streamPeerId: ownCoPeer ? ownCoPeer.id : '',
+            streamPeerId: ownCoPeer ? ownCoPeer.id : (isHostRole && isSharingOwnScreen ? myPeerId : ''),
             streamTitle: 'Sua Tela'
           });
-        } else if (isSharingOwnScreen) {
-          selfInList.isStreaming = true;
-          selfInList.streamPeerId = ownCoPeer ? ownCoPeer.id : selfInList.streamPeerId;
+        } else {
+          selfInList.isStreaming = isSharingOwnScreen;
+          if (isSharingOwnScreen && ownCoPeer) {
+            selfInList.streamPeerId = ownCoPeer.id;
+          }
         }
       }
 
       if (effectiveList.length === 0) {
         effectiveList = [
-          { peerId: currentRoom, name: 'Host da Sala', isHost: true, isStreaming: isHostLive, streamTitle: 'Transmissão Principal' }
+          { peerId: currentRoom, name: isHostRole ? 'Você (Anfitrião)' : 'Host da Sala', isHost: true, isStreaming: isHostLive, streamTitle: 'Transmissão Principal' }
         ];
       }
 
@@ -2644,7 +2618,7 @@
       participantsList.innerHTML = effectiveList.map(p => {
         const targetId = p.streamPeerId || p.peerId;
         const isStreaming = p.isStreaming || (p.isHost && isHostLive);
-        const isSelf = (viewerPeer && p.peerId === viewerPeer.id) || (ownCoPeer && targetId === ownCoPeer.id);
+        const isSelf = (myPeerId && p.peerId === myPeerId) || (ownCoPeer && targetId === ownCoPeer.id);
         const isFocused = (spotlightStreamId === targetId);
         const initial = (p.name || 'M').charAt(0).toUpperCase();
 
@@ -2666,8 +2640,8 @@
                   <div class="online-dot"></div>
                 </div>
                 <div class="participant-name-col">
-                  <span class="participant-name">${p.name || 'Participante'}</span>
-                  <span class="participant-role">${p.isHost ? 'Host da Sala' : (isSelf ? 'Você' : 'Membro')}</span>
+                  <span class="participant-name">${escapeHtml(p.name || 'Participante')}</span>
+                  <span class="participant-role">${p.isHost ? (isSelf ? 'Anfitrião (Você)' : 'Anfitrião da Sala') : (isSelf ? 'Você' : 'Membro')}</span>
                 </div>
               </div>
               ${isStreaming ? '<div class="live-indicator"><span class="pulse-dot"></span> AO VIVO</div>' : ''}
@@ -2684,6 +2658,73 @@
           </div>
         `;
       }).join('');
+    }
+
+    function showFitToast(msg) {
+      const t = document.getElementById('fitToast');
+      if (t) {
+        t.innerText = msg;
+        t.style.display = 'flex';
+        t.style.animation = 'none';
+        t.offsetHeight; // trigger reflow
+        t.style.animation = 'fadeInOut 2.5s forwards';
+        setTimeout(() => { t.style.display = 'none'; }, 2600);
+      }
+    }
+
+    function promptChangeDisplayName() {
+      const currentStored = localStorage.getItem('xennex_display_name') || '';
+      const defaultVal = (currentStored.startsWith('Participante (') || currentStored.startsWith('Espectador (')) ? '' : currentStored;
+      const promptVal = prompt("Digite seu nome de exibição na sala:", defaultVal);
+      if (promptVal === null) return;
+      const clean = promptVal.trim();
+      if (!clean) return;
+
+      localStorage.setItem('xennex_display_name', clean);
+      const nameInput = document.getElementById('displayNameInput');
+      if (nameInput) nameInput.value = clean;
+
+      const myPeerId = isHostRole ? (hostPeer ? hostPeer.id : '') : (viewerPeer ? viewerPeer.id : '');
+
+      if (isHostRole) {
+        if (hostParticipants.length > 0) {
+          hostParticipants[0].name = clean;
+        }
+        participants = hostParticipants;
+        if (knownStreams[myPeerId]) {
+          knownStreams[myPeerId].name = 'Sua Tela (' + clean + ')';
+        }
+        renderParticipants();
+        updateMultiStreamGrid();
+
+        const payload = { type: 'room-presence', participants: hostParticipants };
+        Object.values(hostDataConnections).forEach(c => {
+          if (c.open) {
+            c.send(payload);
+          }
+        });
+      } else {
+        const selfP = participants.find(p => p.peerId === myPeerId);
+        if (selfP) selfP.name = clean;
+        if (knownStreams[myPeerId]) {
+          knownStreams[myPeerId].name = 'Sua Tela (' + clean + ')';
+        }
+        if (ownCoPeer && knownStreams[ownCoPeer.id]) {
+          knownStreams[ownCoPeer.id].name = 'Sua Tela (' + clean + ')';
+        }
+        renderParticipants();
+        updateMultiStreamGrid();
+
+        if (currentDataConn && currentDataConn.open && viewerPeer) {
+          currentDataConn.send({
+            type: 'update-name',
+            peerId: viewerPeer.id,
+            name: clean
+          });
+        }
+      }
+
+      showFitToast('Nome alterado para: ' + clean);
     }
 
     async function toggleViewerScreenShare() {
@@ -2710,7 +2751,65 @@
           stopViewerScreenShare();
         };
 
-        const coId = currentRoom + '_webco_' + Math.floor(1000 + Math.random() * 9000);
+        if (isHostRole && hostPeer) {
+          // O próprio Anfitrião está transmitindo
+          localStream = stream;
+          isHostLive = true;
+          isSharingOwnScreen = true;
+
+          const myId = hostPeer.id;
+          knownStreams[myId] = {
+            stream: ownStream,
+            name: 'Sua Tela (Você)',
+            isHost: true,
+            isSelf: true,
+            volume: 0,
+            muted: true
+          };
+
+          if (hostParticipants.length > 0) {
+            hostParticipants[0].isStreaming = true;
+            hostParticipants[0].streamTitle = 'Sua Tela';
+          }
+          participants = hostParticipants;
+
+          const btn = document.getElementById('btnHubShare');
+          if (btn) {
+            btn.innerText = '⏹ Parar Compartilhamento';
+            btn.classList.add('is-active');
+          }
+          const topBtn = document.getElementById('tabBtnBroadcast');
+          if (topBtn) {
+            topBtn.innerHTML = '⏹ Parar Tela';
+            topBtn.classList.add('active');
+          }
+
+          updateMultiStreamGrid();
+          renderParticipants();
+
+          const payload = { type: 'room-presence', participants: hostParticipants };
+          Object.values(hostDataConnections).forEach(c => {
+            if (c.open) {
+              c.send({ type: 'host-video-started' });
+              c.send(payload);
+            }
+          });
+
+          const newTrack = stream.getVideoTracks()[0];
+          activeCalls.forEach(call => {
+            if (call.peerConnection) {
+              const senders = call.peerConnection.getSenders();
+              const vSender = senders.find(s => s.track && s.track.kind === 'video');
+              if (vSender && newTrack) {
+                vSender.replaceTrack(newTrack).catch(() => {});
+              }
+            }
+          });
+          return;
+        }
+
+        // Participante normal transmitindo
+        const coId = currentRoom + '_co_' + Math.floor(1000 + Math.random() * 9000);
         console.log('[Viewer Web] Criando Peer para compartilhamento de tela:', coId);
 
         ownCoPeer = new Peer(coId, {
@@ -2734,7 +2833,6 @@
             topBtn.classList.add('active');
           }
 
-          // Armazenar o stream próprio localmente e exibir no grid imediatamente
           knownStreams[id] = {
             stream: ownStream,
             name: 'Sua Tela (Você)',
@@ -2744,7 +2842,6 @@
             muted: true
           };
 
-          // Atualizar participante próprio na lista local
           const myId = viewerPeer ? viewerPeer.id : 'web_' + id;
           const existing = participants.find(p => p.peerId === myId);
           if (existing) {
@@ -2766,16 +2863,17 @@
           renderParticipants();
 
           if (currentDataConn && currentDataConn.open && viewerPeer) {
+            const myName = localStorage.getItem('xennex_display_name') || 'Participante';
             currentDataConn.send({
               type: 'start-sharing',
               peerId: viewerPeer.id,
               streamPeerId: id,
-              streamTitle: 'Tela de ' + (viewerPeer.id ? viewerPeer.id.slice(-4) : 'Web')
+              streamTitle: 'Tela de ' + myName
             });
             currentDataConn.send({
               type: 'register-co-streamer',
               peerId: id,
-              title: 'Tela Web Espectador'
+              title: 'Tela de ' + myName
             });
           }
         });
@@ -2799,6 +2897,42 @@
         ownStream.getTracks().forEach(t => t.stop());
         ownStream = null;
       }
+
+      if (isHostRole && hostPeer) {
+        isSharingOwnScreen = false;
+        isHostLive = false;
+        localStream = null;
+        delete knownStreams[hostPeer.id];
+        if (hostParticipants.length > 0) {
+          hostParticipants[0].isStreaming = false;
+          hostParticipants[0].streamTitle = '';
+        }
+        participants = hostParticipants;
+
+        const btn = document.getElementById('btnHubShare');
+        if (btn) {
+          btn.innerText = '📡 Transmitir Minha Tela';
+          btn.classList.remove('is-active');
+        }
+        const topBtn = document.getElementById('tabBtnBroadcast');
+        if (topBtn) {
+          topBtn.innerHTML = '📡 Transmitir Minha Tela';
+          topBtn.classList.remove('active');
+        }
+
+        updateMultiStreamGrid();
+        renderParticipants();
+
+        const payload = { type: 'room-presence', participants: hostParticipants };
+        Object.values(hostDataConnections).forEach(c => {
+          if (c.open) {
+            c.send({ type: 'host-video-stopped' });
+            c.send(payload);
+          }
+        });
+        return;
+      }
+
       if (ownCoPeer) {
         const id = ownCoPeer.id;
         delete knownStreams[id];
@@ -2868,7 +3002,6 @@
           if (v) v.muted = true;
         });
       } else {
-        // Hub mode: ensure videoCinema is muted so audio never plays twice
         if (videoCinema) {
           videoCinema.muted = true;
           videoCinema.pause();
@@ -2918,12 +3051,16 @@
       disconnectViewer("Transmissão Finalizada", "Você saiu da sala.");
     }
 
-    function disconnectViewer(title = "Assistir Transmissão", desc = "Digite o código da sala gerado pelo host para assistir à tela.") {
-      stopViewerScreenShare();
+    function cleanupActiveConnections() {
+      if (hostConnectTimeout) {
+        clearTimeout(hostConnectTimeout);
+        hostConnectTimeout = null;
+      }
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
+      stopViewerScreenShare();
       if (currentCall) {
         try { currentCall.close(); } catch {}
         currentCall = null;
@@ -2938,15 +3075,30 @@
         try { currentDataConn.close(); } catch {}
         currentDataConn = null;
       }
-      if (viewerPeer) {
+      if (viewerPeer && !viewerPeer.destroyed) {
         try { viewerPeer.destroy(); } catch {}
         viewerPeer = null;
       }
+      if (hostPeer && !hostPeer.destroyed) {
+        try { hostPeer.destroy(); } catch {}
+        hostPeer = null;
+      }
+      Object.values(hostDataConnections).forEach(conn => {
+        try { conn.close(); } catch {}
+      });
+      hostDataConnections = {};
+      activeCalls = [];
       activeStream = null;
       activeStreamerId = null;
       spotlightStreamId = null;
       knownStreams = {};
       participants = [];
+      hostParticipants = [];
+      isHostRole = false;
+    }
+
+    function disconnectViewer(title = "Assistir Transmissão", desc = "Digite o código da sala para entrar e assistir à tela.") {
+      cleanupActiveConnections();
 
       const grid = document.getElementById('multiStreamGrid');
       if (grid) grid.innerHTML = '';
@@ -2964,13 +3116,6 @@
     // ==========================================
     // 📡 TRANSMITIR (BROADCAST MODE)
     // ==========================================
-    let hostPeer = null;
-    let localStream = null;
-    let activeCalls = [];
-    let hostDataConnections = {};
-    let hostParticipants = [];
-    let uptimeInterval = null;
-    let uptimeSeconds = 0;
 
     const broadcastSetupCard = document.getElementById('broadcastSetupCard');
     const broadcastActiveContainer = document.getElementById('broadcast-active-container');
@@ -3089,17 +3234,21 @@
         previewVideo.srcObject = stream;
         previewVideo.play().catch(() => {});
 
-        const generatedRoom = 'XNX-' + Math.floor(1000 + Math.random() * 9000);
-        activeRoomCode.innerText = generatedRoom;
+        const customBroadcastRoom = (document.getElementById('broadcastRoomInput')?.value || '').trim().toUpperCase() ||
+                                   (currentRoom ? currentRoom : '') ||
+                                   (initialRoom ? initialRoom.toUpperCase() : '');
 
-        const directUrl = window.location.origin + window.location.pathname + '?room=' + generatedRoom;
+        const chosenRoom = customBroadcastRoom ? toPeerRoomId(customBroadcastRoom) : ('XNX-' + Math.floor(1000 + Math.random() * 9000));
+        activeRoomCode.innerText = chosenRoom;
+
+        const directUrl = window.location.origin + window.location.pathname + '?room=' + encodeURIComponent(chosenRoom.toLowerCase());
         shareUrlText.innerText = directUrl;
 
         hostParticipants = [
-          { peerId: generatedRoom, name: 'Host (Você)', isHost: true, isStreaming: true, streamTitle: 'Transmissão Principal' }
+          { peerId: chosenRoom, name: 'Host (Você)', isHost: true, isStreaming: true, streamTitle: 'Transmissão Principal' }
         ];
 
-        hostPeer = new Peer(generatedRoom, {
+        hostPeer = new Peer(chosenRoom, {
           config: {
             iceServers: ICE_SERVERS
           }
@@ -3116,104 +3265,23 @@
           try { hostPeer.reconnect(); } catch {}
         });
 
-        // Answer Calls
         hostPeer.on('call', (call) => {
-          call.answer(localStream);
-          activeCalls.push(call);
-          updateViewersCount();
-
-          call.on('close', () => {
-            activeCalls = activeCalls.filter(c => c !== call);
-            updateViewersCount();
-          });
-
-          call.on('error', () => {
-            activeCalls = activeCalls.filter(c => c !== call);
-            updateViewersCount();
-          });
+          handleHostCall(call);
         });
 
-        // Data Connections
         hostPeer.on('connection', (conn) => {
-          const pId = conn.peer;
-          hostDataConnections[pId] = conn;
+          handleHostConnection(conn);
+        });
 
-          const broadcastPresence = () => {
-            const payload = { type: 'room-presence', participants: hostParticipants };
-            Object.values(hostDataConnections).forEach(c => {
-              if (c.open) c.send(payload);
-            });
-          };
-
-          const handleConnData = (data) => {
-            if (!data) return;
-            if (data.type === 'join-room') {
-              const name = data.name || ('Espectador (' + pId.slice(-4) + ')');
-              if (!hostParticipants.some(p => p.peerId === pId)) {
-                hostParticipants.push({
-                  peerId: pId,
-                  name: name,
-                  isHost: false,
-                  isStreaming: !!data.isStreaming,
-                  streamTitle: data.streamTitle || '',
-                  streamPeerId: data.streamPeerId || ''
-                });
-              }
-              broadcastPresence();
-              // Send streamers-list to new joiner
-              const coStreamers = hostParticipants.filter(p => !p.isHost && p.isStreaming && p.streamPeerId);
-              if (coStreamers.length > 0 && conn.open) {
-                conn.send({
-                  type: 'streamers-list',
-                  streamers: coStreamers.map(p => ({ peerId: p.streamPeerId, title: p.streamTitle || p.name }))
-                });
-              }
-            } else if (data.type === 'get-presence') {
-              if (conn.open) {
-                conn.send({ type: 'room-presence', participants: hostParticipants });
-                const coStreamers = hostParticipants.filter(p => !p.isHost && p.isStreaming && p.streamPeerId);
-                if (coStreamers.length > 0) {
-                  conn.send({
-                    type: 'streamers-list',
-                    streamers: coStreamers.map(p => ({ peerId: p.streamPeerId, title: p.streamTitle || p.name }))
-                  });
-                }
-              }
-            } else if (data.type === 'start-sharing') {
-              const p = hostParticipants.find(x => x.peerId === pId);
-              if (p) {
-                p.isStreaming = true;
-                p.streamPeerId = data.streamPeerId;
-                p.streamTitle = data.streamTitle || ('Tela de ' + p.name);
-              }
-              broadcastPresence();
-              Object.values(hostDataConnections).forEach(c => {
-                if (c.open && c.peer !== pId) {
-                  c.send({ type: 'co-streamer-added', peerId: data.streamPeerId, title: data.streamTitle });
-                }
-              });
-            } else if (data.type === 'register-co-streamer') {
-              Object.values(hostDataConnections).forEach(c => {
-                if (c.open && c.peer !== pId) {
-                  c.send({ type: 'co-streamer-added', peerId: data.peerId, title: data.title });
-                }
-              });
-            } else if (data.type === 'stop-sharing') {
-              const p = hostParticipants.find(x => x.peerId === pId);
-              if (p) {
-                p.isStreaming = false;
-                p.streamPeerId = '';
-              }
-              broadcastPresence();
-            }
-          };
-
-          conn.on('data', handleConnData);
-          conn.on('close', () => {
-            delete hostDataConnections[pId];
-            hostParticipants = hostParticipants.filter(p => p.peerId !== pId);
-            broadcastPresence();
-          });
+        hostPeer.on('error', (err) => {
+          console.warn('[Host Web] Erro no Host Broadcaster:', err);
+          if (err.type === 'unavailable-id') {
+            alert('A sala ' + chosenRoom + ' já possui outro Host ativo! Conectando você como participante com compartilhamento de tela...');
+            stopBroadcasting();
+            switchTab('watch');
+            if (roomInput) roomInput.value = chosenRoom;
+            startWatch();
+          }
         });
 
       } catch (err) {
@@ -3292,6 +3360,36 @@
         btn.innerText = '✓ Copiado!';
         setTimeout(() => { btn.innerText = '🔗 Copiar Link'; }, 2000);
       });
+    }
+
+    // ==========================================
+    // 🚀 BOOT INITIALIZATION (Full DOM & Code Ready)
+    // ==========================================
+    const storedLastRoom = localStorage.getItem('xennex_last_room') || '';
+    const storedName = localStorage.getItem('xennex_display_name') || '';
+    const nameInputInit = document.getElementById('displayNameInput');
+    if (nameInputInit && storedName && !storedName.startsWith('Participante (') && !storedName.startsWith('Espectador (')) {
+      nameInputInit.value = storedName;
+    }
+
+    if (initialRoom) {
+      if (roomInput) roomInput.value = initialRoom.toUpperCase();
+      localStorage.setItem('xennex_last_room', initialRoom.toUpperCase());
+      switchTab('watch');
+
+      const isDefaultOrEmpty = !storedName || storedName.startsWith('Participante (') || storedName.startsWith('Espectador (');
+      if (!isDefaultOrEmpty) {
+        startWatch();
+      } else {
+        document.getElementById('watchStatusTitle').innerText = "Entrar na Sala " + initialRoom.toUpperCase();
+        document.getElementById('watchStatusDesc').innerText = "Digite seu nome abaixo e clique em Conectar para entrar com seus amigos.";
+        if (nameInputInit) {
+          nameInputInit.value = '';
+          setTimeout(() => nameInputInit.focus(), 150);
+        }
+      }
+    } else if (storedLastRoom && roomInput) {
+      roomInput.value = storedLastRoom;
     }
   </script>
   <div class="fit-toast" id="fitToast"></div>

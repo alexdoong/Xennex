@@ -76,8 +76,7 @@ const FPS_OPTIONS: FpsOption[] = [
 export const toPeerRoomId = (roomId: string): string => {
   const clean = (roomId || '').trim().toUpperCase();
   if (!clean) return '';
-  if (clean.startsWith('XNX-')) return clean;
-  return `XNX-${clean}`;
+  return clean;
 };
 
 const StreamTab: React.FC = () => {

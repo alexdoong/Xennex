@@ -11,8 +11,7 @@ import type { DataConnection } from 'peerjs';
 export const toPeerRoomId = (roomId: string): string => {
   const clean = (roomId || '').trim().toUpperCase();
   if (!clean) return '';
-  if (clean.startsWith('XNX-')) return clean;
-  return `XNX-${clean}`;
+  return clean;
 };
 
 export const ICE_SERVERS = [
