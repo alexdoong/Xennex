@@ -73,6 +73,12 @@ O **Xennex** é um aplicativo de ambiente pessoal (HUD overlay) projetado para j
 
 ## 🛠️ Como Compilar o Projeto
 
+Para compilar e abrir o código atual em desenvolvimento, execute
+`powershell -ExecutionPolicy Bypass -File scripts/run_dev.ps1`.
+Veja o [mapa da arquitetura](docs/AGENT_CONTEXT.md), as
+[regras de codagem](docs/CODING_RULES.md) e o [roteiro de testes](docs/TESTING.md).
+
+
 Se você deseja contribuir ou compilar a partir do código-fonte:
 
 ```bash

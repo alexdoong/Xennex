@@ -1,32 +1,32 @@
-# React + TypeScript + Vite
+# Interface do Xennex
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + TypeScript em modo estrito, compilado pelo Vite para `../wwwroot/`.
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+npm ci
+npm run dev
+npm run build
+npm run build:web
+npm test
+npm run lint
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+O navegador de desenvolvimento não fornece a ponte nativa do WebView2. Para
+validar os recursos Windows, use `../scripts/run_dev.ps1` a partir do projeto.
+
+- `src/features/`: funcionalidades e suas abas.
+- `src/layout/`: navegação e moldura do aplicativo.
+- `src/hooks/`: estado compartilhado e comportamentos reutilizáveis.
+- `src/components/`: componentes comuns.
+- `src/styles/`: módulos CSS, na ordem de `src/index.css`.
+- `src/webview.d.ts`: contrato nativo e modelos compartilhados.
+- `watch.html`: visualizador web independente.
+
+O build preserva o conteúdo de `wwwroot/` para não apagar skins locais.
+O empacotador aplica a filtragem para a distribuição.
+
+Consulte [as regras de codagem](../docs/CODING_RULES.md),
+[o contexto](../docs/AGENT_CONTEXT.md) e [o roteiro de testes](../docs/TESTING.md).
+
+O app e a página web compartilham `src/features/stream/`. O build web sai em
+`cloudflare_pages/dist/`. Veja [STREAMING.md](../docs/STREAMING.md).

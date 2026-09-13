@@ -31,7 +31,7 @@ Garantir que qualquer pacote distribuído funcione de primeira ("out-of-the-box"
 - **Proibição Absoluta de Cópia Cega:** A pasta `Data/` do pacote de distribuição NUNCA deve copiar arquivos indiscriminadamente do diretório local de desenvolvimento.
 - **Whitelist Permitida:** Somente arquivos explicitamente aprovados podem entrar em `Data/`:
   - `config.txt` (gerado do zero com caminhos limpos/neutros).
-  - Modelos públicos: `gestures.json`, `swipe_config.json`, `team_config.txt`.
+  - Modelos públicos: `gestures.json`, `swipe_config.json`, `team_config.txt`, obtidos somente de `assets/defaults/` (opcionais).
 - **Bloqueio Obrigatório:** Arquivos como `wuwa_build.txt`, dados de conta, logs (`*.log`, `*_log.txt`, `*.txt` que contenham logs) e tokens jamais podem entrar no pacote.
 
 ### 5. Preservação de Dados do Usuário na Atualização

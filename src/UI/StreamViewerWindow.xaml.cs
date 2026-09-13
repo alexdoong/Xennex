@@ -14,6 +14,7 @@ namespace Xennex.UI
         private readonly StreamService _streamService;
         private readonly object _apiBridge;
         private bool _isPinned = false;
+        private string _captureOwner;
 
         public StreamViewerWindow(string roomId, string title, StreamService streamService, object apiBridge = null)
         {
@@ -28,6 +29,10 @@ namespace Xennex.UI
             this.Title = $"Xennex: {_title}";
 
             this.Loaded += StreamViewerWindow_Loaded;
+            this.Closed += (s, e) => {
+                if (_apiBridge is Xennex.Interop.ApiBridge bridge && _captureOwner != null) bridge.EndCapture(_captureOwner);
+                webView.Dispose();
+            };
         }
 
         private async void StreamViewerWindow_Loaded(object sender, RoutedEventArgs e)
@@ -67,6 +72,11 @@ namespace Xennex.UI
                     {
                         ev.State = CoreWebView2PermissionState.Allow;
                     }
+                };
+
+                webView.CoreWebView2.WebMessageReceived += (s, args) => {
+                    string message = args.TryGetWebMessageAsString();
+                    if (message != null && message.StartsWith("capture-owner:")) _captureOwner = message.Substring("capture-owner:".Length);
                 };
 
                 string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;

@@ -1,3 +1,4 @@
+using Xennex.Models;
 using System.Reflection;
 using System;
 using System.Diagnostics;
@@ -10,20 +11,6 @@ using System.Windows;
 
 namespace Xennex.Services
 {
-    public class UpdateCheckResult
-    {
-        public bool Success { get; set; }
-        public bool HasUpdate { get; set; }
-        public string CurrentVersion { get; set; } = UpdateService.CurrentVersion;
-        public string LatestVersion { get; set; } = "";
-        public string ReleaseTitle { get; set; } = "";
-        public string ReleaseNotes { get; set; } = "";
-        public string HtmlUrl { get; set; } = "";
-        public string DownloadUrl { get; set; } = "";
-        public long AssetSize { get; set; }
-        public string ErrorMessage { get; set; } = "";
-    }
-
     public class UpdateService
     {
         public static string CurrentVersion
@@ -46,8 +33,8 @@ namespace Xennex.Services
                         return $"v{v.Major}.{v.Minor}.{v.Build}";
                     }
                 }
-                catch { }
-                return "v0.2.2";
+                catch (Exception ex) { AppLog.Error("Version", ex); }
+                return "unknown";
             }
         }
         private const string RepoOwner = "alexdoong";
@@ -161,7 +148,7 @@ namespace Xennex.Services
                 if (string.IsNullOrEmpty(ext)) ext = ".zip";
 
                 string updatePackagePath = Path.Combine(tempDir, $"Xennex_Update_{Guid.NewGuid():N}{ext}");
-                string updaterScriptPath = Path.Combine(tempDir, "xennex_updater.ps1");
+                string updaterScriptPath = Path.Combine(tempDir, $"xennex_updater_{Guid.NewGuid():N}.ps1");
 
                 // Download streaming direto para o disco para economizar RAM
                 using (var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead))
@@ -177,87 +164,12 @@ namespace Xennex.Services
                 int currentPid = Process.GetCurrentProcess().Id;
 
                 // Script PowerShell seguro que aguarda o encerramento do processo e protege configs e skins
-                string scriptContent = @"param(
-    [int]$TargetPid,
-    [string]$UpdateFile,
-    [string]$AppDir,
-    [string]$ExePath
-)
-
-$ErrorActionPreference = 'Continue'
-
-# 1. Aguardar o encerramento suave do Xennex
-if ($TargetPid -gt 0) {
-    try {
-        Wait-Process -Id $TargetPid -Timeout 15 -ErrorAction SilentlyContinue
-    } catch {}
-}
-Start-Sleep -Seconds 1
-
-# 2. Garantir que nao haja processos filhos residuais bloqueando os arquivos
-$attempts = 0
-while ((Get-Process Xennex -ErrorAction SilentlyContinue) -and $attempts -lt 10) {
-    Start-Sleep -Milliseconds 500
-    $attempts++
-}
-
-if ($UpdateFile.EndsWith('.zip', [System.StringComparison]::OrdinalIgnoreCase)) {
-    $extractDir = Join-Path $env:TEMP ('Xennex_Extract_' + [System.Guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-
-    try {
-        Expand-Archive -Path $UpdateFile -DestinationPath $extractDir -Force
-
-        # Se o zip tiver uma subpasta unica (ex: Xennex-v0.2.2-win64), detectar
-        $items = Get-ChildItem -Path $extractDir
-        $sourceDir = $extractDir
-        if ($items.Count -eq 1 -and $items[0].PSIsContainer -and (Test-Path (Join-Path $items[0].FullName 'Xennex.exe'))) {
-            $sourceDir = $items[0].FullName
-        }
-
-        # Copiar arquivos atualizando o app, mas preservando Data/config.txt e skins customizadas do usuario
-        Get-ChildItem -Path $sourceDir | ForEach-Object {
-            $dest = Join-Path $AppDir $_.Name
-            if ($_.PSIsContainer -and $_.Name -eq 'Data') {
-                New-Item -ItemType Directory -Path $dest -Force | Out-Null
-                Get-ChildItem -Path $_.FullName | ForEach-Object {
-                    $fileDest = Join-Path $dest $_.Name
-                    if (-not (Test-Path $fileDest)) {
-                        Copy-Item $_.FullName $fileDest -Force
-                    }
+                string scriptContent;
+                using (var resource = typeof(UpdateService).Assembly.GetManifestResourceStream("Xennex.InstallUpdate.ps1"))
+                {
+                    if (resource == null) throw new InvalidOperationException("Script de atualizacao ausente.");
+                    using (var reader = new StreamReader(resource)) scriptContent = reader.ReadToEnd();
                 }
-            } elseif ($_.PSIsContainer -and $_.Name -eq 'wwwroot') {
-                New-Item -ItemType Directory -Path $dest -Force | Out-Null
-                Get-ChildItem -Path $_.FullName | ForEach-Object {
-                    $subDest = Join-Path $dest $_.Name
-                    if ($_.PSIsContainer -and $_.Name -eq 'skins') {
-                        New-Item -ItemType Directory -Path $subDest -Force | Out-Null
-                        Get-ChildItem -Path $_.FullName | ForEach-Object {
-                            # Atualiza a skin default sem tocar em skins customizadas adicionadas pelo usuario
-                            Copy-Item -Recurse -Path $_.FullName -Destination $subDest -Force
-                        }
-                    } else {
-                        Copy-Item -Recurse -Path $_.FullName -Destination $dest -Force
-                    }
-                }
-            } else {
-                Copy-Item -Recurse -Path $_.FullName -Destination $dest -Force
-            }
-        }
-    }
-    catch {
-        Set-Content -Path (Join-Path $env:TEMP 'xennex_update_error.log') -Value $_.Exception.ToString()
-    }
-    finally {
-        Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
-        Remove-Item -Force $UpdateFile -ErrorAction SilentlyContinue
-    }
-
-    Start-Process -FilePath $ExePath
-} elseif ($UpdateFile.EndsWith('.exe', [System.StringComparison]::OrdinalIgnoreCase)) {
-    Start-Process -FilePath $UpdateFile
-}
-";
 
                 await File.WriteAllTextAsync(updaterScriptPath, scriptContent);
 

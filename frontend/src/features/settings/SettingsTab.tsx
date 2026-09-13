@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import type { SkinConfig } from './webview';
-import SkinEditorModal from './SkinEditorModal';
+import type { SkinConfig, UpdateCheckResult } from '../../webview';
+import SkinEditorModal from '../skins/SkinEditorModal';
 import { Palette, Plus, FolderOpen, RotateCcw, X, Check, RefreshCw, Download, ExternalLink, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface SettingsTabProps {
@@ -35,9 +35,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [skinErrorMsg, setSkinErrorMsg] = useState('');
 
   // Version & Updates State
-  const [appVersion, setAppVersion] = useState('v0.2.2');
+  const [appVersion, setAppVersion] = useState('');
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'up-to-date' | 'available' | 'updating' | 'error'>('idle');
-  const [updateData, setUpdateData] = useState<any>(null);
+  const [updateData, setUpdateData] = useState<UpdateCheckResult | null>(null);
   const [updateMessage, setUpdateMessage] = useState('');
 
   const api = window.chrome?.webview?.hostObjects?.api;
@@ -52,7 +52,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         const currentActive = await api.GetActiveSkin();
         setActiveSkin(currentActive || 'default');
         if (api && api.GetAppVersion) {
-          api.GetAppVersion().then((v: string) => setAppVersion(v || 'v0.2.2'));
+          api.GetAppVersion().then((v: string) => setAppVersion(v));
         }
       }
     };
@@ -119,7 +119,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     setUpdateMessage('');
     try {
       const json = await api.CheckForUpdates();
-      const res = JSON.parse(json);
+      const res: UpdateCheckResult = JSON.parse(json);
       setUpdateData(res);
       if (!res.Success) {
         setUpdateStatus('error');

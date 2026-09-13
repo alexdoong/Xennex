@@ -19,6 +19,8 @@ namespace Xennex.Services
 
         private readonly ConcurrentDictionary<Guid, Channel<byte[]>> _activeClients = new ConcurrentDictionary<Guid, Channel<byte[]>>();
 
+        public Func<(int SampleRate, int Channels)> AudioFormatProvider { get; set; }
+
         public int CurrentSampleRate { get; set; } = 48000;
         public int CurrentChannels { get; set; } = 2;
 
@@ -97,6 +99,9 @@ namespace Xennex.Services
             // Enviar handshake inicial com informações de formato
             try
             {
+                var format = AudioFormatProvider?.Invoke() ?? (CurrentSampleRate, CurrentChannels);
+                CurrentSampleRate = format.Item1;
+                CurrentChannels = format.Item2;
                 string formatJson = $"{{\"type\":\"format\",\"sampleRate\":{CurrentSampleRate},\"channels\":{CurrentChannels}}}";
                 byte[] formatBytes = Encoding.UTF8.GetBytes(formatJson);
                 await webSocket.SendAsync(new ArraySegment<byte>(formatBytes), WebSocketMessageType.Text, true, CancellationToken.None);

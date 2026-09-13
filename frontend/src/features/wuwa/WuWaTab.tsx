@@ -1,4 +1,4 @@
-import { useToast } from './components/ToastContainer';
+import { useToast } from '../../hooks/useToast';
 import React from 'react';
 
 const WuWaTab: React.FC = () => {

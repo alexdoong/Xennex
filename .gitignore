@@ -72,7 +72,7 @@ Backup/
 *src_backup*/
 
 # Application Data
-Data/
+/Data/
 
 # Frontend
 frontend/node_modules/
@@ -100,3 +100,10 @@ publish_temp_package/
 .venv/
 __pycache__/
 *.py[cod]
+
+# Saida da interface web para Cloudflare
+cloudflare_pages/dist/
+
+# Copias geradas pelo empacotador na raiz (as fontes ficam em scripts/)
+/alexdoong.cer
+/instalar_certificado_alexdoong.cmd

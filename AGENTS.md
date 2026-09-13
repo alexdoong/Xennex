@@ -32,6 +32,9 @@ Todo arquivo `.zip` ou pasta de release deve conter estritamente:
 ```
 Xennex-vX.Y.Z-win64/
 ├── Xennex.exe              # Executável compilado com metadados e ícone oficial
+├── Xennex.CaptureWorker.exe # Processo auxiliar self-contained
+├── alexdoong.cer            # Certificado público
+├── instalar_certificado_alexdoong.cmd # Instalador do certificado
 ├── WebView2Loader.dll      # Carregador nativo do Edge WebView2
 ├── wwwroot/                # Interface visual completa (HTML, assets JS/CSS, skins, data)
 ├── Data/                   # Configurações padrão limpas (sem caminhos locais de dev)
@@ -55,3 +58,10 @@ Xennex-vX.Y.Z-win64/
 - Isso faz com que a pasta `wwwroot` raiz fique sem o arquivo JavaScript novo, quebrando o carregamento da interface.
 - **Regra**: O script de empacotamento deve SEMPRE excluir qualquer `wwwroot` gerado previamente pelo `dotnet publish`, criar a pasta limpa e copiar o conteúdo com `Copy-Item -Path "$wwwroot\*" -Destination "$dest\wwwroot\"`.
 - É obrigatório validar programaticamente que `wwwroot\wwwroot` NÃO existe e que o arquivo JS referenciado pelo `index.html` existe e possui tamanho > 50 KB no pacote final.
+
+### 8. Dados públicos, versão e validação
+- Os detalhes de sanitização estão em `.agents/rules/release-packaging.md`.
+- `Data/config.txt` é gerado do zero; os modelos opcionais vêm de `assets/defaults/`, nunca da pasta pessoal `Data/`.
+- Distribua somente `wwwroot/skins/default/`. O atualizador deve preservar as outras skins.
+- A versão vem de `<Version>` em `Xennex.csproj`; `-Version` é opcional e deve coincidir com ela.
+- As validações reutilizáveis ficam em `scripts/lib/ReleaseValidation.ps1`; os testes isolados, em `scripts/tests/test_release.ps1`.

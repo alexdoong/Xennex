@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { SkinConfig } from './webview';
+import type { SkinConfig } from '../../webview';
 import { 
   X, Image as ImageIcon, Video, Palette, Sliders, FolderOpen, 
   RotateCcw, Check, Sparkles, Layout, Monitor, Square 

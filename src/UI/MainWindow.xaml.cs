@@ -87,6 +87,7 @@ namespace Xennex.UI
             string baseDir = AppContext.BaseDirectory;
             string wwwDir = Path.Combine(baseDir, "wwwroot");
             localWebServer = new LocalWebServer(wwwDir);
+            localWebServer.AudioFormatProvider = () => (processAudioCaptureService.SampleRate, processAudioCaptureService.Channels);
             localWebServer.Start();
 
             InitializeApiBridge();
@@ -334,17 +335,29 @@ namespace Xennex.UI
                 configService.SaveConfig();
             }
 
-            sidebarService.Stop();
-            statusTimer?.Stop();
-            realEngineService.Stop();
-            handMotionService.Stop();
-            streamService?.CloseAllViewers();
-            processAudioCaptureService?.StopCapture();
-            processAudioCaptureService?.StopCapture();
-            localWebServer?.Stop();
-            notifyIcon?.Dispose();
+            StopApplicationServices();
 
             Application.Current.Shutdown();
+        }
+
+        private bool servicesStopped;
+
+        private void StopApplicationServices()
+        {
+            if (servicesStopped) return;
+            servicesStopped = true;
+            Action[] cleanup = {
+                () => sidebarService.Stop(), () => statusTimer?.Stop(),
+                () => realEngineService.Stop(), () => handMotionService.Stop(),
+                () => streamService?.StopNativeCapture(), () => streamService?.CloseAllViewers(),
+                () => processAudioCaptureService?.StopCapture(), () => localWebServer?.Stop(),
+                () => notifyIcon?.Dispose()
+            };
+            foreach (var stop in cleanup)
+            {
+                try { stop(); }
+                catch (Exception ex) { AppLog.Error("Shutdown", ex); }
+            }
         }
 
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -357,14 +370,7 @@ namespace Xennex.UI
                     configService.Config.WindowTop = this.Top;
                     configService.SaveConfig();
                 }
-                sidebarService.Stop();
-                statusTimer?.Stop();
-                realEngineService.Stop();
-                handMotionService.Stop();
-                streamService?.CloseAllViewers();
-            processAudioCaptureService?.StopCapture();
-            processAudioCaptureService?.StopCapture();
-                notifyIcon?.Dispose();
+                StopApplicationServices();
                 return;
             }
 

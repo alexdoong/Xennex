@@ -147,12 +147,13 @@ namespace Xennex.CaptureWorker
                     if (res == "1080p") { _scaleWidth = 1920; _scaleHeight = 1080; }
                     else if (res == "720p") { _scaleWidth = 1280; _scaleHeight = 720; }
                     else if (res == "1440p" || res == "2k") { _scaleWidth = 2560; _scaleHeight = 1440; }
+                    else if (res == "source") { _scaleWidth = 0; _scaleHeight = 0; }
                     else if (res == "480p") { _scaleWidth = 854; _scaleHeight = 480; }
                     else if (res == "4k" || res == "2160p") { _scaleWidth = 3840; _scaleHeight = 2160; }
                 }
             }
 
-            if (_targetFps < 15) _targetFps = 30;
+            if (_targetFps <= 0) _targetFps = 120;
             if (_targetFps > 120) _targetFps = 120;
             long minTicksPerFrame = Stopwatch.Frequency / _targetFps;
 
@@ -167,7 +168,7 @@ namespace Xennex.CaptureWorker
                     {
                         try
                         {
-                            var parent = Process.GetProcessById(_parentPid);
+                            using var parent = Process.GetProcessById(_parentPid);
                             if (parent.HasExited)
                             {
                                 Log("Processo pai finalizado. Encerrando CaptureWorker imediatamente.");
@@ -297,96 +298,81 @@ namespace Xennex.CaptureWorker
 
             framePool.FrameArrived += (s, a) =>
             {
-                if (!_isRunning) return;
-
-                // Rate limiting to target FPS
-                long currentTicks = Stopwatch.GetTimestamp();
-                if (currentTicks - _lastFrameTicks < minTicksPerFrame)
+                lock (_syncLock)
                 {
-                    // Discard frame to match target FPS
-                    using var discarded = s.TryGetNextFrame();
-                    return;
-                }
-                _lastFrameTicks = currentTicks;
-
-                try
-                {
-                    using var frame = s.TryGetNextFrame();
-                    if (frame == null) return;
-
-                    // Only process frame if there are connected clients
-                    if (_clients.IsEmpty) return;
-
-                    var access = frame.Surface.As<IDirect3DDxgiInterfaceAccess>();
-                    Guid texGuid = new Guid("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
-                    IntPtr pGpuTexture = access.GetInterface(ref texGuid);
-
-                    if (pGpuTexture != IntPtr.Zero)
+                    if (!_isRunning) return;
+                    try
                     {
-                        copyResource(pContext, pStagingTexture, pGpuTexture);
-
-                        int hrMap = map(pContext, pStagingTexture, 0, 1 /* D3D11_MAP_READ */, 0, out D3D11_MAPPED_SUBRESOURCE mapped);
-                        if (hrMap == 0 && mapped.pData != IntPtr.Zero)
+                        using var frame = s.TryGetNextFrame();
+                        if (frame == null) return;
+                        var size = frame.ContentSize;
+                        if (size.Width <= 0 || size.Height <= 0) return;
+                        if (size.Width != desc.Width || size.Height != desc.Height)
                         {
-                            int width = item.Size.Width;
-                            int height = item.Size.Height;
-                            int pitch = (int)mapped.RowPitch;
-
-                            byte[]? jpegBytes = null;
-
-                            using (var bmp = new Bitmap(width, height, pitch, PixelFormat.Format32bppArgb, mapped.pData))
+                            // The old pool surface has the old dimensions: discard it before recreation.
+                            frame.Dispose();
+                            var resizedDesc = desc;
+                            resizedDesc.Width = (uint)size.Width;
+                            resizedDesc.Height = (uint)size.Height;
+                            int resizeResult = createTexture2D(pD3DDevice, ref resizedDesc, IntPtr.Zero, out IntPtr resizedTexture);
+                            if (resizeResult != 0) throw new InvalidOperationException($"Resize staging: 0x{resizeResult:X8}");
+                            try { s.Recreate(winrtDevice, DirectXPixelFormat.B8G8R8A8UIntNormalized, 2, size); }
+                            catch { Marshal.Release(resizedTexture); throw; }
+                            if (pStagingTexture != IntPtr.Zero) Marshal.Release(pStagingTexture);
+                            pStagingTexture = resizedTexture;
+                            desc = resizedDesc;
+                            return;
+                        }
+                        long currentTicks = Stopwatch.GetTimestamp();
+                        if (_clients.IsEmpty || currentTicks - _lastFrameTicks < minTicksPerFrame) return;
+                        _lastFrameTicks = currentTicks;
+                        var access = frame.Surface.As<IDirect3DDxgiInterfaceAccess>();
+                        Guid texGuid = new Guid("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
+                        IntPtr texture = access.GetInterface(ref texGuid);
+                        if (texture == IntPtr.Zero) return;
+                        try
+                        {
+                            copyResource(pContext, pStagingTexture, texture);
+                            int result = map(pContext, pStagingTexture, 0, 1, 0, out D3D11_MAPPED_SUBRESOURCE mapped);
+                            if (result != 0) return;
+                            byte[] jpeg;
+                            try
                             {
-                                // Force exact target resolution scaling (both upscaling to 2K/1440p and downscaling)
-                                if (_scaleWidth > 0 && _scaleHeight > 0 && (width != _scaleWidth || height != _scaleHeight))
+                                if (mapped.pData == IntPtr.Zero) return;
+                                int width = (int)desc.Width;
+                                int height = (int)desc.Height;
+                                using var bitmap = new Bitmap(width, height, (int)mapped.RowPitch, PixelFormat.Format32bppArgb, mapped.pData);
+                                double scale = _scaleWidth > 0 && _scaleHeight > 0
+                                    ? Math.Min(1.0, Math.Min((double)_scaleWidth / width, (double)_scaleHeight / height)) : 1.0;
+                                int outputWidth = Math.Max(2, (int)(width * scale) / 2 * 2);
+                                int outputHeight = Math.Max(2, (int)(height * scale) / 2 * 2);
+                                using var output = new MemoryStream();
+                                if (outputWidth != width || outputHeight != height)
                                 {
-                                    using (var scaledBmp = new Bitmap(_scaleWidth, _scaleHeight))
+                                    using var scaled = new Bitmap(outputWidth, outputHeight);
+                                    using (var graphics = Graphics.FromImage(scaled))
                                     {
-                                        using (var g = Graphics.FromImage(scaledBmp))
-                                        {
-                                            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                                            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                                            g.CompositingQuality = CompositingQuality.HighQuality;
-                                            g.DrawImage(bmp, 0, 0, _scaleWidth, _scaleHeight);
-                                        }
-                                        using (var ms = new MemoryStream())
-                                        {
-                                            scaledBmp.Save(ms, encoder, encParams);
-                                            jpegBytes = ms.ToArray();
-                                        }
+                                        graphics.InterpolationMode = InterpolationMode.HighQualityBilinear;
+                                        graphics.DrawImage(bitmap, 0, 0, outputWidth, outputHeight);
                                     }
+                                    scaled.Save(output, encoder, encParams);
                                 }
-                                else
-                                {
-                                    using (var ms = new MemoryStream())
-                                    {
-                                        bmp.Save(ms, encoder, encParams);
-                                        jpegBytes = ms.ToArray();
-                                    }
-                                }
+                                else bitmap.Save(output, encoder, encParams);
+                                jpeg = output.ToArray();
                             }
-
-                            unmap(pContext, pStagingTexture, 0);
-
-                            if (jpegBytes != null && jpegBytes.Length > 0)
+                            finally { unmap(pContext, pStagingTexture, 0); }
+                            BroadcastFrame(jpeg);
+                            frameCount++;
+                            if (swFps.ElapsedMilliseconds >= 5000)
                             {
-                                BroadcastFrame(jpegBytes);
-                                frameCount++;
-                                if (swFps.ElapsedMilliseconds >= 5000)
-                                {
-                                    double fps = frameCount / (swFps.ElapsedMilliseconds / 1000.0);
-                                    Log($"Status da Transmissão: {fps:F1} FPS ativos | Tamanho: {jpegBytes.Length / 1024} KB | Clientes: {_clients.Count}");
-                                    frameCount = 0;
-                                    swFps.Restart();
-                                }
+                                Log($"Captura real: {frameCount / swFps.Elapsed.TotalSeconds:F1} FPS | {jpeg.Length / 1024} KB/frame | Clientes: {_clients.Count}");
+                                frameCount = 0;
+                                swFps.Restart();
                             }
                         }
-
-                        Marshal.Release(pGpuTexture);
+                        finally { Marshal.Release(texture); }
                     }
-                }
-                catch (Exception ex)
-                {
-                    Log($"Aviso de processamento de frame: {ex.Message}");
+                    catch (Exception ex) { Log($"Falha no frame: {ex.Message}"); }
                 }
             };
 
@@ -408,7 +394,7 @@ namespace Xennex.CaptureWorker
             Log("Encerrando captura e liberando recursos da GPU...");
             session.Dispose();
             framePool.Dispose();
-            Marshal.Release(pStagingTexture);
+            if (pStagingTexture != IntPtr.Zero) Marshal.Release(pStagingTexture);
             Marshal.Release(pContext);
             Marshal.Release(pD3DDevice);
             Log("Recursos liberados com sucesso. Zero vazamentos.");

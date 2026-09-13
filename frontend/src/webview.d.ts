@@ -1,5 +1,3 @@
-export {};
-
 export interface SkinConfig {
   name: string;
   backgroundType: 'image' | 'video' | 'color';
@@ -19,6 +17,20 @@ export interface SkinConfig {
   borderWidth?: number;
 }
 
+/** JSON returned by ApiBridge.CheckForUpdates (C# UpdateCheckResult). */
+export interface UpdateCheckResult {
+  Success: boolean;
+  HasUpdate: boolean;
+  CurrentVersion: string;
+  LatestVersion: string;
+  ReleaseTitle: string;
+  ReleaseNotes: string;
+  HtmlUrl: string;
+  DownloadUrl: string;
+  AssetSize: number;
+  ErrorMessage: string;
+}
+
 declare global {
   interface Window {
     chrome: {
@@ -31,8 +43,10 @@ declare global {
             IsWacomActive(): Promise<boolean>;
             StartReal(): Promise<void>;
             StopReal(): Promise<void>;
+            IsRealRunning(): Promise<boolean>;
             StartHandMotion(): Promise<void>;
             StopHandMotion(): Promise<void>;
+            IsHandMotionRunning(): Promise<boolean>;
             RecordHandGesture(action: string): Promise<void>;
             StartRecordingGesture(action: string): Promise<void>;
             StopRecordingGesture(): Promise<void>;
@@ -81,6 +95,9 @@ declare global {
             StopProcessAudioCapture(): Promise<void>;
             IsProcessAudioCapturing(): Promise<boolean>;
             GetCapturedProcessId(): Promise<number>;
+            TryBeginCapture(owner: string): Promise<boolean>;
+            EndCapture(owner: string): Promise<void>;
+            GetProcessAudioFormat(): Promise<string>;
             StartNativeWindowCapture(hwnd: number, pid: number, fps: number, resolution: string): Promise<boolean>;
             StopNativeWindowCapture(): Promise<void>;
             IsNativeWindowCapturing(): Promise<boolean>;
@@ -88,10 +105,10 @@ declare global {
         };
       };
     };
-    updateRealStatus: (isRunning: boolean) => void;
-    updateHandMotionStatus: (isRunning: boolean) => void;
-    updateSidebarMode: (isSidebar: boolean) => void;
-    updateSidebarPosition: (pos: string) => void;
+    updateRealStatus?: (isRunning: boolean) => void;
+    updateHandMotionStatus?: (isRunning: boolean) => void;
+    updateSidebarMode?: (isSidebar: boolean) => void;
+    updateSidebarPosition?: (pos: string) => void;
     showCloseModal?: () => void;
   }
 }

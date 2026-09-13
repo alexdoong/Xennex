@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using Xennex.UI;
+using Xennex.Services;
 
 namespace Xennex
 {
@@ -33,9 +34,11 @@ namespace Xennex
 
                 var app = new Application();
                 app.DispatcherUnhandledException += (s, ev) => {
+                    AppLog.Error("UI", ev.Exception);
                     ev.Handled = true;
                 };
                 AppDomain.CurrentDomain.UnhandledException += (s, ev) => {
+                    AppLog.Error("Unhandled", ev.ExceptionObject as Exception);
                 };
                 app.Run(new MainWindow());
             }

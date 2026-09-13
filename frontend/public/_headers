@@ -1,0 +1,7 @@
+/xennex-stream.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: no-store
+/index.html
+  Cache-Control: no-cache
+/watch.html
+  Cache-Control: no-cache

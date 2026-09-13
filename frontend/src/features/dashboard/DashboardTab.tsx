@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Tablet, Zap, ShieldCheck, Sparkles, RefreshCw } from 'lucide-react';
-import { useToast } from './components/ToastContainer';
+import { useToast } from '../../hooks/useToast';
 
 interface DashboardTabProps {
   realStatus: boolean;

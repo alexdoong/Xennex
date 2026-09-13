@@ -1,0 +1,298 @@
+/* ==========================================================================
+   STREAM & SCREEN SHARING (P2P WEBRTC) & POP-OUT VIEWER STYLES
+   ========================================================================== */
+
+/* Standalone Pop-out Window Root */
+.stream-viewer-container {
+  width: 100vw;
+  height: 100vh;
+  background-color: #07090E;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family);
+  color: #F1F5F9;
+  user-select: none;
+}
+
+.stream-viewer-video {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  display: block;
+}
+
+.stream-viewer-video.contain {
+  object-fit: contain;
+}
+
+.stream-viewer-video.cover {
+  object-fit: cover;
+}
+
+/* Connecting / Loading Radar Overlay */
+.stream-viewer-overlay-loading,
+.stream-viewer-overlay-error {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, rgba(17, 24, 39, 0.85) 0%, rgba(7, 9, 14, 0.98) 100%);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+  text-align: center;
+  padding: 24px;
+}
+
+.loading-radar-ring {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 2px dashed rgba(168, 85, 247, 0.5);
+  position: absolute;
+  animation: radarSpin 8s linear infinite;
+}
+
+@keyframes radarSpin {
+  0% { transform: rotate(0deg) scale(0.95); }
+  50% { transform: rotate(180deg) scale(1.05); }
+  100% { transform: rotate(360deg) scale(0.95); }
+}
+
+.loading-icon-pulse {
+  color: var(--primary);
+  filter: drop-shadow(0 0 16px var(--primary-glow));
+  margin-bottom: 20px;
+  animation: pulseIcon 2s ease-in-out infinite;
+}
+
+@keyframes pulseIcon {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.stream-viewer-overlay-loading h3,
+.stream-viewer-overlay-error h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #F8FAFC;
+}
+
+.stream-viewer-overlay-loading p,
+.stream-viewer-overlay-error p {
+  font-size: 0.9rem;
+  color: #94A3B8;
+  max-width: 420px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.room-code-tag {
+  color: #38BDF8;
+  font-weight: 700;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: monospace;
+}
+
+.connecting-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: #CBD5E1;
+}
+
+.spin-icon {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.error-icon-box {
+  margin-bottom: 16px;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.btn-retry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-retry:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px var(--primary-glow);
+}
+
+/* Floating HUD Controls in Viewer */
+.stream-viewer-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  z-index: 20;
+}
+
+.stream-viewer-hud.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stream-viewer-hud.hidden {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+}
+
+.hud-top-bar,
+.hud-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+.hud-left,
+.hud-right,
+.hud-controls-left,
+.hud-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #EF4444;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #EF4444;
+  box-shadow: 0 0 8px #EF4444;
+  animation: blink 1.2s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.hud-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #F8FAFC;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-room-badge {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #38BDF8;
+  font-size: 0.75rem;
+  font-family: monospace;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+
+.hud-stat-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+.hud-btn {
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  padding: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.hud-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+}
+
+.hud-btn.active {
+  color: #F59E0B;
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.hud-volume-slider {
+  width: 80px;
+  accent-color: var(--primary);
+  height: 4px;
+  cursor: pointer;
+}
+

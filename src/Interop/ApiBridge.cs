@@ -16,6 +16,7 @@ namespace Xennex.Interop
         private StreamService _streamService;
         private UpdateService _updateService;
         private ProcessAudioCaptureService _processAudioCaptureService;
+        private readonly CaptureSessionService _captureSession;
         public Action MinimizeToTrayRequested;
         public Action ShutdownRequested;
         public Action ToggleSidebarModeRequested;
@@ -32,6 +33,7 @@ namespace Xennex.Interop
             _streamService = streamService;
             _updateService = updateService ?? new UpdateService();
             _processAudioCaptureService = processAudioCaptureService ?? new ProcessAudioCaptureService();
+            _captureSession = new CaptureSessionService(_streamService, _processAudioCaptureService);
         }
 
         // Wacom
@@ -138,14 +140,7 @@ namespace Xennex.Interop
         public bool OpenStreamViewer(string roomId, string title) => _streamService.OpenViewer(roomId, title);
         public bool CloseStreamViewer(string roomId) => _streamService.CloseViewer(roomId);
         public bool SetViewerAlwaysOnTop(string roomId, bool val) => _streamService.SetAlwaysOnTop(roomId, val);
-        public void OpenBrowser(string url)
-        {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-            }
-            catch { }
-        }
+        public void OpenBrowser(string url) => BrowserService.Open(url);
 
         // Updates & Versioning
         public string GetAppVersion() => UpdateService.CurrentVersion;
@@ -188,9 +183,16 @@ namespace Xennex.Interop
             {
                 _processAudioCaptureService.StopCapture();
             }
-            catch { }
+            catch (Exception ex) { AppLog.Error("ApiBridge", ex); }
         }
 
+
+        public bool TryBeginCapture(string owner) => _captureSession.TryBegin(owner);
+        public void EndCapture(string owner) => _captureSession.End(owner);
+        public string GetProcessAudioFormat() => System.Text.Json.JsonSerializer.Serialize(new {
+            sampleRate = _processAudioCaptureService.SampleRate,
+            channels = _processAudioCaptureService.Channels
+        });
 
         // Native GPU Capture Worker (Windows.Graphics.Capture)
         public bool StartNativeWindowCapture(long hwnd, int pid, int fps, string resolution)
@@ -213,7 +215,7 @@ namespace Xennex.Interop
                 _streamService.StopNativeCapture();
                 _processAudioCaptureService.StopCapture();
             }
-            catch { }
+            catch (Exception ex) { AppLog.Error("ApiBridge", ex); }
         }
 
         public bool IsNativeWindowCapturing() => _streamService.IsNativeCaptureRunning();

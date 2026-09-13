@@ -12,7 +12,7 @@ Para manter o projeto organizado, sem lixo e escalável, qualquer agente (IA) ou
 - O frontend em `frontend/` (compilado para `wwwroot/`) não toma decisões complexas de OS. Ele aciona eventos no backend (`window.chrome.webview.hostObjects.api`) ou reage a dados.
 - **Tipagem Estrita:** Todo código frontend DEVE ser escrito em TypeScript. Qualquer chamada ao backend deve estar documentada e tipada no `webview.d.ts`.
 - **Componentização:** Use o React de forma modular. Telas, modais e abas grandes devem ser componentes separados (`.tsx`).
-- **Design Premium:** Sempre foque em uma estética limpa, com Dark Mode, Glassmorphism e transições suaves. Use CSS moderno e mantenha o `index.css` limpo.
+- **Design Premium:** Sempre foque em uma estética limpa, com Dark Mode, Glassmorphism e transições suaves. Use CSS moderno. `index.css` deve conter os imports ordenados dos módulos em `frontend/src/styles/`.
 
 ## 3. Tolerância a Falhas e Logs
 - Processos do Windows (`Process.Start`, `Process.Kill`) frequentemente dão `AccessDenied` ou não encontram o arquivo. TODO método que interage com processos do OS ou Sistema de Arquivos deve estar dentro de um bloco `try-catch` apropriado.
@@ -35,8 +35,8 @@ Para manter o projeto organizado, sem lixo e escalável, qualquer agente (IA) ou
 
 ## 7. Isolamento de Abas e Padronização UI (Frontend)
 Para não transformar o Frontend num monstro indomável:
-- **Componentização Estrita:** Cada nova aba DEVE ser um componente isolado (`NomeDaAbaTab.tsx`). O arquivo `App.tsx` serve apenas como roteador para ligar/desligar abas.
-- **Separação de CSS (Scoping):** Toda aba deve ter um contêiner principal com um ID ou Classe única (Ex: `<div className="tab-content wuwa-tab">`). No `index.css`, as regras específicas da aba DEVEM ser aninhadas dentro da classe pai (Ex: `.wuwa-tab h2 { ... }`).
-- **Reaproveitamento UI:** Regras globais (ex: `.btn`, painéis de vidro `.glass-panel`) devem ser criadas na raiz do `index.css` e reaproveitadas em todas as abas. Nenhuma aba deve recriar botões ou estilos base do zero.
+- **Componentização Estrita:** Cada nova aba DEVE ser um componente isolado (`NomeDaAbaTab.tsx`). `App.tsx` seleciona o modo principal/visualizador e `AppRoutes.tsx` roteia as abas. Layout mora em `layout/`, estado compartilhado em `hooks/` e funcionalidades em `features/`.
+- **Separação de CSS (Scoping):** Toda aba deve ter um contêiner principal com um ID ou Classe única (Ex: `<div className="tab-content wuwa-tab">`). Nos módulos em `styles/`, importados pelo `index.css`, as regras específicas da aba DEVEM ser aninhadas dentro da classe pai (Ex: `.wuwa-tab h2 { ... }`).
+- **Reaproveitamento UI:** Regras globais (ex: `.btn`, painéis de vidro `.glass-panel`) devem ser criadas no módulo global `styles/base.css` e reaproveitadas em todas as abas. Nenhuma aba deve recriar botões ou estilos base do zero.
 - **Isolamento de Layout:** Nenhuma aba deve intervir no `Titlebar` ou no `topbar`. O conteúdo da aba se restringe a viver abaixo da barra superior de navegação.
 

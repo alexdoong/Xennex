@@ -1,4 +1,4 @@
-﻿import type { SkinConfig } from '../webview';
+import type { SkinConfig } from '../webview';
 
 export interface BorderStyleResult {
   color: string;
@@ -27,7 +27,11 @@ export const computeBorder = (color?: string, opacity?: number, width?: number):
   return { color: finalColor, width: `${w}px`, border: `${w}px solid ${finalColor}` };
 };
 
-export const normalizeSkinConfig = (cfg: any): SkinConfig => {
+type SkinPayload = Partial<SkinConfig> & {
+  [Key in keyof SkinConfig as Capitalize<Key>]?: SkinConfig[Key];
+};
+
+export const normalizeSkinConfig = (cfg: SkinPayload | null | undefined): SkinConfig => {
   if (!cfg) return {} as SkinConfig;
   return {
     name: cfg.name ?? cfg.Name ?? 'default',

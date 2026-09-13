@@ -1,0 +1,85 @@
+.stream-workspace { box-sizing: border-box; color: #e8e9f3; font-family: var(--font-family,system-ui); width: 100%; min-width: 0; padding: 8px; --room-muted: #9b9db6; --room-line: rgba(177,174,221,.14); }
+.stream-workspace * { box-sizing: border-box; }
+.stream-workspace h1,.stream-workspace h2,.stream-workspace h3,.stream-workspace p { margin: 0; }
+.stream-workspace button { display: inline-flex; gap: 8px; align-items: center; justify-content: center; border: 1px solid var(--room-line); border-radius: 10px; color: inherit; background: #ffffff07; padding: 10px 14px; font: inherit; font-size: 13px; cursor: pointer; transition: background .18s; }
+.stream-workspace button:hover { background: #ffffff12; }
+.stream-workspace button:focus-visible,.stream-workspace input:focus-visible,.stream-workspace select:focus-visible { outline: 2px solid #ad93ff; outline-offset: 3px; }
+.stream-workspace button:disabled { opacity: .45; cursor: not-allowed; }
+.stream-workspace .room-primary { background: #8965e8; border-color: #a589ed; color: #fff; }
+.stream-workspace .room-primary:hover { background: #9974f3; }
+.stream-workspace .room-danger { color: #ff9dba; border-color: #ff61932a; }
+.stream-workspace label { display: flex; flex-direction: column; gap: 8px; color: var(--room-muted); font-size: 12px; min-width: 0; }
+.stream-workspace input:not([type=range]),.stream-workspace select { width: 100%; min-width: 0; border: 1px solid var(--room-line); border-radius: 9px; background: #131321; color: #f0eefb; padding: 11px 12px; font: inherit; font-size: 13px; }
+.stream-workspace input[type=range] { width: 75px; accent-color: #ad93ff; }
+.stream-workspace small { color: var(--room-muted); font-size: 11px; line-height: 1.6; }
+.stream-workspace .room-header { display: flex; gap: 20px; justify-content: space-between; align-items: center; padding: 8px 0 25px; flex-wrap: wrap; }
+.stream-workspace .room-brand { display: flex; gap: 14px; align-items: center; }
+.stream-workspace .room-brand-icon { padding: 13px; border: 1px solid #ba9bff33; background: #a780ff12; border-radius: 15px; color: #b79af8; }
+.stream-workspace h1 { font-size: 24px; letter-spacing: -.8px; }
+.stream-workspace .room-brand p { color: var(--room-muted); font-size: 12px; margin-top: 4px; }
+.stream-workspace .room-status { display: flex; align-items: center; gap: 7px; font-size: 11px; border: 1px solid var(--room-line); padding: 8px 11px; border-radius: 20px; }
+.stream-workspace .room-status i,.stream-workspace .room-video-top i { width: 6px; height: 6px; border-radius: 50%; background: #9394ae; display: inline-block; }
+.stream-workspace .room-status-connected i,.stream-workspace .room-video-top i { background: #70e2b3; box-shadow: 0 0 12px #70e2b344; }
+.stream-workspace .room-status-error i { background: #f49cae; }
+.stream-workspace .room-status-reconnecting i,.stream-workspace .room-status-connecting i { background: #e6c780; }
+.stream-workspace .room-notice { padding: 12px 16px; margin-bottom: 16px; color: #e3d5ff; background: #a580eb14; border: 1px solid #b69de62b; border-radius: 12px; line-height: 1.6; font-size: 13px; overflow-wrap: anywhere; }
+.stream-workspace .room-lobby { display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; align-items: center; padding: 35px 28px; min-height: 440px; border: 1px solid var(--room-line); border-radius: 22px; background: radial-gradient(ellipse at 10% 5%,#664cad20,transparent 65%),#11121bd9; }
+.stream-workspace .room-eyebrow { font-size: 10px; letter-spacing: 2.4px; color: #b199e7; }
+.stream-workspace .room-welcome h2 { font-size: clamp(26px,3vw,40px); letter-spacing: -1.3px; line-height: 1.2; margin: 20px 0; }
+.stream-workspace .room-welcome p { max-width: 350px; color: var(--room-muted); font-size: 13px; line-height: 1.8; }
+.stream-workspace .room-feature-list { display: flex; flex-direction: column; gap: 17px; margin-top: 32px; font-size: 12px; color: #b7b2cc; }
+.stream-workspace .room-feature-list span { display: flex; align-items: center; gap: 10px; }
+.stream-workspace .room-entry { display: flex; flex-direction: column; gap: 17px; background: #171722; border: 1px solid var(--room-line); padding: 25px; border-radius: 16px; }
+.stream-workspace .room-entry h3 { font-size: 17px; margin-bottom: 2px; }
+.stream-workspace .room-recent { display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--room-line); padding-top: 12px; }
+.stream-workspace .room-recent span { width: 100%; font-size: 11px; color: var(--room-muted); }
+.stream-workspace .room-recent button { padding: 5px 8px; font-size: 10px; }
+.stream-workspace .room-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 18px; }
+.stream-workspace .room-toolbar > div { display: flex; flex-direction: column; margin-right: 12px; }
+.stream-workspace .room-toolbar small { font-size: 9px; letter-spacing: 1.3px; }
+.stream-workspace .room-toolbar strong { font-size: 16px; letter-spacing: 1px; }
+.stream-workspace .room-spacer { flex: 1; }
+.stream-workspace .room-body { display: grid; grid-template-columns: minmax(0,1fr) 225px; gap: 18px; }
+.stream-workspace .room-stage { min-width: 0; }
+.stream-workspace .room-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 12px; }
+.stream-workspace .room-grid-focus { grid-template-columns: 1fr; }
+.stream-workspace .room-empty { min-height: 285px; border: 1px dashed #af9edd35; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 13px; background: #12131be0; padding: 24px; text-align: center; color: #b6a5db; }
+.stream-workspace .room-empty p { color: var(--room-muted); font-size: 13px; }
+.stream-workspace .room-video { position: relative; width: 100%; aspect-ratio: 16/10; background: #07080d; border: 1px solid var(--room-line); border-radius: 14px; overflow: hidden; }
+.stream-workspace .room-video video { width: 100%; height: 100%; }
+.stream-workspace .room-video-top { position: absolute; inset: 0 0 auto; padding: 12px; background: linear-gradient(#000b,transparent); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; pointer-events: none; }
+.stream-workspace .room-video-top span { display: flex; align-items: center; gap: 8px; }
+.stream-workspace .room-video-controls { position: absolute; inset: auto 0 0; background: linear-gradient(transparent,#000d); padding: 22px 10px 10px; display: flex; align-items: center; gap: 6px; opacity: 0; transition: opacity .2s; }
+.stream-workspace .room-video:hover .room-video-controls,.stream-workspace .room-video:focus-within .room-video-controls { opacity: 1; }
+.stream-workspace .room-video-controls button { padding: 6px; border: 0; }
+.stream-workspace .room-play-overlay { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); background: #352a56; }
+.stream-workspace .room-people { padding: 18px 14px; border: 1px solid var(--room-line); background: #12131bce; border-radius: 14px; align-self: start; }
+.stream-workspace .room-people h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; padding-bottom: 18px; }
+.stream-workspace .room-people h3 span { margin-left: auto; color: var(--room-muted); font-size: 11px; }
+.stream-workspace .room-person { display: flex; gap: 9px; align-items: center; margin-bottom: 18px; }
+.stream-workspace .room-person > div { flex: 1; min-width: 0; }
+.stream-workspace .room-person strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.stream-workspace .room-person small { font-size: 10px; }
+.stream-workspace .room-person button { padding: 5px; }
+.stream-workspace .room-avatar { width: 30px; height: 30px; border-radius: 10px; background: #b195f11b; color: #b49be9; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.stream-workspace .room-helper { color: var(--room-muted); font-size: 11px; line-height: 1.6; margin: 20px 0; }
+.stream-workspace .room-diagnostics { color: var(--room-muted); font-size: 10px; padding: 12px 2px; font-variant-numeric: tabular-nums; }
+.stream-workspace .room-capture,.stream-workspace .room-options { border: 1px solid var(--room-line); border-radius: 14px; padding: 16px; background: #14141fe0; }
+.stream-workspace summary { cursor: pointer; font-size: 13px; color: #c9beda; }
+.stream-workspace .room-capture summary { display: flex; align-items: center; gap: 8px; }
+.stream-workspace .room-capture-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 20px; }
+.stream-workspace .room-input-action { display: flex; gap: 5px; }
+.stream-workspace .room-share-action { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; border-top: 1px solid var(--room-line); margin-top: 20px; padding-top: 16px; }
+.stream-workspace .room-share-action p { flex: 1; min-width: 180px; font-size: 11px; color: var(--room-muted); line-height: 1.7; }
+.stream-workspace .room-options { margin-top: 20px; }
+.stream-workspace .room-options > div { margin-top: 18px; display: grid; gap: 12px; }
+.stream-workspace .room-options p { font-size: 12px; color: var(--room-muted); line-height: 1.7; }
+.stream-workspace.stream-standalone { max-width: 1440px; margin: 0 auto; padding: 30px; min-height: 100vh; background: #0d0e17; }
+@media (max-width:900px) { .stream-workspace .room-body { grid-template-columns: 1fr; } .stream-workspace .room-people { order: 2; } .stream-workspace .room-lobby { gap: 20px; padding: 22px; } }
+@media (max-width:620px) { .stream-workspace .room-lobby { grid-template-columns: 1fr; } .stream-workspace .room-feature-list { display:none; } .stream-workspace .room-capture-form { grid-template-columns: 1fr; } .stream-workspace.stream-standalone { padding: 16px; } .stream-workspace .room-video-controls { opacity: 1; } .stream-workspace .room-grid { grid-template-columns: 1fr; } }
+
+.stream-workspace .room-tile { min-width: 0; }
+.stream-workspace .room-background-media { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); pointer-events: none; }
+.stream-workspace .room-local-source, .stream-workspace .room-publication { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px; border-top: 1px solid #ffffff10; }
+.stream-workspace .room-local-source span, .stream-workspace .room-publication span { overflow-wrap: anywhere; min-width: 0; font-size: 12px; }
+.stream-workspace .room-person-group { border-bottom: 1px solid #ffffff16; padding-bottom: 8px; }
