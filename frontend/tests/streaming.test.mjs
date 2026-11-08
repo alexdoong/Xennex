@@ -275,6 +275,15 @@ try {
   assert.equal(protectedCapture.windowAudio, 'window');
   assert.equal(protectedCapture.systemAudio, 'include');
   assert.equal('restrictOwnAudio' in browserDisplayOptions(browserOptions, false).audio, false);
+  const windowOnlyCapture = browserDisplayOptions({ ...browserOptions, audio: 'window' }, true);
+  assert.equal(windowOnlyCapture.video.displaySurface, 'window');
+  assert.equal(windowOnlyCapture.audio.restrictOwnAudio, true);
+  assert.equal(windowOnlyCapture.windowAudio, 'window');
+  assert.equal(windowOnlyCapture.systemAudio, 'exclude');
+  assert.equal(windowOnlyCapture.selfBrowserSurface, 'exclude');
+  const deviceAudioCapture = browserDisplayOptions({ ...browserOptions, audio: 'device' }, true);
+  assert.equal(deviceAudioCapture.audio, false);
+  assert.equal(deviceAudioCapture.windowAudio, undefined);
   const silentCapture = browserDisplayOptions({ ...browserOptions, audio: 'none' }, true);
   assert.equal(silentCapture.audio, false);
   assert.equal(silentCapture.windowAudio, undefined);

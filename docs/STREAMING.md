@@ -1,5 +1,19 @@
 # Streaming — desenvolvimento 0.2.x
 
+## Áudio isolado de janela/aba e canal dedicado no navegador (08/11/2026)
+
+Na versão web (`StreamCapturePanel.tsx` e `capture.ts`), o modo padrão de áudio para
+transmissão pelo navegador passa a ser **Somente janela ou aba (sem áudio do PC)**
+(`audio: 'window'`), que envia `displaySurface: 'window'`, `windowAudio: 'window'`,
+`systemAudio: 'exclude'`, `selfBrowserSurface: 'exclude'` e `restrictOwnAudio: true`.
+Em navegadores baseados em Chromium (Chrome, Brave, Edge, Opera GX), o seletor abre
+priorizando a aba Janela e bloqueia a captura de áudio da tela inteira para evitar
+vazamento de Discord ou sons do sistema. Também continuam disponíveis **Áudio
+oferecido pelo navegador (inclui tela inteira)** (`audio: 'system'`) e **Canal de
+áudio dedicado (Sonar, Cabo Virtual, Mic)** (`audio: 'device'`), que anexa um
+dispositivo `audioinput` em modo estéreo limpo (`echoCancellation: false`,
+`noiseSuppression: false`, `autoGainControl: false`) ao vídeo capturado.
+
 ## Prévia nativa de transmissão no Android e diagnóstico de captura (08/11/2026)
 
 Adicionada a prévia nativa em `src/Android` (`me.xennex.live`, API 26+, compilada

@@ -9,7 +9,7 @@ import { QUALITY_PRESETS, captureFps, requestedFps, fitWithin, type Quality } fr
 export type NativeApi = Window['chrome']['webview']['hostObjects']['api'];
 export interface AudioProcess { Pid: number; Hwnd: number; Name: string; Title: string; HasActiveAudio: boolean; PeakVolume: number }
 export interface CaptureMonitor { Id: string; Width: number; Height: number; Primary: boolean }
-export interface CaptureOptions { source: 'browser' | 'window' | 'monitor' | 'camera' | 'game'; monitorBackend?: 'wgc' | 'dxgi'; monitorId?: string; cameraId?: string; frameOutput?: CaptureFrameMode; process?: AudioProcess; audioProcess?: AudioProcess; audio: 'none' | 'system' | 'process' | 'microphone'; quality: Quality }
+export interface CaptureOptions { source: 'browser' | 'window' | 'monitor' | 'camera' | 'game'; monitorBackend?: 'wgc' | 'dxgi'; monitorId?: string; cameraId?: string; audioDeviceId?: string; frameOutput?: CaptureFrameMode; process?: AudioProcess; audioProcess?: AudioProcess; audio: 'none' | 'window' | 'system' | 'process' | 'microphone' | 'device'; quality: Quality }
 export interface CaptureHandle { stream: MediaStream; source: string; nativeSession: boolean; warning: string; readonly pipeline?: CapturePipeline; stop(): Promise<void> }
 export interface CaptureEvents { onProgress?: (phase: CapturePhase) => void; onWarning?: (message: string) => void; onMetrics?: (metrics: CapturePipeline) => void }
 export const nativeApi = (): NativeApi | undefined => window.chrome?.webview?.hostObjects?.api;
@@ -17,17 +17,26 @@ export const nativeApi = (): NativeApi | undefined => window.chrome?.webview?.ho
 type BrowserDisplayOptions = DisplayMediaStreamOptions & {
   windowAudio?: 'window' | 'system' | 'exclude';
   systemAudio?: 'include' | 'exclude';
+  selfBrowserSurface?: 'include' | 'exclude';
 };
 
 export function browserDisplayOptions(options: CaptureOptions, restrictOwnAudioSupported: boolean): BrowserDisplayOptions {
-  const browserAudio = options.audio !== 'none' && options.audio !== 'process';
+  const browserAudio = options.audio === 'system' || options.audio === 'window';
+  const windowOnly = options.audio === 'window';
+  const hasFps = requestedFps(options.quality.fps);
+  const fpsConstraint = hasFps ? { frameRate: { ideal: captureFps(options.quality.fps), max: captureFps(options.quality.fps) } } : {};
+  const video = windowOnly
+    ? { displaySurface: 'window' as const, ...fpsConstraint }
+    : (hasFps ? fpsConstraint : true);
   return {
-    video: requestedFps(options.quality.fps) ? { frameRate: { ideal: captureFps(options.quality.fps), max: captureFps(options.quality.fps) } } : true,
+    video,
     audio: !browserAudio ? false : {
       echoCancellation: false, noiseSuppression: false, autoGainControl: false,
       ...(restrictOwnAudioSupported ? { restrictOwnAudio: true } : {}),
     },
-    ...(!browserAudio ? {} : { windowAudio: 'window' as const, systemAudio: 'include' as const }),
+    ...(!browserAudio ? {} : windowOnly
+      ? { windowAudio: 'window' as const, systemAudio: 'exclude' as const, selfBrowserSurface: 'exclude' as const }
+      : { windowAudio: 'window' as const, systemAudio: 'include' as const }),
   };
 }
 
@@ -135,6 +144,36 @@ export async function startCapture(options: CaptureOptions, signal: AbortSignal,
       if (options.audio === 'process') {
         await acquireNative(); check();
         if (!await nativeCall(api!.BeginBrowserCapture(owner))) throw new Error('Não foi possível preparar o áudio desta transmissão.');
+      } else if (options.audio === 'device') {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          warn('Canal de entrada de áudio indisponível neste navegador. A tela está sendo compartilhada sem som.');
+        } else {
+          progress('audio');
+          try {
+            const deviceAudio = await captureAwait(
+              navigator.mediaDevices.getUserMedia({
+                video: false,
+                audio: {
+                  ...(options.audioDeviceId ? { deviceId: { exact: options.audioDeviceId } } : {}),
+                  echoCancellation: false,
+                  noiseSuppression: false,
+                  autoGainControl: false,
+                },
+              }),
+              signal,
+              20000,
+              'O canal de áudio não respondeu. Confira a permissão e tente novamente.',
+              value => value.getTracks().forEach(t => t.stop()),
+            );
+            check();
+            resources.push(() => deviceAudio.getTracks().forEach(t => t.stop()));
+            const audioTrack = deviceAudio.getAudioTracks()[0];
+            if (audioTrack) stream.addTrack(audioTrack);
+          } catch (error) {
+            check();
+            warn(`${error instanceof Error ? error.message : 'O canal de áudio não pôde ser capturado.'} A tela está sendo compartilhada sem som.`);
+          }
+        }
       }
     } else {
       if (!api) throw new Error('Captura nativa disponível apenas no aplicativo.');
@@ -305,7 +344,11 @@ export async function startCapture(options: CaptureOptions, signal: AbortSignal,
       }
     }
     check();
-    if (options.audio !== 'none' && !stream.getAudioTracks().length) warning = warning || 'A fonte escolhida não forneceu áudio. No navegador, marque a opção de compartilhar áudio quando disponível.';
+    if (options.audio !== 'none' && !stream.getAudioTracks().length) {
+      warning = warning || (options.source === 'browser' && options.audio === 'window'
+        ? 'A janela selecionada não forneceu áudio. No Chrome, Brave ou Opera GX, escolha a aba Janela e marque "Compartilhar também o áudio da janela".'
+        : 'A fonte escolhida não forneceu áudio. No navegador, marque a opção de compartilhar áudio quando disponível.');
+    }
     stream.getVideoTracks()[0].addEventListener('ended', () => { if (!stopped) onEnded(); }, { once: true });
     signal.removeEventListener('abort', abort);
     signal.addEventListener('abort', () => { void stop(); }, { once: true });

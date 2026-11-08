@@ -19,13 +19,15 @@ export default function StreamCapturePanel({ open, onClose }: { open: boolean; o
   const [title, setTitle] = useState('Minha transmissão');
   const [quality, setQuality] = useState<Quality>(DEFAULT_QUALITY);
   const [source, setSource] = useState<CaptureOptions['source']>('browser');
-  const [audio, setAudio] = useState<CaptureOptions['audio']>(api ? 'process' : 'system');
+  const [audio, setAudio] = useState<CaptureOptions['audio']>(api ? 'process' : 'window');
   const [processes, setProcesses] = useState<AudioProcess[]>([]);
   const [processId, setProcessId] = useState('');
   const [audioProcessId, setAudioProcessId] = useState('');
   const [loadingProcesses, setLoadingProcesses] = useState(false);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [cameraId, setCameraId] = useState('');
+  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
+  const [audioDeviceId, setAudioDeviceId] = useState('');
   const [monitors, setMonitors] = useState<CaptureMonitor[]>([]);
   const [monitorId, setMonitorId] = useState('');
   const [monitorBackend, setMonitorBackend] = useState<'dxgi' | 'wgc'>('dxgi');
@@ -47,6 +49,10 @@ export default function StreamCapturePanel({ open, onClose }: { open: boolean; o
     try { setCameras((await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput')); }
     catch { setNotice('Não foi possível listar as câmeras. Use a câmera padrão ou confira a permissão.'); }
   };
+  const refreshAudioInputs = async () => {
+    try { setAudioInputs((await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'audioinput')); }
+    catch { setNotice('Não foi possível listar os canais de áudio. Use o canal padrão ou confira a permissão.'); }
+  };
   const refreshMonitors = async () => {
     if (!api) return;
     setLoadingMonitors(true);
@@ -60,7 +66,7 @@ export default function StreamCapturePanel({ open, onClose }: { open: boolean; o
   const setSourceMode = (value: CaptureOptions['source']) => {
     setSource(value);
     if (value === 'camera') { setAudio('none'); void refreshCameras(); }
-    else if (value === 'browser') { setAudio(api && !nativeBusy ? 'process' : 'system'); if (api) void refreshProcesses(); }
+    else if (value === 'browser') { setAudio(api && !nativeBusy ? 'process' : 'window'); if (api) void refreshProcesses(); }
     else { setAudio(value === 'monitor' ? 'system' : 'process'); void refreshProcesses(); if (value === 'monitor') void refreshMonitors(); }
   };
   const share = () => {
@@ -73,7 +79,7 @@ export default function StreamCapturePanel({ open, onClose }: { open: boolean; o
     if (audio === 'process' && audioProcessId && !selectedAudioProcess) {
       setNotice('A fonte de áudio escolhida não está mais disponível. Atualize e selecione novamente.'); return;
     }
-    void room.share({ source, audio, cameraId, monitorId, monitorBackend, process: selectedProcess, audioProcess: selectedAudioProcess, quality }, title);
+    void room.share({ source, audio, cameraId, audioDeviceId, monitorId, monitorBackend, process: selectedProcess, audioProcess: selectedAudioProcess, quality }, title);
   };
   const nativeBusy = room.locals.some(local => local.nativeSession || local.source === 'window' || local.source === 'monitor' || local.source === 'game');
   const dialog = useRef<HTMLDialogElement>(null);
@@ -125,7 +131,21 @@ export default function StreamCapturePanel({ open, onClose }: { open: boolean; o
 
             {(source === 'window' || source === 'game') && <label>{source === 'game' ? 'Janela do jogo OpenGL' : 'Janela do vídeo'}<div className="room-input-action"><select value={processId} disabled={room.capturing} onFocus={() => { if (!processes.length) void refreshProcesses(); }} onChange={event => setProcessId(event.target.value)}><option value="">Selecione uma janela</option>{windows.map(p => <option key={p.Hwnd} value={p.Hwnd}>{p.Title} — {p.Name}</option>)}</select><button title="Atualizar janelas" onClick={() => void refreshProcesses()} disabled={loadingProcesses}><RefreshCw size={16}/></button></div></label>}
             {source === 'camera' && <label>Câmera<select value={cameraId} onFocus={() => void refreshCameras()} onChange={event => setCameraId(event.target.value)}><option value="">Câmera padrão</option>{cameras.map((camera, index) => <option key={camera.deviceId || index} value={camera.deviceId}>{camera.label || `Câmera ${index + 1}`}</option>)}</select></label>}
-            <label>Áudio<select aria-label="Áudio" value={audio} disabled={room.capturing} onChange={event => setAudio(event.target.value as CaptureOptions['audio'])}><option value="none">Sem áudio</option>{source === 'camera' ? <option value="microphone">Microfone</option> : <option value="system">{source === 'browser' ? 'Áudio oferecido pelo navegador' : 'Áudio do sistema'}</option>}{api && source !== 'camera' && <option value="process" disabled={nativeBusy}>Escolher janela / processo de áudio</option>}</select></label>
+            <label>Áudio<select aria-label="Áudio" value={audio} disabled={room.capturing} onChange={event => {
+              const next = event.target.value as CaptureOptions['audio'];
+              setAudio(next);
+              if (next === 'device') void refreshAudioInputs();
+            }}>
+              <option value="none">Sem áudio</option>
+              {source === 'camera' && <option value="microphone">Microfone</option>}
+              {source === 'browser' && <option value="window">Somente janela ou aba (sem áudio do PC)</option>}
+              {source !== 'camera' && <option value="system">{source === 'browser' ? 'Áudio oferecido pelo navegador (inclui tela inteira)' : 'Áudio do sistema'}</option>}
+              {source === 'browser' && <option value="device">Canal de áudio dedicado (Sonar, Cabo Virtual, Mic)</option>}
+              {api && source !== 'camera' && <option value="process" disabled={nativeBusy}>Escolher janela / processo de áudio</option>}
+            </select>
+            {source === 'browser' && audio === 'window' && <small>Prioriza a aba Janela e bloqueia o áudio do PC inteiro (Discord/sistema). No Chrome, Brave ou Opera GX, marque “Compartilhar também o áudio da janela”.</small>}
+            </label>
+            {source === 'browser' && audio === 'device' && <label>Canal de entrada de áudio<div className="room-input-action"><select aria-label="Canal de entrada de áudio" value={audioDeviceId} disabled={room.capturing} onFocus={() => void refreshAudioInputs()} onChange={event => setAudioDeviceId(event.target.value)}><option value="">Canal de áudio padrão</option>{audioInputs.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `Canal de áudio ${index + 1}`}</option>)}</select><button title="Atualizar canais de áudio" disabled={room.capturing} onClick={() => void refreshAudioInputs()}><RefreshCw size={16}/></button></div><small>Modo estéreo limpo sem filtros de voz. Ideal para o canal Game do SteelSeries Sonar, Voicemeeter ou VB-Cable.</small></label>}
             {source !== 'camera' && audio === 'process' && <label>Fonte independente de áudio<div className="room-input-action"><select value={audioProcessId} disabled={room.capturing} onFocus={() => { if (!processes.length) void refreshProcesses(); }} onChange={event => setAudioProcessId(event.target.value)}>
               <option value="">{source === 'window' || source === 'game' ? 'Mesma janela do vídeo' : 'Selecione o processo de áudio'}</option>
               {audioProcesses.map(p => <option key={p.Pid} value={p.Pid}>{p.Title || p.Name} — {p.Name} (PID {p.Pid}){p.HasActiveAudio ? ' · áudio ativo' : ''}</option>)}

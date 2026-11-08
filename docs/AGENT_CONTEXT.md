@@ -1,5 +1,25 @@
 # Xennex — arquitetura e contexto
 
+## Isolamento de áudio por janela/aba e canal dedicado na Web — 08/11/2026
+
+Adicionados em `frontend/src/features/stream/capture.ts` e `StreamCapturePanel.tsx`
+dois modos de áudio sem instalação para os participantes que transmitem pelo site no
+Cloudflare Workers (`xennex-live.alexdoong11.workers.dev`):
+- **Somente janela ou aba (`audio: 'window'`, padrão na Web)**: solicita
+  `displaySurface: 'window'`, `windowAudio: 'window'`, `systemAudio: 'exclude'`,
+  `selfBrowserSurface: 'exclude'` e `restrictOwnAudio: true` no `getDisplayMedia`,
+  abrindo o seletor do Chromium (Chrome, Brave, Edge, Opera GX) direto na aba Janela
+  e bloqueando o áudio do sistema inteiro para não vazar chamadas do Discord ou sons
+  do PC.
+- **Canal de áudio dedicado (`audio: 'device'`)**: captura a tela/janela sem áudio do
+  navegador (`audio: false`) e anexa a faixa de um dispositivo `audioinput` escolhido
+  (`echoCancellation: false`, `noiseSuppression: false`, `autoGainControl: false`),
+  permitindo enviar canais virtuais de jogo (SteelSeries Sonar, Voicemeeter, VB-Cable).
+- **Validação e Deploy Cloudflare**: `npm test`, `npm run lint`, `npm run build`,
+  `npm run build:web`, `scripts/tests/test_ci.ps1` e `browser-capabilities-ui.mjs`
+  aprovados com código 0; publicado em `https://xennex-live.alexdoong11.workers.dev`
+  (Version ID `0b352946-cfd3-4188-ad68-f671adb8f2e7`).
+
 ## Streaming no Android e alinhamento aos padrões de código — 08/11/2026
 
 Concluída e padronizada a prévia nativa de transmissão de tela no Android em
