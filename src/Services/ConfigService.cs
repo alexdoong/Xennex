@@ -28,6 +28,13 @@ namespace Xennex.Services
             LoadConfig();
         }
 
+        public void SetSidebarAnimationFps(int fps)
+        {
+            if (fps is not (0 or 30 or 60 or 120)) throw new ArgumentOutOfRangeException(nameof(fps));
+            Config.SidebarAnimationFps = fps;
+            SaveConfig();
+        }
+
         public event Action<string> OnLogReceived;
         public event Action OnConfigChanged;
 
@@ -92,9 +99,33 @@ namespace Xennex.Services
                     Config.HideSidebarPullTab = val;
                 return;
             }
+            if (item.StartsWith("SidebarInset=", StringComparison.OrdinalIgnoreCase))
+            {
+                if (int.TryParse(item.Substring("SidebarInset=".Length), out int inset))
+                    Config.SidebarInset = Math.Clamp(inset, 0, 2000);
+                return;
+            }
+            if (item.StartsWith("SidebarVerticalPercent=", StringComparison.OrdinalIgnoreCase))
+            {
+                if (int.TryParse(item.Substring("SidebarVerticalPercent=".Length), out int vertical))
+                    Config.SidebarVerticalPercent = Math.Clamp(vertical, -1, 100);
+                return;
+            }
             if (item.StartsWith("SidebarPosition=", StringComparison.OrdinalIgnoreCase))
             {
-                Config.SidebarPosition = item.Substring("SidebarPosition=".Length).Trim();
+                var position = item.Substring("SidebarPosition=".Length).Trim();
+                Config.SidebarPosition = position == "TopLeft" || position == "MiddleLeft" ? position : "MiddleRight";
+                return;
+            }
+            if (item.StartsWith("SidebarAnimationFps=", StringComparison.OrdinalIgnoreCase))
+            {
+                if (int.TryParse(item.Substring("SidebarAnimationFps=".Length), out int fps))
+                    Config.SidebarAnimationFps = fps is 30 or 60 or 120 ? fps : 0;
+            }
+            if (item.StartsWith("SidebarCollapseEdge=", StringComparison.OrdinalIgnoreCase))
+            {
+                var edge = item.Substring("SidebarCollapseEdge=".Length).Trim();
+                Config.SidebarCollapseEdge = (edge == "Top" || edge == "Left" || edge == "Right" || edge == "Auto") ? edge : "Auto";
                 return;
             }
             if (item.StartsWith("SidebarMonitor=", StringComparison.OrdinalIgnoreCase) && int.TryParse(item.Substring("SidebarMonitor=".Length).Trim(), out int sm))
@@ -151,7 +182,7 @@ namespace Xennex.Services
             try
             {
                 string line2 = string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                    "CloseToTray={0},AutoStart={1},SidebarMonitor={2},HideSidebarPullTab={3},SidebarPosition={4},HandMotionCameraIndex={5},WindowLeft={6},WindowTop={7},AutoHideSidebar={8},AutoHideTitlebar={9},ActiveSkin={10},WindowWidth={11},WindowHeight={12}",
+                    "CloseToTray={0},AutoStart={1},SidebarMonitor={2},HideSidebarPullTab={3},SidebarPosition={4},HandMotionCameraIndex={5},WindowLeft={6},WindowTop={7},AutoHideSidebar={8},AutoHideTitlebar={9},ActiveSkin={10},WindowWidth={11},WindowHeight={12},SidebarInset={13},SidebarVerticalPercent={14},SidebarCollapseEdge={15},SidebarAnimationFps={16}",
                     Config.CloseToTray ? "true" : "false",
                     Config.AutoStart ? "true" : "false",
                     Config.SidebarMonitorIndex,
@@ -164,7 +195,11 @@ namespace Xennex.Services
                     Config.AutoHideTitlebar ? "true" : "false",
                     Config.ActiveSkin,
                     Config.WindowWidth,
-                    Config.WindowHeight);
+                    Config.WindowHeight,
+                    Config.SidebarInset,
+                    Config.SidebarVerticalPercent,
+                    Config.SidebarCollapseEdge,
+                    Config.SidebarAnimationFps);
 
                 File.WriteAllLines(configPath, new[] { Config.RealExePath, line2 });
                 OnConfigChanged?.Invoke();

@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   const web = mode === 'cloudflare';
   const input: Record<string, string> = web ? { watch: resolve(__dirname, 'watch.html') } : { index: resolve(__dirname, 'index.html'), watch: resolve(__dirname, 'watch.html') };
   return {
+    define: { __XENNEX_BUILD__: JSON.stringify(`${web ? 'web' : 'app'}-${new Date().toISOString()}`) },
     plugins: [react(), {
       name: 'cloudflare-entry',
       closeBundle() {

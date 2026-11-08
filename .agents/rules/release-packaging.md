@@ -1,3 +1,9 @@
+---
+description: Protocolo obrigatório para montagem, empacotamento, assinatura digital Authenticode e sanitização de releases portáteis
+scope: ["scripts/package_release.ps1", "scripts/lib/ReleaseValidation.ps1", "Backup/**"]
+trigger: "sempre que gerar, empacotar ou publicar uma nova versão ou release"
+---
+
 # Regra de Empacotamento de Releases e Higiene do Repositório ("Normie PC")
 
 Esta regra define o protocolo obrigatório para montagem, empacotamento, versionamento e distribuição de novas versões do **Xennex** para amigos, testadores e usuários finais, sem burocracia e com máxima segurança de dados.
@@ -35,7 +41,7 @@ Garantir que qualquer pacote distribuído funcione de primeira ("out-of-the-box"
 - **Bloqueio Obrigatório:** Arquivos como `wuwa_build.txt`, dados de conta, logs (`*.log`, `*_log.txt`, `*.txt` que contenham logs) e tokens jamais podem entrar no pacote.
 
 ### 5. Preservação de Dados do Usuário na Atualização
-- O instalador / atualizador (`xennex_updater.ps1`) deve respeitar os dados existentes no computador do usuário:
+- O instalador / atualizador (`src/Services/Updates/install_update.ps1`) deve respeitar os dados existentes no computador do usuário:
   - Nunca sobrescrever arquivos existentes na pasta `Data/` (ex: `config.txt`, builds, tokens).
   - Nunca deletar nem substituir pastas de skins personalizadas criadas pelo usuário dentro de `wwwroot/skins/`.
 
@@ -52,6 +58,7 @@ Todo arquivo `.zip` ou pasta de release deve conter estritamente:
 Xennex-vX.Y.Z-win64/
 ├── Xennex.exe                      # Executável principal assinado por alexdoong
 ├── Xennex.CaptureWorker.exe        # Motor de captura GPU assinado
+├── Xennex.GesturesWorker.exe       # Worker de gestos com runtime/modelos empacotados
 ├── WebView2Loader.dll              # Carregador nativo do Edge WebView2
 ├── alexdoong.cer                   # Certificado público Authenticode
 ├── instalar_certificado_alexdoong.cmd # Instalador de 1 clique do certificado
@@ -61,7 +68,25 @@ Xennex-vX.Y.Z-win64/
 └── scripts/                        # Scripts Python e auxiliares (hand_motion.py)
 ```
 
-### 8. Checklist de Higiene Pré-Commit
+### 8. Empacotador obrigatório e integridade da cópia
+
+Use exclusivamente `powershell -ExecutionPolicy Bypass -File scripts/package_release.ps1`.
+O parâmetro opcional `-Version` deve coincidir com `<Version>` no projeto.
+O script valida, assina e gera `Backup/Xennex-vX.Y.Z-win64.zip`; não publica a release.
+
+Ao copiar a interface após publish, valide o destino dentro do staging, remova
+a pasta wwwroot gerada ali, recrie-a e copie **seu conteúdo**. Copiar a pasta
+para outra wwwroot existente causa aninhamento wwwroot/wwwroot.
+Valide que esse aninhamento não existe e que o JS referenciado pelo index.html
+existe e tem mais de 50 KB, além do CSS. Falha deve abortar o pacote.
+Use scripts/lib/ReleaseValidation.ps1 e scripts/tests/test_release.ps1.
+
+Assinatura usa o certificado configurado e fingerprint público existente.
+Não gerar nova chave silenciosamente nem distribuir a chave privada.
+O pacote exige WebView2 Runtime instalado/disponível no Windows; o loader
+sozinho não é o runtime. Não prometer funcionamento sem esse pré-requisito.
+
+### 9. Checklist de Higiene Pré-Commit
 Antes de commitar novas alterações:
 ```bash
 # 1. Conferir arquivos modificados e adicionados

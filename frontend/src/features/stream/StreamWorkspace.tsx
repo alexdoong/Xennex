@@ -1,31 +1,38 @@
-import { useEffect, useState } from 'react';
-import { Radio, Link, Copy, LogIn, Plus, ScreenShare, Square, Users, RefreshCw, LogOut, Monitor, ExternalLink } from 'lucide-react';
-import { useRoom } from './useRoom';
-import { nativeApi, type AudioProcess, type CaptureOptions } from './capture';
-import { DEFAULT_QUALITY, QUALITY_PRESETS, type Quality, type Resolution } from './quality';
-import { displayName, PROTOCOL, MAX_PARTICIPANTS, MAX_LOCAL_STREAMS, MAX_WATCHING, newRoomCode, normalizeRoom, roomLink } from './protocol';
+import CapturePipelineDiagnostics from './CapturePipelineDiagnostics';
+import { useCallback, useEffect, useState } from 'react';
+import { Radio, Link, Copy, LogIn, Plus, ScreenShare, Square, Users, LogOut, Monitor, ExternalLink, Activity } from 'lucide-react';
+import { useStreamContext } from './StreamContext';
+import CaptureProgress from './CaptureProgress';
+import { nativeApi } from './capture';
+import StreamCapturePanel from './StreamCapturePanel';
+import TurnFallbackPanel from './TurnFallbackPanel';
+import type { VideoReading } from './streamStats';
+import type { Quality } from './quality';
+import { displayName, PROTOCOL, MAX_PARTICIPANTS, MAX_WATCHING, newRoomCode, normalizeRoom, roomLink } from './protocol';
 import { HAS_TURN } from './peerConfig';
-import StreamVideo from './StreamVideo';
+import StreamStage from './StreamStage';
 import RoomDiagnostics from './RoomDiagnostics';
+import RoomEntryDiagnostic from './RoomEntryDiagnostic';
+import RoomToolsPanel from './RoomToolsPanel';
+import { entryReport } from './entryDiagnostics';
 import './stream-workspace.css';
 
 export default function StreamWorkspace({ initialRoom = '', standalone = false }: { initialRoom?: string; standalone?: boolean }) {
-  const room = useRoom(); const { state, client } = room;
+  const room = useStreamContext(); const { state, client } = room;
   const api = nativeApi();
   const [name, setName] = useState(() => localStorage.getItem('xennex_display_name') || '');
   const [code, setCode] = useState(initialRoom);
-  const [title, setTitle] = useState('Minha transmissão');
   const [publicUrl, setPublicUrl] = useState(() => localStorage.getItem('xennex_cloudflare_url') || 'https://xennex-live.alexdoong11.workers.dev');
-  const [quality, setQuality] = useState<Quality>(DEFAULT_QUALITY);
-  const [source, setSource] = useState<CaptureOptions['source']>(api ? 'window' : 'browser');
-  const [audio, setAudio] = useState<CaptureOptions['audio']>(api ? 'process' : 'system');
-  const [processes, setProcesses] = useState<AudioProcess[]>([]);
-  const [processId, setProcessId] = useState('');
-  const [loadingProcesses, setLoadingProcesses] = useState(false);
+  const [viewOnly, setViewOnly] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [fallbackPending, setFallbackPending] = useState(false);
+  const closeCapture = useCallback(() => setCaptureOpen(false), []);
+  const [peopleOpen, setPeopleOpen] = useState(true);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [readings, setReadings] = useState<Record<string, VideoReading>>({});
   const [notice, setNotice] = useState('');
   const [audible, setAudible] = useState<string[]>([]);
-  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
-  const [cameraId, setCameraId] = useState('');
   const [focus, setFocus] = useState('');
   const [recent, setRecent] = useState<string[]>(() => {
     try { const items: unknown = JSON.parse(localStorage.getItem('xennex_room_history_v2') || '[]'); return Array.isArray(items) ? items.filter((x): x is string => typeof x === 'string' && !!normalizeRoom(x)).slice(0, 5) : []; }
@@ -34,8 +41,7 @@ export default function StreamWorkspace({ initialRoom = '', standalone = false }
 
   const connected = state.phase === 'connected';
   const inRoom = connected || state.phase === 'reconnecting';
-  const busy = state.phase === 'connecting';
-  const selectedProcess = processes.find(p => String(p.Hwnd) === processId);
+  const busy = state.phase === 'connecting' || fallbackPending;
   const copy = async (value: string) => {
     try { await navigator.clipboard.writeText(value); setNotice('Copiado para a área de transferência.'); }
     catch { setNotice(`Copie manualmente: ${value}`); }
@@ -55,21 +61,12 @@ export default function StreamWorkspace({ initialRoom = '', standalone = false }
     } catch { setNotice('Não foi possível verificar a página pública. Confira o endereço Cloudflare e publique o build web atualizado.'); }
   };
   const enter = (host: boolean) => {
-    setNotice(''); setFocus(''); setAudible([]);
+    setNotice(''); setFocus(''); setAudible([]); setViewOnly(false); setPeopleOpen(true); setCaptureOpen(false);
     const target = host && !code.trim() ? newRoomCode() : normalizeRoom(code);
     if (!target) { setNotice('Digite um código válido ou cole um link de convite.'); return; }
     setCode(target); localStorage.setItem('xennex_display_name', displayName(name));
     try { client.start(target, name, host); }
     catch (error) { setNotice(error instanceof Error ? error.message : 'Falha ao conectar.'); }
-  };
-  const refreshProcesses = async () => {
-    if (!api) return;
-    setLoadingProcesses(true);
-    try {
-      const parsed: AudioProcess[] = JSON.parse(await api.GetAudioProcesses());
-      setProcesses(parsed.filter(p => p.Hwnd > 0));
-    } catch { setNotice('Não foi possível listar as janelas. Tente novamente.'); }
-    finally { setLoadingProcesses(false); }
   };
   useEffect(() => {
     if (!state.room || state.phase !== 'connected') return;
@@ -85,27 +82,20 @@ export default function StreamWorkspace({ initialRoom = '', standalone = false }
   const publications = state.participants.flatMap(p => p.publications.map(publication => ({ ...publication, peerId: p.peerId, name: p.name })));
   const tiles = [...state.streams.entries()].map(([id, stream]) => {
     const publication = publications.find(p => p.id === id);
-    return { id, stream, name: `${publication?.name || 'Participante'} · ${publication?.title || 'Transmissão'}`, local: false };
+    return { id, stream, name: `${publication?.name || 'Participante'} · ${publication?.title || 'Transmissão'}`, local: false, quality: undefined as Quality | undefined };
   });
-  for (const local of room.locals) tiles.unshift({ id: local.id, stream: local.stream, name: `${name || 'Você'} · ${local.title}`, local: true });
+  for (const local of room.locals) tiles.unshift({ id: local.id, stream: local.stream, name: `${name || 'Você'} · ${local.title}`, local: true, quality: local.quality });
   const pending = publications.filter(p => state.watching.includes(p.id) && !state.streams.has(p.id));
-  const nativeBusy = room.locals.some(local => local.source === 'window' || local.source === 'monitor');
+  const newPublicationIds = new Set(room.newScreens.map(s => s.publicationId));
+  const newSharers = new Set(room.newScreens.map(s => s.peerId));
   const validFocus = tiles.some(tile => tile.id === focus) ? focus : '';
   const statusLabel = { idle: 'Pronto para conectar', connecting: 'Conectando', connected: 'Na sala', reconnecting: 'Reconectando', error: 'Falha na conexão', closed: 'Sala encerrada' }[state.phase];
-  const refreshCameras = async () => {
-    try { setCameras((await navigator.mediaDevices.enumerateDevices()).filter(device => device.kind === 'videoinput')); }
-    catch { setNotice('Não foi possível listar as câmeras. Use a câmera padrão ou confira a permissão.'); }
-  };
-  const setSourceMode = (value: CaptureOptions['source']) => {
-    setSource(value);
-    if (value === 'camera') { setAudio('none'); void refreshCameras(); }
-    else if (value === 'browser') setAudio('system');
-    else { setAudio('process'); void refreshProcesses(); }
-  };
-  return <section className={`stream-workspace ${standalone ? 'stream-standalone' : ''}`}>
+  return <section className={`stream-workspace ${standalone ? 'stream-standalone' : ''} ${viewOnly && inRoom ? 'room-view-only' : ''} ${inRoom ? 'room-active' : ''} ${peopleOpen ? 'room-show-people' : ''} ${diagnosticsOpen ? 'room-show-diagnostics' : ''}`}>
     <header className="room-header"><div className="room-brand"><span className="room-brand-icon"><Radio size={24}/></span><div><h1>Xennex Live</h1><p>Sua sala. Suas telas. Todo mundo junto.</p></div></div>
       <span className={`room-status room-status-${state.phase}`}><i/>{statusLabel}</span></header>
     {(notice || state.message || room.captureError || room.warning) && <div className="room-notice" role="status">{[notice, state.message, room.captureError, room.warning].filter(Boolean).join(' · ')}</div>}
+    {!inRoom && <RoomEntryDiagnostic entry={state.entry} phase={state.phase} alternative={state.transport === 'alternative' || HAS_TURN}/>}
+    <TurnFallbackPanel client={client} state={state} code={code} name={name} base={api ? publicUrl : window.location.href} onPending={setFallbackPending}/>
     {!inRoom && <div className="room-lobby">
       <div className="room-welcome"><span className="room-eyebrow">COMPARTILHE O MOMENTO</span><h2>O próximo encontro<br/>começa por uma tela.</h2><p>Crie uma sala ou entre com um convite. Assista e compartilhe pelo aplicativo ou pelo navegador.</p><div className="room-feature-list"><span><Monitor size={18}/>Várias transmissões</span><span><Users size={18}/>Até {MAX_PARTICIPANTS} pessoas</span><span><Link size={18}/>Um link para entrar</span></div></div>
       <form className="room-entry" onSubmit={event => { event.preventDefault(); enter(false); }}>
@@ -122,38 +112,28 @@ export default function StreamWorkspace({ initialRoom = '', standalone = false }
       <div className="room-toolbar"><div><small>{state.isHost ? 'COORDENANDO A SALA' : 'SALA CONECTADA'}</small><strong>{state.room}</strong></div>
         <button title="Copiar código" onClick={() => void copy(state.room)}><Copy size={16}/>Código</button>
         <button onClick={() => void invite()}><Link size={16}/>Convidar</button>
-        {api && <button onClick={() => void api.OpenStreamViewer(state.room, title)}><ExternalLink size={16}/>Janela separada</button>}
-        <span className="room-spacer"/><button className="room-danger" onClick={() => void room.leave()}><LogOut size={16}/>Sair</button>
+        {api && <button onClick={() => void api.OpenStreamViewer(state.room, 'Xennex Live')}><ExternalLink size={16}/>Janela separada</button>}
+        <button aria-pressed={viewOnly} onClick={() => { setPeopleOpen(viewOnly); setViewOnly(value => !value); }}><Monitor size={16}/>{viewOnly ? 'Voltar aos controles' : 'Somente telas'}</button>
+        <span className="room-spacer"/>
+        <button className="room-primary" aria-haspopup="dialog" onClick={() => setCaptureOpen(true)}><ScreenShare size={16}/>{room.locals.length ? `Transmitindo · ${room.locals.length}` : 'Transmitir'}</button>
+        <button className={room.newScreens.length ? 'room-new-live-button' : undefined} aria-label="Pessoas e telas" aria-description={room.newScreens.length ? `${room.newScreens.length} novas transmissões disponíveis` : undefined} aria-pressed={peopleOpen} onClick={() => setPeopleOpen(value => !value)}><Users size={16}/>Pessoas e telas{room.newScreens.length > 0 && <span className="room-new-live-badge" aria-hidden="true">{room.newScreens.length}</span>}</button>
+        <button aria-pressed={diagnosticsOpen} onClick={() => setDiagnosticsOpen(value => !value)}><Activity size={16}/>Qualidade</button>
+        <button aria-expanded={toolsOpen} onClick={() => setToolsOpen(value => !value)}>Conversa e notas</button>
+        <button className="room-danger" onClick={() => void room.leave()}><LogOut size={16}/>Sair</button>
       </div>
+      {room.capturing && !captureOpen && <CaptureProgress phase={room.capturePhase} cancel={room.cancel}/>}
+      <StreamCapturePanel open={captureOpen} onClose={closeCapture}/>
+      <div hidden={!toolsOpen}><RoomToolsPanel key={client.sessionId} view={state.workspace} client={client.workspace}/></div>
       <div className="room-body"><main className="room-stage">
-        <div className={`room-grid ${validFocus ? 'room-grid-focus' : ''}`}>
-          {tiles.map(tile => <div key={tile.id} inert={!!validFocus && tile.id !== validFocus} aria-hidden={!!validFocus && tile.id !== validFocus} className={validFocus && tile.id !== validFocus ? 'room-background-media' : 'room-tile'}><StreamVideo {...tile} audible={audible.includes(tile.id)} focused={tile.id === validFocus}
-            onAudio={() => setAudible(ids => ids.includes(tile.id) ? ids.filter(id => id !== tile.id) : [...ids, tile.id])} onFocus={() => setFocus(validFocus === tile.id ? '' : tile.id)}/></div>)}
-          {!tiles.length && <div className="room-empty"><ScreenShare size={40}/><h3>A sala está pronta</h3><p>Compartilhe sua tela ou aguarde alguém começar.</p><small>O áudio de cada transmissão é ativado por você.</small></div>}
-        </div>
+        <StreamStage tiles={tiles} readings={readings} audible={audible} focus={validFocus} onFocus={setFocus}
+          onAudio={id => setAudible(ids => ids.includes(id) ? ids.filter(item => item !== id) : [...ids, id])}/>
         {pending.length > 0 && <div className="room-notice" role="status">Conectando ao vídeo de {pending.map(p => `${p.name}: ${p.title}`).join(', ')}… Se continuar aguardando, confira a conexão e a configuração TURN. <button onClick={() => client.retryWatching()}>Tentar vídeo novamente</button></div>}
-        <RoomDiagnostics client={client}/>
-        <details className="room-capture" open><summary><ScreenShare size={18}/>Adicionar transmissão · {room.locals.length}/{MAX_LOCAL_STREAMS}</summary>
-          <div className="room-capture-form"><label>Título<input value={title} maxLength={80} disabled={room.capturing} onChange={event => setTitle(event.target.value)}/></label>
-            <label>Capturar<select value={source} disabled={room.capturing} onChange={event => setSourceMode(event.target.value as CaptureOptions['source'])}><option value="browser">Selecionar tela / janela / aba</option><option value="camera">Câmera</option>{api && <><option value="window" disabled={nativeBusy}>Janela do Windows</option><option value="monitor" disabled={nativeBusy}>Monitor principal do Windows</option></>}</select></label>
-            {(source === 'window' || source === 'monitor') && <label>Janela / processo<div className="room-input-action"><select value={processId} disabled={room.capturing} onFocus={() => { if (!processes.length) void refreshProcesses(); }} onChange={event => setProcessId(event.target.value)}><option value="">Selecione uma janela</option>{processes.map(p => <option key={p.Hwnd} value={p.Hwnd}>{p.Title} — {p.Name}</option>)}</select><button title="Atualizar janelas" onClick={() => void refreshProcesses()} disabled={loadingProcesses}><RefreshCw size={16}/></button></div></label>}
-            {source === 'camera' && <label>Câmera<select value={cameraId} onFocus={() => void refreshCameras()} onChange={event => setCameraId(event.target.value)}><option value="">Câmera padrão</option>{cameras.map((camera, index) => <option key={camera.deviceId || index} value={camera.deviceId}>{camera.label || `Câmera ${index + 1}`}</option>)}</select></label>}
-            <label>Áudio<select value={audio} disabled={room.capturing} onChange={event => setAudio(event.target.value as CaptureOptions['audio'])}><option value="none">Sem áudio</option>{source === 'camera' ? <option value="microphone">Microfone</option> : <option value="system">{source === 'browser' ? 'Áudio oferecido pelo navegador' : 'Áudio do sistema'}</option>}{api && (source === 'window' || source === 'monitor') && <option value="process">Somente o processo selecionado</option>}</select></label>
-            <label>Resolução máxima<select value={quality.resolution} disabled={room.capturing} onChange={event => setQuality({ ...quality, resolution: event.target.value as Resolution })}>{Object.entries(QUALITY_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}</select></label>
-            <label>Limite de FPS (0 = automático)<input type="number" min={0} max={120} step={1} value={quality.fps} disabled={room.capturing} onChange={event => setQuality({ ...quality, fps: Math.max(0, Math.min(120, Math.round(Number(event.target.value) || 0))) })}/></label>
-            <label>Prioridade<select value={quality.preference} disabled={room.capturing} onChange={event => setQuality({ ...quality, preference: event.target.value as Quality['preference'] })}><option value="motion">Fluidez (jogos)</option><option value="detail">Nitidez (texto)</option></select></label>
-            <label>Upload disponível (Mbps)<input type="number" min={1} max={100} value={quality.uploadMbps} disabled={room.capturing} onChange={event => setQuality({ ...quality, uploadMbps: Math.max(1, Math.min(100, Number(event.target.value) || 1)) })}/></label>
-          </div>
-          <div className="room-share-action"><p>{source === 'browser' ? 'Escolha a fonte no seletor e marque compartilhar áudio, quando disponível.' : 'A captura é local. Somente as pessoas que assistem recebem a transmissão.'}<br/><small>A resolução preserva a proporção original. A qualidade se adapta à conexão e ao número de espectadores.</small></p>
-            {room.capturing ? <button className="room-danger" onClick={room.cancel}><Square size={17}/>Cancelar</button> : <button className="room-primary" disabled={!connected || room.locals.length >= MAX_LOCAL_STREAMS || (nativeBusy && (source === 'window' || source === 'monitor'))} onClick={() => void room.share({ source, audio, cameraId, process: selectedProcess, quality }, title)}><ScreenShare size={18}/>{source === 'camera' ? 'Adicionar câmera' : 'Compartilhar tela'}</button>}
+        <RoomDiagnostics client={client} onReadings={setReadings}/>
+        {diagnosticsOpen && <CapturePipelineDiagnostics captures={room.locals}/>}
 
-          </div>
-          {nativeBusy && <p className="room-helper">Uma captura nativa ativa. Para adicionar outra tela, use “Selecionar tela / janela / aba”.</p>}
-          {room.locals.map(local => <div className="room-local-source" key={local.id}><span>{local.title} · {local.kind === 'camera' ? 'Câmera' : 'Tela'} · {local.quality.fps || 'Auto'} FPS</span><button className="room-danger" onClick={() => void room.stop(local.id)} aria-label={`Parar ${local.title}`}><Square size={14}/>Parar</button></div>)}
-        </details>
       </main><aside className="room-people"><h3><Users size={18}/>Pessoas <span>{state.participants.length}/{MAX_PARTICIPANTS}</span></h3>
-        {state.participants.map(p => <div key={p.peerId} className="room-person-group"><div className="room-person"><span className="room-avatar">{p.name.slice(0, 1).toUpperCase()}</span><div><strong>{p.name}{p.peerId === state.selfId ? ' (você)' : ''}</strong><small>{p.peerId === state.coordinator ? 'Coordenador · ' : ''}{p.publications.length} transmissões</small></div></div>
-          {p.publications.map(publication => <div className="room-publication" key={publication.id}><span>{publication.kind === 'camera' ? 'Câmera' : 'Tela'} · {publication.title}</span>{p.peerId !== state.selfId && <button title={state.watching.includes(publication.id) ? 'Parar de assistir' : 'Assistir'} aria-label={`${state.watching.includes(publication.id) ? 'Parar de assistir' : 'Assistir'} ${p.name}: ${publication.title}`} disabled={!state.watching.includes(publication.id) && state.watching.length >= MAX_WATCHING} onClick={() => client.setWatching(state.watching.includes(publication.id) ? state.watching.filter(id => id !== publication.id) : [...state.watching, publication.id])}>{state.watching.includes(publication.id) ? <Square size={14}/> : <Monitor size={14}/>}</button>}</div>)}
+        {state.participants.map(p => <div key={p.peerId} className="room-person-group"><div className="room-person"><span className="room-avatar">{p.name.slice(0, 1).toUpperCase()}</span><div><strong className={newSharers.has(p.peerId) ? 'room-new-live-name' : undefined}>{p.name}{p.peerId === state.selfId ? ' (você)' : ''}</strong><small>{p.peerId === state.coordinator ? 'Coordenador · ' : ''}{p.publications.length} transmissões</small></div></div>
+          {p.publications.map(publication => <div className="room-publication" key={publication.id}><span>{publication.kind === 'camera' ? 'Câmera' : 'Tela'} · {publication.title}</span>{p.peerId !== state.selfId && <button className={newPublicationIds.has(publication.id) ? 'room-new-live-button' : undefined} aria-pressed={state.watching.includes(publication.id)} title={state.watching.includes(publication.id) ? 'Parar de assistir' : newPublicationIds.has(publication.id) ? 'Nova transmissão disponível' : 'Assistir'} aria-label={`${state.watching.includes(publication.id) ? 'Parar de assistir' : 'Assistir'} ${p.name}: ${publication.title}`} disabled={!state.watching.includes(publication.id) && state.watching.length >= MAX_WATCHING} onClick={() => client.setWatching(state.watching.includes(publication.id) ? state.watching.filter(id => id !== publication.id) : [...state.watching, publication.id])}>{state.watching.includes(publication.id) ? <><Square size={14}/>Parar</> : <><Monitor size={14}/>Assistir{newPublicationIds.has(publication.id) && <span className="room-new-live-badge" aria-hidden="true">Nova</span>}</>}</button>}</div>)}
         </div>)}
         <p className="room-helper">Escolha até {MAX_WATCHING} transmissões. Ative e ajuste o áudio de cada uma independentemente, inclusive com outra tela em destaque.</p>
         <label>Alterar seu nome<input value={name} maxLength={40} onChange={event => setName(event.target.value)} onBlur={() => { client.setName(name); localStorage.setItem('xennex_display_name', displayName(name)); }}/></label>
@@ -161,9 +141,11 @@ export default function StreamWorkspace({ initialRoom = '', standalone = false }
     </>}
     <details className="room-options"><summary>Opções da conexão</summary><div>
       {api && <label>Endereço público do seu Cloudflare<input value={publicUrl} onChange={event => setPublicUrl(event.target.value)} onBlur={() => localStorage.setItem('xennex_cloudflare_url', publicUrl)}/></label>}
-      <p>{HAS_TURN ? 'Servidor de retransmissão configurado para redes que não permitem conexão direta.' : 'Conexão direta entre participantes. Se a sala conectar mas o vídeo não chegar entre redes diferentes, será necessário configurar um servidor TURN.'}</p>
+      <p>{HAS_TURN ? 'Servidor de retransmissão configurado; sua disponibilidade depende do servidor e das credenciais.' : 'Sem retransmissão TURN configurada. Redes restritas podem impedir a entrada na sala ou a chegada dos vídeos, mesmo quando a página abre normalmente.'}</p>
       <small>Salas: geração 3. App e página web devem usar esta mesma geração; salas das versões anteriores não são compatíveis. A hospedagem Cloudflare entrega a página; não retransmite o vídeo automaticamente.</small>
-      {state.diagnostics.length > 0 && <details><summary>Diagnóstico da conexão</summary><pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{state.diagnostics.join('\n')}</pre></details>}
+      {state.entry && <button onClick={() => void copy(entryReport(state.entry!, state.phase, state.transport === 'alternative' || HAS_TURN))}><Copy size={16}/>Copiar diagnóstico</button>}
+      {state.diagnostics.length > 0 && <>
+        <details><summary>Diagnóstico da conexão</summary><pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{state.diagnostics.join('\n')}</pre></details></>}
     </div></details>
   </section>;
 }

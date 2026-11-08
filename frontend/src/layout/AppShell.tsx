@@ -1,9 +1,13 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Palette } from 'lucide-react';
+import SkinEditorModal from '../features/skins/SkinEditorModal';
+import SkinBackground from '../features/skins/SkinBackground';
+import { cssImage } from '../utils/skinUtils';
 import Titlebar from './Titlebar';
+import CompactWorkspace from './CompactWorkspace';
 import CloseConfirmModal from '../components/CloseConfirmModal';
 import AppRoutes from '../AppRoutes';
-import { APP_TABS, type AppTab } from './navigation';
+import { APP_TABS, CUSTOMIZABLE_TABS, type AppTab } from './navigation';
 import { useAppState } from '../hooks/useAppState';
 import { useAutoHide } from '../hooks/useAutoHide';
 
@@ -19,9 +23,19 @@ export default function AppShell() {
     onMouseLeave: handleTitlebarMouseLeave } = useAutoHide(autoHideTitlebar);
   const handleResize = (dir: string) => window.chrome?.webview?.postMessage(`resizeWindow:${dir}`);
 
+  const openFullWindow = (tab?: AppTab) => {
+    if (tab) setActiveTab(tab);
+    window.chrome?.webview?.postMessage('exitSidebar');
+  };
+
+  const effectiveCollapseEdge = state.effectiveCollapseEdge;
+  const orderedTabs = [...CUSTOMIZABLE_TABS].sort((left, right) =>
+    (skinConfig?.navigationOrder.indexOf(left.id) ?? 0) - (skinConfig?.navigationOrder.indexOf(right.id) ?? 0));
+  const navigationTabs = [...orderedTabs, APP_TABS.find(tab => tab.id === 'settings')!];
+
   return (
     <div 
-      className={`app-container ${sidebarMode ? 'sidebar-mode' : ''} pos-${sidebarPosition.toLowerCase()}`} 
+      className={`app-container ${sidebarMode ? 'sidebar-mode' : ''} pos-${sidebarPosition.toLowerCase()} collapse-${effectiveCollapseEdge.toLowerCase()} ${state.compactOpenHeight <= 560 ? 'compact-short' : ''} skin-nav-${skinConfig?.navigationPlacement || 'left'} skin-controls-${skinConfig?.controlsPlacement || 'right'} skin-frame-${skinConfig?.windowPresentation || 'floating'} skin-surface-${skinConfig?.surfaceStyle || 'glass'}`}
       id="app-container"
     >
       {!sidebarMode && (
@@ -38,7 +52,7 @@ export default function AppShell() {
       )}
       <div className="app-frame" id="app-frame">
         {/* Trigger Zone for Auto-Hide Sidebar */}
-        {autoHideSidebar && !showSidebar && (
+        {!sidebarMode && autoHideSidebar && !showSidebar && (
           <div 
             className="sidebar-trigger-zone"
             onMouseEnter={handleSidebarMouseEnter}
@@ -55,7 +69,7 @@ export default function AppShell() {
           {skinConfig?.sidebarImage && (
             <div 
               className="sidebar-bg-layer"
-              style={{ backgroundImage: `url('${skinConfig.sidebarImage}')` }}
+              style={{ backgroundImage: cssImage(skinConfig.sidebarImage), opacity: skinConfig.sidebarImageOpacity }}
             />
           )}
 
@@ -64,13 +78,14 @@ export default function AppShell() {
           </div>
 
           <div className="tabs">
-            {APP_TABS.map(({ id, title, icon: Icon }) => (
+            {navigationTabs.map(({ id, title, icon: Icon }) => (
               <button key={id} className={`tab-btn ${activeTab === id ? 'active' : ''}`}
                 onClick={() => setActiveTab(id)} title={title}
-                style={id === 'settings' ? { marginTop: 'auto' } : undefined}>
+                data-settings={id === 'settings' ? 'true' : undefined}>
                 <Icon size={24} />
               </button>
             ))}
+            <button className="tab-btn" title="Personalizar aparência" onClick={() => state.onEditSkin(state.activeSkinName)}><Palette size={24}/></button>
           </div>
         </div>
 
@@ -79,33 +94,10 @@ export default function AppShell() {
           className={`main-window ${!showSidebar || sidebarMode ? 'expanded' : ''}`}
           style={{ backgroundColor: skinConfig?.backgroundColor || '#0f131a' }}
         >
-          {skinConfig?.backgroundType === 'video' && skinConfig.backgroundUrl ? (
-            <video
-              key={skinConfig.backgroundUrl}
-              className="main-window-bg-video"
-              src={skinConfig.backgroundUrl}
-              autoPlay
-              loop
-              muted
-              playsInline
-              style={{
-                opacity: skinConfig?.backgroundOpacity ?? 1,
-                filter: skinConfig?.backgroundBlur ? `blur(${skinConfig.backgroundBlur}px)` : 'none'
-              }}
-            />
-          ) : (
-            <div
-              className="main-window-bg-image"
-              style={{
-                backgroundImage: skinConfig?.backgroundUrl ? `url('${skinConfig.backgroundUrl}')` : undefined,
-                opacity: skinConfig?.backgroundOpacity ?? 1,
-                filter: skinConfig?.backgroundBlur ? `blur(${skinConfig.backgroundBlur}px)` : 'none'
-              }}
-            />
-          )}
+          <SkinBackground config={skinConfig}/>
 
           {/* Trigger Zone for Titlebar */}
-          {autoHideTitlebar && !showTitlebar && (
+          {!sidebarMode && autoHideTitlebar && !showTitlebar && (
             <div 
               className="titlebar-trigger-zone"
               onMouseEnter={handleTitlebarMouseEnter}
@@ -122,12 +114,21 @@ export default function AppShell() {
             {skinConfig?.titlebarImage && (
               <div 
                 className="titlebar-bg-layer"
-                style={{ backgroundImage: `url('${skinConfig.titlebarImage}')` }}
+                style={{ backgroundImage: cssImage(skinConfig.titlebarImage), opacity: skinConfig.titlebarImageOpacity }}
               />
             )}
             <Titlebar />
           </div>
 
+          {sidebarMode && (
+            <CompactWorkspace
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              openFullWindow={openFullWindow}
+              {...state}
+            />
+          )}
+          {sidebarMode && <div className="compact-edge-handle" aria-hidden="true"><span/></div>}
           <div className="content-wrapper" id="content">
             <AppRoutes activeTab={activeTab} {...state} />
           </div>
@@ -149,6 +150,8 @@ export default function AppShell() {
           )}
         </div>
 
+        {state.skinEditorName && <SkinEditorModal compact={sidebarMode} skinName={state.skinEditorName}
+          onClose={() => state.setSkinEditorName(null)} onSaved={state.onSkinUpdated} onPreview={state.previewSkin}/>}
         {/* Modal de Confirmação ao Fechar */}
         <CloseConfirmModal 
           isOpen={showCloseConfirm}

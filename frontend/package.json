@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.2.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "build:web": "tsc -b && vite build --mode cloudflare",
-    "test": "node tests/streaming.test.mjs"
+    "test": "node tests/browser-capture-support.test.mjs && node tests/streaming.test.mjs && node tests/room-workspace.test.mjs && node tests/capture-lifecycle.test.mjs && node tests/turn-fallback.test.mjs && node tests/frame-processing.test.mjs && node tests/capture-output.test.mjs && node tests/capture-pipeline.test.mjs && node tests/stream-capabilities.test.mjs && node tests/stream-announcements.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.42.0",
@@ -23,6 +23,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "playwright": "^1.63.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1"
   }

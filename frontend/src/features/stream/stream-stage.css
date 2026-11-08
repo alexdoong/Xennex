@@ -1,0 +1,46 @@
+.stream-workspace .room-view-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.stream-workspace .room-view-tools [aria-pressed=true] { background: #8965e844; border-color: #a589ed; }
+.stream-workspace .room-layout-help { display: block; margin-bottom: 10px; }
+.stream-workspace .room-free-board { display: block; position: relative; background: #08091299; border-radius: 12px; overflow: hidden; }
+.stream-workspace .room-grid.room-spotlight-board { grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); grid-template-rows: minmax(240px, 1fr); grid-auto-rows: 140px; align-content: start; overflow-y: auto; }
+.stream-workspace .room-spotlight-board .room-spotlight-primary { grid-column: 1 / -1; min-height: 240px; }
+.stream-workspace .room-spotlight-board .room-video { height: 100%; aspect-ratio: auto; }
+.stream-workspace .room-spotlight-board .room-tile:not(.room-spotlight-primary) .room-video-metrics { display: none; }
+.stream-workspace .room-spotlight-board .room-tile:not(.room-spotlight-primary) .room-video-top span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stream-workspace .room-spotlight-board .room-tile:not(.room-spotlight-primary) .room-video-controls { flex-wrap: wrap; gap: 4px; padding: 10px 6px 6px; }
+.stream-workspace .room-spotlight-board .room-tile:not(.room-spotlight-primary) .room-video-controls input { width: 48px; min-width: 0; }
+.stream-workspace .room-floating-tile { position: absolute; display: flex; flex-direction: column; padding: 4px; min-width: 0; }
+.stream-workspace .room-floating-tile .room-video { flex: 1; min-height: 0; aspect-ratio: auto; border-radius: 0 0 10px 10px; }
+.stream-workspace .room-move-handle { flex: 0 0 30px; border-radius: 9px 9px 0 0; background: #252135; padding: 4px 10px; justify-content: flex-start; cursor: move; touch-action: none; overflow: hidden; }
+.stream-workspace .room-move-handle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stream-workspace .room-resize-handle { position: absolute; z-index: 3; padding: 0; border: 0; border-radius: 4px; background: transparent; touch-action: none; }
+.stream-workspace .room-resize-handle:hover,.stream-workspace .room-resize-handle:focus-visible { background: #ad93ff66; }
+.stream-workspace .room-resize-n,.stream-workspace .room-resize-s { left: 20px; right: 20px; height: 7px; cursor: ns-resize; }
+.stream-workspace .room-resize-n { top: 0; }
+.stream-workspace .room-resize-s { bottom: 0; }
+.stream-workspace .room-resize-e,.stream-workspace .room-resize-w { top: 20px; bottom: 20px; width: 7px; cursor: ew-resize; }
+.stream-workspace .room-resize-e { right: 0; }
+.stream-workspace .room-resize-w { left: 0; }
+.stream-workspace :is(.room-resize-ne,.room-resize-nw,.room-resize-se,.room-resize-sw) { width: 20px; height: 20px; }
+.stream-workspace .room-resize-ne { right: 0; top: 0; cursor: nesw-resize; }
+.stream-workspace .room-resize-nw { left: 0; top: 0; cursor: nwse-resize; }
+.stream-workspace .room-resize-sw { left: 0; bottom: 0; cursor: nesw-resize; }
+.stream-workspace .room-resize-se { right: 0; bottom: 0; background: #302647; cursor: nwse-resize; }
+.stream-workspace .room-floating-tile .room-video-controls { padding-right: 32px; flex-wrap: wrap; }
+.stream-workspace .room-move-handle[hidden], .stream-workspace .room-resize-handle[hidden] { display: none; }
+.stream-workspace.room-view-only > .room-header,
+.stream-workspace.room-view-only > .room-options,
+.stream-workspace:not(.room-show-people) .room-people,
+.stream-workspace:not(.room-show-diagnostics) .room-diagnostics { display: none; }
+.stream-workspace:not(.room-show-people) .room-body { grid-template-columns: minmax(0, 1fr); }
+.stream-workspace.stream-standalone.room-view-only { max-width: none; padding: 12px; }
+.stream-workspace .room-video-top span { min-width: 0; overflow-wrap: anywhere; }
+.stream-workspace .room-video-top small { flex-shrink: 0; }
+.room-capture-progress { display: flex; align-items: center; gap: 12px; padding: 14px; margin: 12px 0; border: 1px solid var(--accent, #9671ef); border-radius: 12px; background: var(--surface, rgba(20, 20, 32, .8)); }
+.room-capture-progress > div { flex: 1; min-width: 0; }
+.room-capture-progress p { margin: 4px 0; }
+.room-capture-progress small { display: block; opacity: .8; }
+.room-capture-spinner { flex-shrink: 0; animation: room-capture-spin 1s linear infinite; }
+.compact-stream .room-capture-progress { flex-wrap: wrap; font-size: 12px; }
+@keyframes room-capture-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .room-capture-spinner { animation: none; } }

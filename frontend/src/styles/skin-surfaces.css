@@ -1,0 +1,79 @@
+/* Appearance only. Geometry and docking stay in skin-layout/compact-panel. */
+.app-container.skin-surface-solid :is(.glass-panel,.left-sidebar,.floating-titlebar) { backdrop-filter:none; }
+.app-container.skin-surface-terminal { font-family:Consolas,monospace; }
+.app-container.skin-surface-terminal :is(.glass-panel,.main-window,.left-sidebar,.floating-titlebar,.btn,.tab-btn,.modern-input) {
+  border-radius:0; box-shadow:none; backdrop-filter:none;
+}
+.app-container.skin-surface-terminal :is(.glass-panel,.left-sidebar,.floating-titlebar) { border-color:var(--primary); }
+.app-container.skin-surface-terminal .tab-btn.active { outline:1px solid var(--primary); outline-offset:-2px; }
+.app-container.skin-surface-terminal .drag-region { border-radius:0; }
+.app-container.skin-surface-ornate :is(.glass-panel,.main-window,.left-sidebar,.floating-titlebar) {
+  border-color:var(--primary); outline:1px solid color-mix(in srgb,var(--primary) 45%,transparent); outline-offset:-5px;
+}
+.app-container.skin-surface-ornate .tab-btn.active { outline:1px solid var(--primary); }
+
+/* Static highlights, with no displacement filters or per-frame JS/animations. */
+.app-container.skin-surface-liquid {
+  --liquid-reflection:linear-gradient(145deg,var(--glass-sheen),transparent 42%,var(--glass-shade));
+  --liquid-shadow:var(--surface-shadow),inset 0 1px 0 var(--glass-rim),inset 0 -1px 0 var(--glass-shade);
+}
+.app-container.skin-surface-liquid .main-window::after {
+  content:""; position:absolute; inset:0; z-index:3; pointer-events:none; border-radius:inherit;
+  background:radial-gradient(ellipse at 8% 0,var(--glass-sheen),transparent 55%);
+  box-shadow:inset 0 1px 0 var(--glass-rim),inset 0 -1px 0 var(--glass-shade);
+}
+.app-container.skin-surface-liquid :is(.glass-panel,.assets-workspace,.room-entry,.room-options,.room-capture) {
+  background:var(--liquid-reflection),var(--panel-background);
+  border:var(--border); border-radius:var(--radius-lg); box-shadow:var(--liquid-shadow);
+  backdrop-filter:blur(var(--panel-blur)) saturate(135%);
+}
+.app-container.skin-surface-liquid :is(.left-sidebar,.floating-titlebar) {
+  background-image:var(--liquid-reflection);
+  box-shadow:var(--liquid-shadow); backdrop-filter:blur(var(--bar-blur)) saturate(135%);
+}
+/* Inner cards/rows share the tint, without another blur layer on each item. */
+.app-container.skin-surface-liquid :is(.glass-panel-inner,.compact-resume,.compact-shortcut) {
+  background:var(--liquid-reflection),var(--card-background);
+  box-shadow:inset 0 1px 0 var(--glass-sheen);
+}
+.app-container.skin-surface-liquid #settings-tab .settings-about { background-image:var(--liquid-reflection); }
+.app-container.skin-surface-liquid .compact-panel {
+  background:var(--liquid-reflection),var(--panel-background);
+  box-shadow:inset 0 1px 0 var(--glass-rim);
+}
+.app-container.skin-surface-liquid :is(.assets-sidebar,.assets-inspector) {
+  background:color-mix(in srgb,var(--panel-background) 70%,transparent);
+  border-color:var(--border-color);
+}
+.app-container.skin-surface-liquid :is(.assets-toolbar,.assets-file-toolbar,.assets-footer,.ai-conversation-title) {
+  border-color:var(--border-color);
+}
+.app-container.skin-surface-liquid :is(.assets-card,.assets-tabs>div,.assets-split-controls,.ai-message) {
+  background:var(--card-background); border-color:var(--border-color);
+}
+.app-container.skin-surface-liquid :is(.assets-card.selected,.assets-tabs>div.active,.ai-message.user) {
+  background:color-mix(in srgb,var(--primary) 13%,var(--card-background));
+  border-color:var(--primary);
+}
+.app-container.skin-surface-liquid .btn.secondary {
+  background:var(--liquid-reflection),var(--card-background); border-color:var(--border-color);
+  box-shadow:inset 0 1px 0 var(--glass-sheen);
+}
+.app-container.skin-surface-liquid .btn.secondary:hover:not(:disabled) {
+  background:color-mix(in srgb,var(--primary) 15%,var(--card-background)); border-color:var(--primary);
+}
+.app-container.skin-surface-liquid .btn.primary { background-image:var(--liquid-reflection); box-shadow:inset 0 1px 0 var(--glass-rim); }
+.app-container.skin-surface-liquid :is(.tab-btn.active,.title-btn:not(.close):hover) {
+  background:var(--liquid-reflection),color-mix(in srgb,var(--primary) 15%,transparent);
+  box-shadow:inset 0 1px 0 var(--glass-rim);
+}
+.app-container.skin-surface-liquid :is(button,input,textarea,select):focus-visible {
+  outline:2px solid var(--primary); outline-offset:3px;
+}
+/* Readable base fill remains if backdrop-filter is unavailable. Media previews,
+   video surfaces, semantic status colors and the portaled skin editor stay intact. */
+@supports not (backdrop-filter:blur(1px)) {
+  .app-container.skin-surface-liquid :is(.glass-panel,.assets-workspace,.room-entry,.room-options,.room-capture,.compact-panel) {
+    background-color:var(--frame-fill);
+  }
+}

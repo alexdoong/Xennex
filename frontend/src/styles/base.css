@@ -115,6 +115,7 @@ body { font-family: var(--font-family); background: var(--bg-base); color: var(-
 
 .sidebar-logo { margin-bottom: 40px; color: white; display: flex; justify-content: center; position: relative; z-index: 2; }
 .tabs { display: flex; flex-direction: column; gap: 16px; width: 100%; align-items: center; height: 100%; position: relative; z-index: 2; }
+.tabs .tab-btn[data-settings="true"] { margin-top:auto; }
 
 .tab-btn {
   background: transparent; border: none; color: var(--text-secondary);
@@ -348,4 +349,8 @@ input:checked + .slider:before { transform: translateX(20px); background-color: 
   top: 8px; right: 8px;
   z-index: 130;
 }
+
+
+.btn.secondary { background: rgba(255,255,255,.07); color: var(--text-primary); border: 1px solid rgba(255,255,255,.18); }
+.btn.secondary:hover:not(:disabled) { background: rgba(255,255,255,.13); }
 

@@ -254,6 +254,7 @@ namespace Xennex.Services
         private readonly object _lock = new object();
 
         public bool IsCapturing { get; private set; }
+        public bool IsRunning => IsCapturing && _captureThread?.IsAlive == true;
         public int CapturedPid { get; private set; }
         public int SampleRate { get; private set; } = 48000;
         public int Channels { get; private set; } = 2;
@@ -352,38 +353,25 @@ namespace Xennex.Services
                 Log($"Aviso ao enumerar sessões de áudio: {ex.Message}");
             }
 
-            // 3. Incluir processos com janelas ativas (jogos e aplicativos que podem estar silenciosos no momento)
-            foreach (var win in allWindows)
+            // Preserve every HWND, including several windows owned by the same process.
+            // Audio-only child processes remain selectable, without impersonating another window.
+            var result = allWindows.Where(win => win.Pid != currentPid).Select(win =>
             {
-                if (win.Pid == currentPid) continue;
-
-                var existing = resultDict.Values.FirstOrDefault(p => p.Hwnd == win.Hwnd.ToInt64() || p.Pid == win.Pid);
-                if (existing != null)
+                resultDict.TryGetValue(win.Pid, out var audio);
+                return new AudioProcessInfo
                 {
-                    existing.Hwnd = win.Hwnd.ToInt64();
-                    if (string.IsNullOrWhiteSpace(existing.Title) || existing.Title == existing.Name)
-                    {
-                        existing.Title = win.Title;
-                    }
-                }
-                else
-                {
-                    resultDict[win.Pid] = new AudioProcessInfo
-                    {
-                        Pid = win.Pid,
-                        Hwnd = win.Hwnd.ToInt64(),
-                        Name = win.ProcessName,
-                        Title = win.Title,
-                        HasActiveAudio = false,
-                        PeakVolume = 0f
-                    };
-                }
+                    Pid = win.Pid, Hwnd = win.Hwnd.ToInt64(), Name = win.ProcessName, Title = win.Title,
+                    HasActiveAudio = audio?.HasActiveAudio ?? false, PeakVolume = audio?.PeakVolume ?? 0f
+                };
+            }).ToList();
+            var windowPids = result.Select(item => item.Pid).ToHashSet();
+            foreach (var audio in resultDict.Values.Where(item => !windowPids.Contains(item.Pid)))
+            {
+                audio.Hwnd = 0;
+                result.Add(audio);
             }
-
-            return resultDict.Values
-                .OrderByDescending(p => p.HasActiveAudio)
-                .ThenBy(p => p.Title)
-                .ToList();
+            return result.OrderByDescending(p => p.Hwnd != 0)
+                .ThenByDescending(p => p.HasActiveAudio).ThenBy(p => p.Title).ToList();
         }
 
         public bool StartCapture(int pid)
@@ -392,22 +380,28 @@ namespace Xennex.Services
             {
                 StopCapture();
 
+                if (_captureThread?.IsAlive == true)
+                {
+                    Log("A captura anterior ainda está encerrando; aguarde antes de iniciar outra.");
+                    return false;
+                }
+
                 bool isSystem = (pid <= 0);
                 Log(isSystem ? "Iniciando captura de áudio do sistema completo (WASAPI Loopback)..." : $"Iniciando captura de áudio exclusiva para PID {pid}...");
 
                 _cts = new CancellationTokenSource();
-                var startedEvent = new ManualResetEvent(false);
-                bool success = false;
+                var startedEvent = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+                CancellationToken captureToken = _cts.Token;
                 _captureThread = new Thread(() =>
                 {
                     if (isSystem)
                     {
-                        RunSystemCaptureWorker(startedEvent, ref success, _cts.Token);
+                        RunSystemCaptureWorker(startedEvent, captureToken);
                     }
                     else
                     {
-                        RunMtaCaptureWorker(pid, startedEvent, ref success, _cts.Token);
+                        RunMtaCaptureWorker(pid, startedEvent, captureToken);
                     }
                 })
                 {
@@ -419,10 +413,12 @@ namespace Xennex.Services
                 _captureThread.SetApartmentState(ApartmentState.MTA);
                 _captureThread.Start();
 
-                // Aguarda inicialização do worker MTA
-                startedEvent.WaitOne(4000);
+                // Called by CaptureSessionService on a background task, never by the new UI startup path.
+                bool success = false;
+                try { success = startedEvent.Task.WaitAsync(TimeSpan.FromSeconds(4)).GetAwaiter().GetResult(); }
+                catch (TimeoutException) { Log("Timeout na inicialização do áudio."); }
 
-                if (success)
+                if (success && _captureThread.IsAlive)
                 {
                     IsCapturing = true;
                     CapturedPid = pid;
@@ -438,7 +434,7 @@ namespace Xennex.Services
             }
         }
 
-        private void RunSystemCaptureWorker(ManualResetEvent startedEvent, ref bool success, CancellationToken token)
+        private void RunSystemCaptureWorker(TaskCompletionSource<bool> startedEvent, CancellationToken token)
         {
             WasapiLoopbackCapture capture = null;
             try
@@ -474,8 +470,7 @@ namespace Xennex.Services
                 };
 
                 capture.StartRecording();
-                success = true;
-                startedEvent.Set();
+                startedEvent.TrySetResult(true);
 
                 while (!token.IsCancellationRequested)
                 {
@@ -488,13 +483,13 @@ namespace Xennex.Services
             }
             finally
             {
-                startedEvent.Set();
+                startedEvent.TrySetResult(false);
                 try { capture?.StopRecording(); } catch { }
                 try { capture?.Dispose(); } catch { }
             }
         }
 
-        private void RunMtaCaptureWorker(int pid, ManualResetEvent startedEvent, ref bool success, CancellationToken token)
+        private void RunMtaCaptureWorker(int pid, TaskCompletionSource<bool> startedEvent, CancellationToken token)
         {
             IntPtr actParamsPtr = IntPtr.Zero;
             IntPtr propvarPtr = IntPtr.Zero;
@@ -536,14 +531,14 @@ namespace Xennex.Services
                 if (hr != 0)
                 {
                     Log($"ActivateAudioInterfaceAsync retornou HR: 0x{hr:X8}");
-                    startedEvent.Set();
+                    startedEvent.TrySetResult(false);
                     return;
                 }
 
                 if (!handler.CompletedEvent.WaitOne(3000) || handler.HResult != 0 || handler.ActivatedInterface == IntPtr.Zero)
                 {
                     Log($"Falha na ativação assíncrona. HR: 0x{handler.HResult:X8}");
-                    startedEvent.Set();
+                    startedEvent.TrySetResult(false);
                     return;
                 }
 
@@ -553,7 +548,7 @@ namespace Xennex.Services
                 if (ctor == null)
                 {
                     Log("Não foi possível encontrar o construtor interno do AudioClient.");
-                    startedEvent.Set();
+                    startedEvent.TrySetResult(false);
                     return;
                 }
 
@@ -584,8 +579,7 @@ namespace Xennex.Services
                 var captureClient = client.AudioCaptureClient;
                 client.Start();
 
-                success = true;
-                startedEvent.Set();
+                startedEvent.TrySetResult(true);
 
                 int channels = mixFormat.Channels;
                 int bitsPerSample = mixFormat.BitsPerSample;
@@ -629,7 +623,7 @@ namespace Xennex.Services
             }
             finally
             {
-                startedEvent.Set();
+                startedEvent.TrySetResult(false);
                 try { client?.Stop(); } catch { }
                 try { client?.Dispose(); } catch { }
                 _audioClient = null;
@@ -661,7 +655,10 @@ namespace Xennex.Services
                 }
                 catch { }
 
+                // Retain a slow worker until it exits. Never overwrite its session with a new one.
+                if (_captureThread?.IsAlive == true) return;
                 _captureThread = null;
+                _cts?.Dispose();
                 _cts = null;
                 Log("Captura parada.");
             }
@@ -677,14 +674,9 @@ namespace Xennex.Services
                 {
                     if (inChannels == 2)
                     {
-                        // Estéreo IEEE Float direto com ganho de áudio para clareza em jogos (1.5x)
+                        // Preserve source amplitude; gain belongs to explicit playback controls.
                         float[] floats = new float[numFrames * 2];
                         Marshal.Copy(bufferPtr, floats, 0, floats.Length);
-                        for (int i = 0; i < floats.Length; i++)
-                        {
-                            float amplified = floats[i] * 1.5f;
-                            floats[i] = amplified > 1.0f ? 1.0f : (amplified < -1.0f ? -1.0f : amplified);
-                        }
                         byte[] result = new byte[floats.Length * sizeof(float)];
                         Buffer.BlockCopy(floats, 0, result, 0, result.Length);
                         return result;

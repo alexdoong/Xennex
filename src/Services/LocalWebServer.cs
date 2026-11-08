@@ -1,3 +1,4 @@
+using Xennex.Services.Security;
 using System;
 using System.Collections.Concurrent;
 using System.IO;
@@ -15,6 +16,7 @@ namespace Xennex.Services
         private HttpListener _listener;
         private readonly string _wwwrootDir;
         public const int Port = 59123;
+        private readonly int _port;
         private bool _isRunning = false;
 
         private readonly ConcurrentDictionary<Guid, Channel<byte[]>> _activeClients = new ConcurrentDictionary<Guid, Channel<byte[]>>();
@@ -24,9 +26,10 @@ namespace Xennex.Services
         public int CurrentSampleRate { get; set; } = 48000;
         public int CurrentChannels { get; set; } = 2;
 
-        public LocalWebServer(string wwwrootDir)
+        public LocalWebServer(string wwwrootDir, int port = Port)
         {
             _wwwrootDir = wwwrootDir;
+            _port = port;
         }
 
         public void Start()
@@ -34,16 +37,16 @@ namespace Xennex.Services
             try
             {
                 _listener = new HttpListener();
-                _listener.Prefixes.Add($"http://localhost:{Port}/");
-                _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+                _listener.Prefixes.Add($"http://localhost:{_port}/");
+                _listener.Prefixes.Add($"http://127.0.0.1:{_port}/");
                 _listener.Start();
                 _isRunning = true;
                 Task.Run(ListenLoop);
-                Console.WriteLine($"[LocalWebServer] Serving from {_wwwrootDir} at http://localhost:{Port}/");
+                Console.WriteLine($"[LocalWebServer] Serving from {_wwwrootDir} at http://localhost:{_port}/");
             }
             catch (Exception ex)
             {
-                Console.WriteLine("[LocalWebServer] Could not bind to port: " + ex.Message);
+                AppLog.Error("LocalWebServer.Start", ex);
             }
         }
 
@@ -54,6 +57,10 @@ namespace Xennex.Services
                 try
                 {
                     var context = await _listener.GetContextAsync();
+                    if (context.Request.IsWebSocketRequest && !LocalRequestPolicy.IsCaptureAllowed(context.Request.Headers["Origin"], context.Request.QueryString["token"], LocalRequestPolicy.CaptureToken))
+                    {
+                        context.Response.StatusCode = 403; context.Response.Close(); continue;
+                    }
                     if (context.Request.IsWebSocketRequest && context.Request.Url.AbsolutePath.TrimEnd('/').Equals("/audiostream", StringComparison.OrdinalIgnoreCase))
                     {
                         _ = HandleAudioWebSocketAsync(context);
@@ -63,9 +70,10 @@ namespace Xennex.Services
                         ProcessRequest(context);
                     }
                 }
-                catch
+                catch (Exception error)
                 {
                     if (!_isRunning) break;
+                    AppLog.Error("LocalWebServer.Listen", error);
                 }
             }
         }
@@ -172,10 +180,14 @@ namespace Xennex.Services
         {
             try
             {
-                string rawUrl = context.Request.Url.AbsolutePath.TrimStart('/');
-                if (string.IsNullOrEmpty(rawUrl) || rawUrl == "/") rawUrl = "watch.html";
-
-                string filePath = Path.Combine(_wwwrootDir, rawUrl.Replace('/', Path.DirectorySeparatorChar));
+                if (context.Request.HttpMethod != "GET" && context.Request.HttpMethod != "HEAD")
+                { context.Response.StatusCode = 405; return; }
+                // No cross-origin fetches; WS authorization is separate from CORS.
+                string origin = context.Request.Headers["Origin"];
+                if (origin != null && origin != $"http://localhost:{_port}" && origin != $"http://127.0.0.1:{_port}")
+                { context.Response.StatusCode = 403; return; }
+                string filePath = LocalRequestPolicy.ResolvePublicFile(_wwwrootDir, context.Request.RawUrl);
+                if (filePath == null) { context.Response.StatusCode = 403; return; }
                 if (File.Exists(filePath))
                 {
                     byte[] bytes = File.ReadAllBytes(filePath);
@@ -190,17 +202,19 @@ namespace Xennex.Services
                         ".svg" => "image/svg+xml",
                         _ => "application/octet-stream"
                     };
-                    context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+                    context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
+                    context.Response.Headers.Add("Cross-Origin-Resource-Policy", "same-origin");
                     context.Response.StatusCode = 200;
-                    context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+                    context.Response.ContentLength64 = bytes.Length;
+                    if (context.Request.HttpMethod == "GET") context.Response.OutputStream.Write(bytes, 0, bytes.Length);
                 }
                 else
                 {
                     context.Response.StatusCode = 404;
                 }
-                context.Response.Close();
             }
-            catch { }
+            catch (Exception error) { AppLog.Error("LocalWebServer.Request", error); }
+            finally { try { context.Response.Close(); } catch (Exception error) { AppLog.Error("LocalWebServer.Close", error); } }
         }
 
         public void Stop()

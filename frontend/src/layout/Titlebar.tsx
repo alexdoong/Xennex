@@ -1,5 +1,5 @@
 import React from 'react';
-import { Minus, X } from 'lucide-react';
+import { Minus, X, PanelRightClose } from 'lucide-react';
 
 const Titlebar: React.FC = () => {
   const handleMinimize = () => {
@@ -28,6 +28,8 @@ const Titlebar: React.FC = () => {
         ✕
       </div>
       <div className="title-actions">
+        <button onClick={() => window.chrome?.webview?.postMessage('enterSidebar')} className="title-btn"
+          aria-label="Abrir painel compacto" title="Painel compacto"><PanelRightClose size={15}/></button>
         <button onClick={handleMinimize} className="title-btn" aria-label="Minimize">
           <Minus size={14} />
         </button>

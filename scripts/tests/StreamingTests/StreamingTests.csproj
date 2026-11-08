@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><EnableDefaultCompileItems>false</EnableDefaultCompileItems><OutputPath>../../../bin/StreamingTests/</OutputPath></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../../src/Services/CaptureFrameCadence.cs" Link="CaptureFrameCadence.cs" />
+    <Compile Include="../../../src/Services/CaptureRecoveryPolicy.cs" Link="CaptureRecoveryPolicy.cs" />
+    <Compile Include="../../../src/Services/CaptureSessionService.cs" Link="CaptureSessionService.cs" />
+    <Compile Include="../../../src/Services/ProcessAudioCaptureService.cs" Link="ProcessAudioCaptureService.cs" />
+    <Compile Include="../../../src/Services/AppLog.cs" Link="AppLog.cs" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+</Project>

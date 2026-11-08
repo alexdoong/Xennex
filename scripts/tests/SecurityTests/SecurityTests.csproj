@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems><OutputPath>../../../bin/SecurityTests/</OutputPath></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../../src/Services/Security/LocalRequestPolicy.cs" Link="LocalRequestPolicy.cs" />
+    <Compile Include="../../../src/Services/Updates/UpdatePolicy.cs" Link="UpdatePolicy.cs" />
+    <Compile Include="../../../src/Services/LocalWebServer.cs" Link="LocalWebServer.cs" />
+    <Compile Include="../../../src/Services/AppLog.cs" Link="AppLog.cs" />
+  </ItemGroup>
+</Project>

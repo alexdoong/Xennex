@@ -1,0 +1,24 @@
+.games-tab .games-definition { gap: 24px; }
+.games-tab .games-definition-section { display: flex; flex-direction: column; gap: 16px; padding: 20px 0; border-top: 1px solid #a78bfa25; }
+.games-tab .games-definition-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.games-tab .games-definition-item, .games-tab .games-event-editor { display: flex; flex-direction: column; gap: 12px; padding: 18px; background: #a78bfa0b; border: 1px solid #a78bfa30; border-radius: 14px; }
+.games-tab .games-definition-item.is-archived { opacity: .65; border-style: dashed; }
+.games-tab .games-definition-explainer { display: flex; flex-wrap: wrap; gap: 12px; }
+.games-tab .games-definition-explainer span { display: flex; align-items: center; gap: 8px; border: 1px solid #a78bfa30; color: #d5c8ef; background: #a78bfa10; padding: 10px 14px; border-radius: 12px; font-size: 12px; }
+.games-tab .games-definition > fieldset > .games-toolbar { position: sticky; bottom: 0; z-index: 3; padding: 14px; border-radius: 12px; background: #171927f5; border: 1px solid #a78bfa50; }
+.games-tab .games-skill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.games-tab .games-skill-card { border: 1px solid #a78bfa45; border-radius: 18px; background: radial-gradient(circle at right top, #a78bfa30, transparent 70%), #151827; padding: 20px; }
+.games-tab .games-skill-card summary { display: flex; flex-direction: column; gap: 12px; cursor: pointer; color: #dfd0ff; }
+.games-tab .games-skill-card strong { font-size: 21px; overflow-wrap: anywhere; }
+.games-tab .games-skill-card small { color: #aaa3bc; font-size: 11px; }
+.games-tab .games-skill-card p { margin-top: 16px; line-height: 1.6; font-size: 13px; color: var(--text-secondary); }
+.games-tab .games-skill-metric { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 12px; }
+.games-tab .games-event-history { padding: 12px; border: 1px solid #a78bfa25; border-radius: 12px; }
+.games-tab .games-event-history summary { color: #d5c8ef; cursor: pointer; font-size: 12px; }
+.games-tab .games-event-history ol { list-style: none; padding: 12px 0 0; display: flex; flex-direction: column; gap: 12px; max-height: 330px; overflow: auto; }
+.games-tab .games-event-history li { display: flex; gap: 14px; font-size: 12px; line-height: 1.6; }
+.games-tab .games-event-history time { min-width: 65px; color: #b9a4f1; }
+.games-tab .games-event-history li > div { border-left: 2px solid #a78bfa55; padding-left: 14px; overflow-wrap: anywhere; }
+@media (max-width: 750px) {
+  .games-tab .games-definition-grid { grid-template-columns: 1fr; }
+}

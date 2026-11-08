@@ -1,0 +1,28 @@
+{
+  "name": "xennex-live",
+  "account_id": "0699d60368a51264db60c147d3b361a9",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "persist": true
+    }
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    "TURN_ENABLED": "false",
+    "TURN_TTL_SECONDS": "43200",
+    "TURN_ALLOWED_ORIGINS": "https://appassets"
+  },
+  "ratelimits": [{
+    "name": "TURN_RATE_LIMITER",
+    "namespace_id": "10261031",
+    "simple": { "limit": 10, "period": 60 }
+  }]
+}

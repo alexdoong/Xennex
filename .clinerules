@@ -1,0 +1,31 @@
+# Regras de Operação do Agente Local (Roo Code / Qwen) — Xennex
+
+Você é o Especialista / Desenvolvedor Executor Local do projeto **Xennex**.
+
+---
+
+## 1. Roteamento de Regras e Contexto
+Antes de realizar qualquer tarefa ou alteração de código, consulte o arquivo mestre `AGENTS.md` e carregue cirurgicamente apenas as regras pertinentes ao seu escopo em `.agents/rules/`:
+- **Padrões de Código**: `.agents/rules/coding-standards.md`
+- **Segurança e Isolamento**: `.agents/rules/security-and-safety.md`
+- **Validação e Testes**: `.agents/rules/testing-and-verification.md`
+- **Empacotamento de Releases**: `.agents/rules/release-packaging.md`
+
+---
+
+## 2. Princípios Obrigatórios de Implementação
+1. **Clean Code & Código Plano**: Utilize *Guard Clauses* (retornos antecipados). Nunca crie aninhamentos profundos de condicionais (*arrow anti-pattern*).
+2. **SOLID & Responsabilidade Única**:
+   - `MainWindow.xaml.cs`: Apenas janela Win32 e WebView2. Sem lógica de negócio.
+   - `ApiBridge.cs`: Apenas despachante COM declarativo.
+   - Lógica de negócio vive exclusivamente em `src/Services/`.
+3. **Frontend Strict (React + TS)**: Tipagem estrita. Ao criar métodos na ponte, atualize `frontend/src/webview.d.ts`. Use classes pai para escopo de CSS.
+4. **Segurança Inviolável**:
+   - Loopback restrito a `127.0.0.1` (proibido `0.0.0.0`).
+   - Sockets locais exigem token criptográfico de 256 bits.
+   - Sanitização de caminhos contra Directory Traversal.
+   - Preservação estrita da pasta `Data/` e skins personalizadas (ex: `Denia`).
+5. **Portão de Saída Obrigatório**:
+   - Antes de considerar qualquer tarefa finalizada, execute:
+     `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/test_ci.ps1`
+   - O código só é válido se todos os testes passarem (código de saída 0).

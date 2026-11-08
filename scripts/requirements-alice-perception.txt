@@ -1,0 +1,9 @@
+# Optional isolated encoder worker. Do not install into Gestures or the core lab.
+# Install matching CPU torch/vision/audio from the official PyTorch CPU index.
+torch==2.10.0
+torchvision==0.25.0
+torchaudio==2.10.0
+transformers==5.19.0
+sentence-transformers==6.1.0
+safetensors==0.8.0
+soundfile==0.13.1

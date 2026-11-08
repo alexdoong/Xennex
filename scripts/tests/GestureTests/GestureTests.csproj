@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems><OutputPath>../../../bin/GestureTests/</OutputPath></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../../src/Services/Gestures/*.cs" Link="Services/%(Filename)%(Extension)" />
+    <Compile Include="../../../src/Services/HandMotionService.cs" Link="Services/HandMotionService.cs" />
+    <None Include="fake_worker.py" Link="scripts/hand_motion.py" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+</Project>

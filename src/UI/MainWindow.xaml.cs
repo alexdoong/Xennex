@@ -15,6 +15,12 @@ namespace Xennex.UI
 {
     public partial class MainWindow : Window
     {
+        private sealed class DialogOwner : System.Windows.Forms.IWin32Window
+        {
+            public IntPtr Handle { get; }
+            public DialogOwner(IntPtr handle) => Handle = handle;
+        }
+
         private readonly WacomService wacomService;
         private readonly RealEngineService realEngineService;
         private readonly HandMotionService handMotionService;
@@ -27,6 +33,7 @@ namespace Xennex.UI
         private readonly ProcessAudioCaptureService processAudioCaptureService;
         private ApiBridge apiBridge;
         private NotifyIcon notifyIcon;
+        private System.Drawing.Icon trayIcon;
         private DispatcherTimer statusTimer;
         private bool isForceExiting = false;
 
@@ -48,8 +55,6 @@ namespace Xennex.UI
         public const int HTBOTTOMLEFT = 16;
         public const int HTBOTTOMRIGHT = 17;
 
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern int RegisterWindowMessage(string lpString);
                         [DllImport("user32.dll")]
         public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
         [DllImport("user32.dll")]
@@ -63,12 +68,12 @@ namespace Xennex.UI
         public const int WS_CAPTION = 0x00C00000;
         public const int LWA_COLORKEY = 1;
 
-        public static readonly int WM_SHOW_XENNEX = RegisterWindowMessage("XENNEX_RESTORE_INSTANCE_MSG");
         public static CoreWebView2Environment SharedEnvironment { get; private set; }
 
         public MainWindow()
         {
             InitializeComponent();
+            Icon = AppIcon.LoadWindowIcon();
 
             wacomService = new WacomService();
             realEngineService = new RealEngineService();
@@ -77,6 +82,11 @@ namespace Xennex.UI
             skinService = new SkinService(configService);
             streamService = new StreamService();
             sidebarService = new SidebarService(this, configService, OnSidebarModeChanged);
+            sidebarService.OnGeometryChanged = (w, h, edge) =>
+            {
+                webView?.CoreWebView2?.ExecuteScriptAsync(
+                    $"if(window.updateSidebarGeometry) window.updateSidebarGeometry({w}, {h}, '{edge}');");
+            };
             updateService = new UpdateService();
             processAudioCaptureService = new ProcessAudioCaptureService();
             processAudioCaptureService.OnAudioChunkAvailable += (bytes, rate, ch) =>
@@ -106,7 +116,22 @@ namespace Xennex.UI
                 ShutdownRequested = ShutdownApp,
                 ToggleSidebarModeRequested = () => sidebarService.ToggleSidebarMode(),
                 IsSidebarModeGetter = () => sidebarService.IsSidebarMode,
-                SidebarPositionChangedRequested = () => sidebarService.OnSidebarPositionChanged()
+                SidebarPositionChangedRequested = () => sidebarService.OnSidebarPositionChanged(),
+                SetSidebarPinnedRequested = value => sidebarService.SetPinned(value),
+                IsSidebarPinnedGetter = () => sidebarService.IsPinned,
+                SetSidebarPlacementRequested = (inset, vertical) => sidebarService.SetPlacement(inset, vertical),
+                SetCompactInteractingRequested = val => sidebarService.SetInteracting(val),
+                PickAssetRootRequested = () =>
+                {
+                    using var dialog = new FolderBrowserDialog { Description = "Escolha uma pasta para a Biblioteca do Xennex", UseDescriptionForTitle = true };
+                    return dialog.ShowDialog(new DialogOwner(new WindowInteropHelper(this).Handle)) == System.Windows.Forms.DialogResult.OK ? dialog.SelectedPath : "";
+                },
+                PickAlicePathRequested = PickAlicePath,
+                PickAssetBackupRequested = () =>
+                {
+                    using var dialog = new SaveFileDialog { Title = "Salvar backup do catálogo", Filter = "Catálogo SQLite (*.db)|*.db", FileName = "xennex-biblioteca.db", OverwritePrompt = true };
+                    return dialog.ShowDialog(new DialogOwner(new WindowInteropHelper(this).Handle)) == System.Windows.Forms.DialogResult.OK ? dialog.FileName : "";
+                }
             };
             streamService.ApiBridge = apiBridge;
         }
@@ -129,20 +154,12 @@ namespace Xennex.UI
                 await webView.EnsureCoreWebView2Async(SharedEnvironment);
 
                 webView.CoreWebView2.AddHostObjectToScript("api", apiBridge);
-                webView.CoreWebView2.PermissionRequested += (s, ev) =>
-                {
-                    if (ev.PermissionKind == CoreWebView2PermissionKind.Camera ||
-                        ev.PermissionKind == CoreWebView2PermissionKind.Microphone ||
-                        (int)ev.PermissionKind == 14)
-                    {
-                        ev.State = CoreWebView2PermissionState.Allow;
-                    }
-                };
-
+                Xennex.Interop.WebViewSecurity.Configure(webView.CoreWebView2);
+                Xennex.Interop.AssetResourceHandler.Attach(webView.CoreWebView2, apiBridge.Assets);
                 string baseDir = AppContext.BaseDirectory;
                 string wwwrootDir = Path.Combine(baseDir, "wwwroot");
 
-                webView.CoreWebView2.SetVirtualHostNameToFolderMapping("appassets", wwwrootDir, CoreWebView2HostResourceAccessKind.Allow);
+                webView.CoreWebView2.SetVirtualHostNameToFolderMapping("appassets", wwwrootDir, CoreWebView2HostResourceAccessKind.Deny);
                 webView.CoreWebView2.Navigate("https://appassets/index.html");
                 webView.DefaultBackgroundColor = System.Drawing.Color.Transparent;
 
@@ -179,7 +196,9 @@ namespace Xennex.UI
 
         private void CoreWebView2_WebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
-            string msg = e.TryGetWebMessageAsString();
+            if (!Xennex.Services.Security.LocalRequestPolicy.IsAppDocument(e.Source)) return;
+            string msg;
+            try { msg = e.TryGetWebMessageAsString(); } catch (ArgumentException) { return; }
             if (msg != null && msg.StartsWith("resizeWindow:") && !sidebarService.IsSidebarMode)
             {
                 string dir = msg.Substring("resizeWindow:".Length).ToLowerInvariant();
@@ -222,21 +241,8 @@ namespace Xennex.UI
             }
         }
 
-        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            if (msg == WM_SHOW_XENNEX)
-            {
-                RestoreFromTray();
-                handled = true;
-            }
-            return IntPtr.Zero;
-        }
-
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            var source = HwndSource.FromHwnd(hwnd);
-            source?.AddHook(WndProc);
             RestoreWindowPosition();
             StartStatusTimer();
         }
@@ -281,9 +287,16 @@ namespace Xennex.UI
 
         private void InitializeTrayIcon()
         {
+            try
+            {
+                string executable = Environment.ProcessPath;
+                if (!string.IsNullOrEmpty(executable))
+                    trayIcon = System.Drawing.Icon.ExtractAssociatedIcon(executable);
+            }
+            catch (Exception ex) { AppLog.Error("TrayIcon", ex); }
             notifyIcon = new NotifyIcon
             {
-                Icon = System.Drawing.SystemIcons.Application,
+                Icon = trayIcon ?? System.Drawing.SystemIcons.Application,
                 Visible = true,
                 Text = "Xennex Utility Hub"
             };
@@ -306,12 +319,13 @@ namespace Xennex.UI
             notifyIcon.Visible = true;
         }
 
-        private void RestoreFromTray()
+        internal void RestoreFromTray()
         {
             this.Show();
             this.ShowInTaskbar = true;
             this.WindowState = WindowState.Normal;
             this.Visibility = Visibility.Visible;
+            sidebarService.Reveal();
             this.Activate();
             this.Focus();
 
@@ -322,8 +336,34 @@ namespace Xennex.UI
             }
         }
 
-        private void ShutdownApp()
+        private string PickAlicePath(string kind)
         {
+            if (kind == "models")
+            {
+                using var folder = new FolderBrowserDialog { Description = "Pasta do encoder perceptivo instalado", UseDescriptionForTitle = true };
+                return folder.ShowDialog(new DialogOwner(new WindowInteropHelper(this).Handle)) == System.Windows.Forms.DialogResult.OK ? folder.SelectedPath : "";
+            }
+            var filter = kind switch
+            {
+                "python" => "Python instalado (python.exe)|python.exe",
+                "checkpoint" => "Estado da Alice (*.pt)|*.pt",
+                "image" => "Imagem PNG (*.png)|*.png",
+                "audio" => "Áudio WAV (*.wav)|*.wav",
+                "text" => "Texto UTF-8 (*.txt)|*.txt",
+                _ => null
+            };
+            if (filter is null) return "";
+            using var dialog = new OpenFileDialog { Title = "Selecionar arquivo para a Alice", Filter = filter, CheckFileExists = true, Multiselect = false };
+            return dialog.ShowDialog(new DialogOwner(new WindowInteropHelper(this).Handle)) == System.Windows.Forms.DialogResult.OK ? dialog.FileName : "";
+        }
+
+        private bool shutdownPending;
+        private async void ShutdownApp()
+        {
+            if (shutdownPending) return;
+            shutdownPending = true;
+            try { if (apiBridge is not null) await apiBridge.StopAlice(); }
+            catch (Exception ex) { AppLog.Error("Shutdown.Alice", ex); }
             isForceExiting = true;
 
             if (!sidebarService.IsSidebarMode && this.WindowState == WindowState.Normal)
@@ -347,11 +387,11 @@ namespace Xennex.UI
             if (servicesStopped) return;
             servicesStopped = true;
             Action[] cleanup = {
-                () => sidebarService.Stop(), () => statusTimer?.Stop(),
+                () => apiBridge?.StopLocalAi(), () => apiBridge?.StopAssets(), () => sidebarService.Stop(), () => statusTimer?.Stop(),
                 () => realEngineService.Stop(), () => handMotionService.Stop(),
                 () => streamService?.StopNativeCapture(), () => streamService?.CloseAllViewers(),
                 () => processAudioCaptureService?.StopCapture(), () => localWebServer?.Stop(),
-                () => notifyIcon?.Dispose()
+                () => notifyIcon?.Dispose(), () => trayIcon?.Dispose()
             };
             foreach (var stop in cleanup)
             {

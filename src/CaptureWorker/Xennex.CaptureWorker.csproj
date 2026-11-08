@@ -6,8 +6,20 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Xennex.CaptureWorker</AssemblyName>
-    <Version>0.2.2</Version>
+    <Version>0.2.4</Version>
     <PublishSingleFile>false</PublishSingleFile>
     <SelfContained>false</SelfContained>
   </PropertyGroup>
+  <ItemGroup><Compile Include="../Services/Security/LocalRequestPolicy.cs" Link="Security/LocalRequestPolicy.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Services/CaptureFrameCadence.cs" Link="CaptureFrameCadence.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Services/CaptureRecoveryPolicy.cs" Link="CaptureRecoveryPolicy.cs" /></ItemGroup>
+  <ItemGroup><PackageReference Include="Vortice.Direct3D11" Version="3.8.3" /></ItemGroup>
+  <ItemGroup><PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="GpuScale.hlsl" LogicalName="Xennex.GpuScale.hlsl" /></ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="CaptureWorkerTests" /></ItemGroup>
+  <ItemGroup>
+    <Compile Include="../../scripts/lib/AuthenticodeVerification.cs" Link="Security/AuthenticodeVerification.cs" />
+    <EmbeddedResource Include="../../assets/publisher-thumbprint.txt" LogicalName="Xennex.PublisherThumbprint" />
+  </ItemGroup>
+  <ItemGroup><None Include="../../assets/licenses/Streaming-DXGI.txt" Link="licenses/Streaming-DXGI.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
 </Project>

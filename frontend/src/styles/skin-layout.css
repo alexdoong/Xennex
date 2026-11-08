@@ -1,0 +1,47 @@
+/* Structural choices only affect the full window; compact geometry belongs to WPF. */
+:root { --nav-bottom-height:74px; --frame-fill:#0f131a; }
+.app-container #settings-tab .settings-shell { display:grid; grid-template-columns:minmax(0,1fr); gap:var(--card-gap); align-content:start; }
+.app-container #settings-tab .settings-shell.settings-cols-2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.app-container #settings-tab .settings-shell > h2 { grid-column:1/-1; order:-1; }
+.app-container #settings-tab .settings-shell > .settings-block { min-width:0; margin:0; flex:none; }
+.app-container #settings-tab .settings-shell > .settings-about { background:var(--card-background); border:var(--card-border); border-radius:var(--card-radius); padding:var(--card-padding); }
+@media(max-width:1100px) { .app-container #settings-tab .settings-shell.settings-cols-2 { grid-template-columns:minmax(0,1fr); } }
+.app-container:not(.sidebar-mode).skin-nav-right .left-sidebar { left:auto; right:16px; }
+.app-container:not(.sidebar-mode).skin-nav-right .sidebar-trigger-zone { left:auto; right:0; }
+.app-container:not(.sidebar-mode).skin-nav-right .left-sidebar.hidden { transform:translateX(125%); }
+.app-container:not(.sidebar-mode).skin-nav-right .main-window:not(.expanded) { left:16px; right:calc(var(--sidebar-width) + 32px); }
+
+.app-container:not(.sidebar-mode).skin-nav-bottom .left-sidebar {
+  top:auto; left:16px; right:16px; bottom:16px; width:auto; height:var(--nav-bottom-height);
+  flex-direction:row; padding:0 10px;
+}
+.app-container:not(.sidebar-mode).skin-nav-bottom .left-sidebar.hidden { transform:translateY(125%); }
+.app-container:not(.sidebar-mode).skin-nav-bottom .sidebar-trigger-zone { top:auto; left:0; right:0; bottom:0; width:auto; height:32px; }
+.app-container:not(.sidebar-mode).skin-nav-bottom .sidebar-logo { margin:0 12px 0 2px; }
+.app-container:not(.sidebar-mode).skin-nav-bottom .tabs { flex-direction:row; width:auto; flex:1; min-width:0; height:100%; gap:5px; overflow-x:auto; overflow-y:hidden; }
+.app-container:not(.sidebar-mode).skin-nav-bottom .tabs .tab-btn { flex:none; }
+.app-container:not(.sidebar-mode).skin-nav-bottom .tabs .tab-btn[data-settings="true"] { margin-top:0; margin-left:auto; }
+.app-container:not(.sidebar-mode).skin-nav-bottom .main-window:not(.expanded) { left:16px; right:16px; bottom:calc(var(--nav-bottom-height) + 32px); }
+
+.app-container:not(.sidebar-mode).skin-controls-left .floating-titlebar { left:14px; right:auto; }
+.app-container:not(.sidebar-mode).skin-controls-left .titlebar-trigger-zone { left:0; right:auto; }
+.app-container:not(.sidebar-mode).skin-controls-center .floating-titlebar { left:50%; right:auto; transform:translateX(-50%); }
+.app-container:not(.sidebar-mode).skin-controls-center .floating-titlebar.hidden { transform:translate(-50%,-150%); }
+.app-container:not(.sidebar-mode).skin-controls-center .titlebar-trigger-zone { left:calc(50% - 140px); right:auto; }
+.app-container:not(.sidebar-mode):is(.skin-controls-left,.skin-controls-center) .content-wrapper { padding-top:max(64px,var(--content-padding)); }
+
+.app-container:not(.sidebar-mode).skin-frame-filled .app-frame { background-color:var(--frame-fill) !important; }
+.app-container:not(.sidebar-mode).skin-frame-filled .main-window { top:0; right:0; bottom:0; border-radius:0; }
+.app-container:not(.sidebar-mode).skin-frame-filled .main-window.expanded { left:0; right:0; bottom:0; }
+.app-container:not(.sidebar-mode).skin-frame-filled.skin-nav-left .main-window:not(.expanded) { left:calc(var(--sidebar-width) + 16px); right:0; }
+.app-container:not(.sidebar-mode).skin-frame-filled.skin-nav-right .main-window:not(.expanded) { left:0; right:calc(var(--sidebar-width) + 16px); }
+.app-container:not(.sidebar-mode).skin-frame-filled.skin-nav-bottom .main-window:not(.expanded) { left:0; right:0; bottom:calc(var(--nav-bottom-height) + 16px); }
+.app-container:not(.sidebar-mode).skin-frame-filled .left-sidebar { border-radius:0; }
+.app-container:not(.sidebar-mode).skin-frame-filled.skin-nav-left .left-sidebar { top:0; bottom:0; left:0; }
+.app-container:not(.sidebar-mode).skin-frame-filled.skin-nav-right .left-sidebar { top:0; bottom:0; right:0; }
+.app-container:not(.sidebar-mode).skin-frame-filled.skin-nav-bottom .left-sidebar { bottom:0; left:0; right:0; }
+
+@media(max-width:640px) {
+  .app-container:not(.sidebar-mode).skin-nav-bottom .sidebar-logo { display:none; }
+  .app-container:not(.sidebar-mode).skin-nav-bottom .tabs { gap:2px; }
+}

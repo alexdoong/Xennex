@@ -49,6 +49,10 @@ Write-Host "`n[2/6] Validando integridade dos assets do wwwroot..." -ForegroundC
 $wwwroot = Join-Path $rootDir "wwwroot"
 Assert-XennexFrontend $wwwroot
 
+# Incluir o runtime de camera no pacote, sem depender de Python no PC do usuario.
+& (Join-Path $PSScriptRoot 'build_gestures.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Falha ao preparar o motor Gestures.' }
+
 # 3. Publicar .NET Self-Contained
 Write-Host "`n[3/6] Publicando executavel .NET 8 Self-Contained (Win-x64)..." -ForegroundColor Yellow
 $stagingDir = Join-Path $rootDir "publish_temp_package"
@@ -76,6 +80,21 @@ dotnet publish $workerProj -p:Version=$Version -c Release -r win-x64 --self-cont
 
 if ($LASTEXITCODE -ne 0) {
     throw "Erro ao publicar Xennex.CaptureWorker via dotnet publish."
+}
+
+# Native OpenGL hook is an explicit source; only its four signed runtime files ship.
+& (Join-Path $PSScriptRoot 'build_game_capture.ps1') -PrepareTools -OutputDirectory 'bin/GameCaptureRelease'
+if ($LASTEXITCODE -ne 0) { throw 'Falha ao compilar captura de jogo.' }
+$stagingGameCapture = Join-Path $stagingDir 'GameCapture'
+New-Item -ItemType Directory -Force -Path $stagingGameCapture | Out-Null
+$gameCaptureNames = @('Xennex.GameHook32.dll', 'Xennex.GameHook64.dll', 'Xennex.GameInjector32.exe', 'Xennex.GameInjector64.exe')
+foreach ($name in $gameCaptureNames) {
+    Copy-Item -LiteralPath (Join-Path $rootDir "bin/GameCaptureRelease/$name") -Destination (Join-Path $stagingGameCapture $name) -Force
+}
+New-Item -ItemType Directory -Force -Path (Join-Path $stagingDir 'licenses') | Out-Null
+Copy-Item -LiteralPath (Join-Path $rootDir 'src/CaptureWorker/Native/ThirdParty/MinHook/LICENSE.txt') -Destination (Join-Path $stagingDir 'licenses/MinHook.txt') -Force
+foreach ($name in @('Zig-runtime.txt','MinGW-runtime.txt')) {
+    Copy-Item -LiteralPath (Join-Path $rootDir "assets/licenses/$name") -Destination (Join-Path $stagingDir "licenses/$name") -Force
 }
 
 # Remover .pdb
@@ -112,7 +131,15 @@ Assert-XennexFrontend $stagingWwwroot
 $stagingScripts = Join-Path $stagingDir "scripts"
 Remove-XennexBuildDirectory $stagingScripts $stagingDir
 New-Item -ItemType Directory -Path $stagingScripts -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot "hand_motion.py") -Destination $stagingScripts -Force
+foreach ($name in @('hand_motion.py', 'setup_gestures.ps1', 'requirements-gestures.txt')) {
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $stagingScripts -Force
+}
+$gestureScripts = Join-Path $stagingScripts 'gestures'
+New-Item -ItemType Directory -Path $gestureScripts -Force | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'gestures') -Filter '*.py' -File |
+    Copy-Item -Destination $gestureScripts -Force
+
+Copy-Item -LiteralPath (Join-Path $rootDir 'bin/GesturesWorker/Xennex.GesturesWorker.exe') -Destination $stagingScripts -Force
 
 # Criar pasta Data de distribuicao com whitelist estrita (zero vazamento de dados locais/pessoais)
 $stagingData = Join-Path $stagingDir "Data"
@@ -145,17 +172,25 @@ Write-Host " -> Dados limpos de configuracao montados (whitelist estrita aplicad
 Write-Host "`n[5/6] Aplicando assinatura digital Authenticode oficial (alexdoong)..." -ForegroundColor Yellow
 $exePath = Join-Path $stagingDir "Xennex.exe"
 $workerPath = Join-Path $stagingDir "Xennex.CaptureWorker.exe"
+$gesturePath = Join-Path $stagingScripts "Xennex.GesturesWorker.exe"
 try {
-    $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Subject -like "*alexdoong*" } | Select-Object -First 1
+    $publisherThumbprint = (Get-Content -LiteralPath (Join-Path $rootDir 'assets/publisher-thumbprint.txt') -Raw).Trim()
+    $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Thumbprint -eq $publisherThumbprint -and $_.HasPrivateKey } | Select-Object -First 1
     if (-not $cert) {
-        $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=alexdoong, O=alexdoong, OU=Xennex Project, C=BR" -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(10) -KeyUsage DigitalSignature -KeySpec Signature
+        throw 'Certificado de assinatura esperado ausente. Restaure a chave existente; o empacotamento nao cria outra identidade.'
     }
     Set-AuthenticodeSignature -FilePath $exePath -Certificate $cert -TimestampServer "http://timestamp.digicert.com" -ErrorAction Stop | Out-Null
     if (Test-Path $workerPath) {
         Set-AuthenticodeSignature -FilePath $workerPath -Certificate $cert -TimestampServer "http://timestamp.digicert.com" -ErrorAction Stop | Out-Null
     }
 
-    foreach ($binary in @($exePath, $workerPath)) {
+    Set-AuthenticodeSignature -FilePath $gesturePath -Certificate $cert -TimestampServer "http://timestamp.digicert.com" -ErrorAction Stop | Out-Null
+    foreach ($name in $gameCaptureNames) {
+        $gameBinary = Join-Path $stagingGameCapture $name
+        Set-AuthenticodeSignature -LiteralPath $gameBinary -Certificate $cert -TimestampServer "http://timestamp.digicert.com" -ErrorAction Stop | Out-Null
+        Assert-XennexSignature -Path $gameBinary -ExpectedThumbprint $cert.Thumbprint
+    }
+    foreach ($binary in @($exePath, $workerPath, $gesturePath)) {
         Assert-XennexSignature -Path $binary -ExpectedThumbprint $cert.Thumbprint
     }
 
@@ -205,6 +240,16 @@ Compress-Archive -LiteralPath $finalFolder -DestinationPath $zipPath -Compressio
 try {
     Copy-Item (Join-Path $stagingDir "Xennex.exe") (Join-Path $rootDir "Xennex.exe") -Force
     if (Test-Path (Join-Path $stagingDir "Xennex.CaptureWorker.exe")) { Copy-Item (Join-Path $stagingDir "Xennex.CaptureWorker.exe") (Join-Path $rootDir "Xennex.CaptureWorker.exe") -Force }
+    Copy-Item -LiteralPath $gesturePath -Destination (Join-Path $rootDir 'scripts/Xennex.GesturesWorker.exe') -Force
+    Copy-Item -LiteralPath (Join-Path $stagingDir 'WebView2Loader.dll') -Destination (Join-Path $rootDir 'WebView2Loader.dll') -Force
+    $rootGameCapture = Join-Path $rootDir 'GameCapture'
+    New-Item -ItemType Directory -Force -Path $rootGameCapture | Out-Null
+    foreach ($name in $gameCaptureNames) { Copy-Item -LiteralPath (Join-Path $stagingGameCapture $name) -Destination (Join-Path $rootGameCapture $name) -Force }
+    New-Item -ItemType Directory -Force -Path (Join-Path $rootDir 'licenses') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $stagingDir 'licenses/MinHook.txt') -Destination (Join-Path $rootDir 'licenses/MinHook.txt') -Force
+    foreach ($name in @('Zig-runtime.txt','MinGW-runtime.txt')) {
+        Copy-Item -LiteralPath (Join-Path $stagingDir "licenses/$name") -Destination (Join-Path $rootDir "licenses/$name") -Force
+    }
     Write-Host " -> Xennex.exe da raiz atualizado com sucesso!" -ForegroundColor Green
 } catch {
     Write-Host " -> [AVISO] Xennex.exe na raiz esta em execucao e nao pode ser sobrescrito." -ForegroundColor Yellow

@@ -1,0 +1,33 @@
+.games-tab { flex: 0 0 auto; height: auto; overflow: visible; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.games-tab h2, .games-tab h3, .games-tab h4, .games-tab p { margin: 0; }
+.games-tab .glass-panel { flex: 0 0 auto; overflow: visible; display: flex; flex-direction: column; gap: 18px; padding: 24px; min-width: 0; }
+.games-tab .games-eyebrow { font-size: 10px; letter-spacing: .16em; color: var(--primary); }
+.games-tab .games-muted { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.games-tab .games-toolbar, .games-tab .games-library, .games-tab .games-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.games-tab .games-toolbar { justify-content: space-between; }
+.games-tab .games-add { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
+.games-tab .games-add label { flex: 1; min-width: 180px; }
+.games-tab label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; min-width: 0; }
+.games-tab input, .games-tab textarea, .games-tab select { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--border-color, #454051); border-radius: 8px; padding: 10px; background: rgba(15, 14, 24, .85); color: var(--text-primary, #eee); font: inherit; }
+.games-tab textarea { resize: vertical; }
+.games-tab input:focus-visible, .games-tab textarea:focus-visible, .games-tab select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.games-tab fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.games-tab .games-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.games-tab .games-metric-fields { display: grid; grid-template-columns: 2fr 1fr 1fr auto; align-items: end; gap: 10px; }
+.games-tab .games-timeline { display: flex; flex-direction: column; gap: 14px; }
+.games-tab article, .games-tab .games-import { border: 1px solid var(--border-color, #454051); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: rgba(15,14,24,.3); }
+.games-tab .games-chips span { padding: 6px 10px; background: rgba(145,110,230,.12); border-radius: 8px; font-size: 12px; }
+.games-tab .games-notes { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.games-tab .games-check { flex-direction: row; align-items: center; }
+.games-tab .games-check input { width: auto; }
+.games-tab .games-chart svg { width: 100%; max-height: 190px; }
+.games-tab .games-chart { display: flex; flex-direction: column; gap: 8px; }
+.games-tab .games-table-scroll { overflow-x: auto; }
+.games-tab table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+.games-tab th, .games-tab td { padding: 12px; border-bottom: 1px solid var(--border-color, #454051); overflow-wrap: anywhere; }
+.games-tab .games-error { color: #ffb5b5; overflow-wrap: anywhere; }
+.games-tab .btn:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 650px) {
+  .games-tab .games-fields, .games-tab .games-metric-fields { grid-template-columns: 1fr; }
+  .games-tab .glass-panel { padding: 16px; }
+}

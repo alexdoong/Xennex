@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_title">Xennex Live · Android v0.2.4</string>
+    <string name="intro">Entre em uma sala já aberta no site ou no computador. Esta prévia compartilha vídeo da tela, sem microfone ou áudio do aparelho. O Android pedirá sua autorização.</string>
+    <string name="room_hint">Código ou link da sala</string>
+    <string name="name_hint">Seu nome</string>
+    <string name="start_capture">Entrar e compartilhar tela</string>
+    <string name="stop_capture">Parar transmissão</string>
+    <string name="capture_cancelled">Compartilhamento cancelado.</string>
+    <string name="start_failed">O Android não permitiu iniciar a captura. Abra o app e tente novamente.</string>
+    <string name="licenses">Licenças de terceiros</string>
+</resources>

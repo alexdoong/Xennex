@@ -1,4 +1,5 @@
 {
   "protocol": "xennex-room-v3",
-  "series": "0.2"
+  "series": "0.2",
+  "version": "0.2.4"
 }

@@ -1,3 +1,4 @@
+import type { CodecMode } from './streamCapabilities';
 export const QUALITY_PRESETS = {
   '720p': { width: 1280, height: 720, label: '720p', bitrate: 4_000_000 },
   '1080p': { width: 1920, height: 1080, label: '1080p', bitrate: 8_000_000 },
@@ -6,8 +7,8 @@ export const QUALITY_PRESETS = {
   source: { width: 0, height: 0, label: 'Original', bitrate: 12_000_000 },
 } as const;
 export type Resolution = keyof typeof QUALITY_PRESETS;
-export interface Quality { resolution: Resolution; fps: number; preference: 'motion' | 'detail'; uploadMbps: number }
-export const DEFAULT_QUALITY: Quality = { resolution: '1080p', fps: 30, preference: 'motion', uploadMbps: 12 };
+export interface Quality { resolution: Resolution; fps: number; preference: 'motion' | 'detail'; uploadMbps: number; delivery?: 'preserve' | 'adaptive'; codec?: CodecMode }
+export const DEFAULT_QUALITY: Quality = { resolution: '1080p', fps: 30, preference: 'motion', uploadMbps: 12, delivery: 'preserve' };
 /** Zero means automatic, never a frozen zero-frame capture. */
 export const requestedFps = (fps: number) => Number.isFinite(fps) ? Math.max(0, Math.min(120, Math.round(fps))) : 0;
 export const captureFps = (fps: number) => requestedFps(fps) || 120;
@@ -17,10 +18,18 @@ export function fitWithin(width: number, height: number, maxWidth: number, maxHe
   return { width: Math.max(2, Math.floor(width * scale / 2) * 2), height: Math.max(2, Math.floor(height * scale / 2) * 2) };
 }
 export function bitrateBudget(quality: Quality, viewers: number): number {
-  const ceiling = Math.max(1, Math.min(100, quality.uploadMbps)) * 1_000_000 * 0.85 / Math.max(1, viewers);
+  const ceiling = Math.max(1, Math.min(1000, Number.isFinite(quality.uploadMbps) ? quality.uploadMbps : 12)) * 1_000_000 * 0.85 / Math.max(1, viewers);
   return Math.max(1_000, Math.min(QUALITY_PRESETS[quality.resolution].bitrate * captureFps(quality.fps) / 30, ceiling));
 }
-export async function tuneConnection(connection: RTCPeerConnection, quality: Quality, viewers: number) {
+const tuning = new WeakMap<RTCPeerConnection, Promise<void>>();
+const warnings = new WeakMap<RTCPeerConnection, string>();
+export const qualityWarning = (connection: RTCPeerConnection) => warnings.get(connection) || '';
+export function tuneConnection(connection: RTCPeerConnection, quality: Quality, viewers: number): Promise<void> {
+  const next = (tuning.get(connection) || Promise.resolve()).catch(() => {}).then(() => applyQuality(connection, quality, viewers));
+  tuning.set(connection, next);
+  return next;
+}
+async function applyQuality(connection: RTCPeerConnection, quality: Quality, viewers: number) {
   for (const sender of connection.getSenders()) {
     if (sender.track?.kind !== 'video') continue;
     sender.track.contentHint = quality.preference;
@@ -30,9 +39,10 @@ export async function tuneConnection(connection: RTCPeerConnection, quality: Qua
     for (const encoding of params.encodings) {
       encoding.maxBitrate = bitrateBudget(quality, viewers);
       encoding.maxFramerate = captureFps(quality.fps);
+      encoding.scaleResolutionDownBy = 1;
     }
-    params.degradationPreference = quality.preference === 'detail' ? 'maintain-resolution' : 'balanced';
-    try { await sender.setParameters(params); }
-    catch (error) { console.warn('[Stream] Ajuste de qualidade não aplicado:', error); }
+    params.degradationPreference = quality.delivery !== 'adaptive' || quality.preference === 'detail' ? 'maintain-resolution' : 'balanced';
+    try { await sender.setParameters(params); warnings.delete(connection); }
+    catch (error) { warnings.set(connection, 'O navegador não aplicou os parâmetros de qualidade solicitados.'); console.warn('[Stream] Ajuste de qualidade não aplicado:', error); }
   }
 }

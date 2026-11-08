@@ -1,16 +1,19 @@
 import { createRequire } from 'node:module';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.XENNEX_PLAYWRIGHT_PATH || 'playwright');
 const base = process.env.XENNEX_TEST_URL || 'http://127.0.0.1:5179';
 const output = resolve('../bin/streaming-qa'); await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const browser = await chromium.launch({ channel: 'msedge', headless: true,
+  ignoreDefaultArgs: ['--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'] });
 const errors = [];
 const roomCode = `XNX-QA-${Date.now().toString(36).toUpperCase()}`;
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const host = await context.newPage();
+  let disabledTurnRequests = 0;
+  await host.route('**/api/turn-credentials', route => { disabledTurnRequests++; return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"turn_disabled"}' }); });
   host.on('pageerror', error => errors.push(error.message));
   host.on('console', message => { if (message.type() === 'error') console.log('BROWSER:', message.text()); });
   await host.goto(base);
@@ -26,6 +29,19 @@ try {
   await host.getByRole('button', { name: 'Entrar na sala', exact: true }).click();
   await host.getByRole('status').filter({ hasText: 'não foi encontrada nesta versão' }).waitFor({ timeout: 15000 });
   console.log('PASS: unknown room immediately explains create/join and version compatibility');
+  if (disabledTurnRequests !== 0) throw new Error('Normal connection contacted the TURN broker');
+  await host.getByRole('button', { name: 'Tentar conexão alternativa', exact: true }).click();
+  if (disabledTurnRequests !== 0) throw new Error('Opening the option activated TURN');
+  await host.getByLabel('Código de acesso à conexão alternativa', { exact: true }).fill('synthetic-private-access-code-12345');
+  await host.getByRole('button', { name: 'Conectar com alternativa', exact: true }).click();
+  await host.getByText('A conexão alternativa está desligada ou ainda não foi configurada pelo dono da sala.', { exact: true }).waitFor();
+  await host.screenshot({ path: resolve(output, 'turn-fallback.png'), fullPage: true });
+  if (disabledTurnRequests !== 1) throw new Error('Alternative retried without permission');
+  await host.locator('.room-options > summary').click();
+  await host.evaluate(() => { navigator.clipboard.writeText = async value => { window.__copiedDiagnostic = value; }; });
+  await host.getByRole('button', { name: 'Copiar diagnóstico', exact: true }).click();
+  if (!await host.evaluate(() => window.__copiedDiagnostic.includes('estado: error') && window.__copiedDiagnostic.includes('padrão P2P') && !window.__copiedDiagnostic.includes(document.querySelector('.room-entry input')?.value))) throw new Error('Connection diagnostic cannot be copied safely after failure');
+  await host.locator('.room-options > summary').click();
   await host.getByRole('button', { name: 'Criar sala com este código' }).click();
   await host.getByRole('button', { name: 'Sair', exact: true }).waitFor({ timeout: 25000 });
   const guestContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -36,6 +52,29 @@ try {
   await guest.getByRole('button', { name: 'Sair', exact: true }).waitFor({ timeout: 25000 });
   await host.getByText('Teste convidado', { exact: true }).waitFor();
   console.log('PASS: real PeerJS signaling and room presence');
+  await guest.waitForFunction(() => document.querySelector('.room-options pre')?.textContent.includes('Entrada na sala: ICE'));
+  await guest.waitForFunction(() => document.querySelector('.room-options pre')?.textContent.includes('Rota da entrada: direta entre participantes'));
+  // A selector that never settles must remain cancellable and release late media.
+  await host.evaluate(() => {
+    navigator.mediaDevices.getDisplayMedia = () => new Promise(resolve => { window.__resolvePicker = resolve; });
+  });
+  await host.getByRole('button', { name: 'Transmitir', exact: true }).click();
+  await host.screenshot({ path: resolve(output, 'share-panel.png'), fullPage: true });
+  await host.setViewportSize({ width: 390, height: 844 });
+  await host.screenshot({ path: resolve(output, 'share-panel-mobile.png'), fullPage: true });
+  if (await host.evaluate(() => document.querySelector('dialog').scrollWidth > document.querySelector('dialog').clientWidth + 1)) throw new Error('Capture dialog overflows at mobile width');
+  await host.setViewportSize({ width: 1280, height: 900 });
+  await host.getByRole('button', { name: 'Compartilhar tela', exact: true }).click();
+  await host.getByText('Preparando transmissão', { exact: true }).waitFor();
+  await host.getByRole('button', { name: 'Cancelar captura', exact: true }).click();
+  await host.getByRole('button', { name: 'Compartilhar tela', exact: true }).waitFor();
+  await host.evaluate(() => {
+    window.__lateStopped = false;
+    window.__resolvePicker({ getTracks: () => [{ stop() { window.__lateStopped = true; } }] });
+  });
+  await host.waitForFunction(() => window.__lateStopped === true);
+  await host.getByRole('button', { name: 'Fechar painel de transmissão', exact: true }).click();
+  console.log('PASS: stalled picker shows loading, cancels and releases late capture without publishing');
   // Replace only display capture with test media, keeping real WebRTC transport.
   const fixture = async page => page.evaluate(() => {
     const synthetic = async () => {
@@ -59,10 +98,12 @@ try {
   });
   await fixture(host); await fixture(guest);
   const share = async (page, title, camera = false) => {
+    await page.getByRole('button', { name: /^Transmit(ir|indo)/ }).click();
     await page.getByLabel('Título', { exact: true }).fill(title);
-    await page.getByLabel('Capturar', { exact: false }).selectOption(camera ? 'camera' : 'browser');
+    await page.getByRole('button', { name: camera ? 'Câmera' : 'Tela, janela ou aba', exact: true }).click();
     await page.getByRole('button', { name: camera ? 'Adicionar câmera' : 'Compartilhar tela', exact: true }).click();
-    await page.getByRole('button', { name: `Parar ${title}`, exact: true }).waitFor();
+    await page.waitForFunction(title => [...document.querySelectorAll('.room-local-source')].some(element => element.textContent.includes(title)), title);
+    await page.getByRole('dialog', { name: 'Compartilhar uma transmissão' }).waitFor({ state: 'hidden' });
   };
   await share(guest, 'Tela um'); await share(guest, 'Tela dois'); await share(guest, 'Webcam', true);
   await host.getByRole('button', { name: 'Assistir Teste convidado: Webcam', exact: true }).waitFor();
@@ -73,16 +114,105 @@ try {
   await host.getByRole('button', { name: 'Ouvir esta transmissão', exact: true }).first().click();
   await host.getByRole('button', { name: 'Ouvir esta transmissão', exact: true }).first().click();
   await host.waitForFunction(() => [...document.querySelectorAll('video')].filter(v => !v.muted && v.srcObject?.getAudioTracks().length === 1).length === 2);
-  await host.getByRole('button', { name: 'Destacar transmissão', exact: true }).first().click();
+  await host.locator('video').first().dblclick();
   await host.waitForFunction(() => [...document.querySelectorAll('video')].filter(v => !v.muted && !v.paused).length === 2);
   await host.getByRole('button', { name: 'Destacar transmissão', exact: true }).first().click();
+  await host.getByLabel('Volume', { exact: true }).first().fill('0.35');
+  await host.evaluate(() => { window.__testVideos = [...document.querySelectorAll('video')]; });
+  await host.getByRole('button', { name: 'Somente telas', exact: true }).click();
+  if (await host.locator('.room-capture').isVisible() || await host.locator('.room-people').isVisible()) throw new Error('Viewer controls were not hidden');
+  await host.getByRole('button', { name: 'Pessoas e telas', exact: true }).click();
+  if (!await host.locator('.room-people').isVisible()) throw new Error('Viewer cannot choose streams');
+  await host.getByRole('button', { name: 'Pessoas e telas', exact: true }).click();
+  await host.getByRole('button', { name: /^Transmit(ir|indo)/ }).click();
+  await host.getByRole('dialog', { name: 'Compartilhar uma transmissão' }).waitFor();
+  await host.getByRole('button', { name: 'Fechar painel de transmissão', exact: true }).click();
+  await host.getByRole('button', { name: 'Organizar livremente', exact: true }).click();
+  const boardRect = await host.locator('.room-grid').boundingBox();
+  if (boardRect.y + boardRect.height < 860) throw new Error('Free board does not fill the viewport');
+  await host.waitForFunction(() => [...document.querySelectorAll('.room-video-metrics')].every(element => /Recebendo.*[1-9][0-9]* FPS/.test(element.textContent)), null, { timeout: 20000 });
+  await host.getByRole('button', { name: 'Qualidade', exact: true }).click();
+  await host.getByText('Qualidade real por conexão', { exact: true }).click();
+  await host.waitForFunction(() => [...document.querySelectorAll('.room-diagnostics p')].some(element => /codec video\//.test(element.textContent) && /decodificar/.test(element.textContent)));
+  await host.getByText('Medir esta sessão', { exact: true }).click();
+  await host.getByRole('button', { name: 'Iniciar medição', exact: true }).click();
+  await host.getByRole('button', { name: 'Copiar relatório da medição', exact: true }).waitFor({ timeout: 70000 });
+  await host.getByRole('button', { name: 'Copiar relatório da medição', exact: true }).click();
+  const benchmarkReport = await host.evaluate(() => JSON.parse(window.__copiedDiagnostic));
+  if (benchmarkReport.active || benchmarkReport.measuredSeconds !== 60 || benchmarkReport.tracks.length !== 2 || benchmarkReport.tracks.some(track => !track.metrics.fps || track.metrics.fps.samples < 20)) throw new Error('Timed RTP benchmark did not measure both incoming tracks for a minute');
+  if (/Teste convidado|Tela um|Tela dois|peerId|credential|candidate/.test(JSON.stringify(benchmarkReport))) throw new Error('Benchmark exported private identities or transport credentials');
+  await writeFile(resolve(output, 'rtp-benchmark-60s.json'), JSON.stringify(benchmarkReport, null, 2));
+  console.log('PASS: minute-long real RTP benchmark exports anonymous measured FPS/bitrate/decode distributions');
+  await host.getByRole('button', { name: 'Qualidade', exact: true }).click();
+  const tile = host.locator('.room-floating-tile').first();
+  const beforeRect = await tile.boundingBox();
+  await tile.locator('.room-resize-se').focus();
+  await host.keyboard.press('ArrowLeft');
+  await host.keyboard.press('ArrowUp');
+  const smaller = await tile.boundingBox();
+  if (!(smaller.width < beforeRect.width)) throw new Error('Resize handle did not resize the tile');
+  const grip = host.getByRole('button', { name: /^Mover/ }).first();
+  const gripRect = await grip.boundingBox();
+  await host.mouse.move(gripRect.x + 35, gripRect.y + 12); await host.mouse.down();
+  await host.mouse.move(gripRect.x + 50, gripRect.y + 45, { steps: 5 }); await host.mouse.up();
+  const moved = await tile.boundingBox();
+  if (!(moved.x > smaller.x && moved.y > smaller.y)) throw new Error('Dragging did not move the screen');
+  // The north-west corner anchors the opposite corner instead of translating the tile.
+  const nw = tile.locator('.room-resize-nw');
+  const edgeBox = await nw.boundingBox();
+  const edgeBefore = await tile.boundingBox();
+  await host.mouse.move(edgeBox.x + 4, edgeBox.y + 4); await host.mouse.down();
+  await host.mouse.move(edgeBox.x + 25, edgeBox.y + 22, { steps: 6 }); await host.mouse.up();
+  const edgeAfter = await tile.boundingBox();
+  if (!(edgeAfter.x > edgeBefore.x && edgeAfter.y > edgeBefore.y && Math.abs(edgeAfter.x + edgeAfter.width - edgeBefore.x - edgeBefore.width) < 2)) throw new Error('North-west resize did not anchor the opposite corner');
+  // Move well below the old fixed-height boundary.
+  const moveToBottom = await grip.boundingBox();
+  await host.mouse.move(moveToBottom.x + 40, moveToBottom.y + 12); await host.mouse.down();
+  await host.mouse.move(moveToBottom.x + 40, 840, { steps: 8 }); await host.mouse.up();
+  const bottom = await tile.boundingBox();
+  if (bottom.y + bottom.height < 830) throw new Error('Tile cannot reach the bottom of the stage');
+  await host.getByRole('button', { name: 'Salvar organização', exact: true }).click();
+  const persisted = await host.evaluate(() => JSON.parse(localStorage.getItem('xennex_stream_layout_v1')));
+  if (persisted.mode !== 'free' || persisted.slots.length !== 2 || /Teste|peerId|publication|roomCode/.test(JSON.stringify(persisted))) throw new Error('Layout was not saved as anonymous visual slots');
+  await host.getByRole('button', { name: 'Foco e miniaturas', exact: true }).click();
+  if (await host.locator('.room-spotlight-primary').count() !== 1 || await host.locator('.room-tile:visible').count() !== 2) throw new Error('Spotlight must keep the other thumbnails visible');
+  if (!await host.evaluate(() => window.__testVideos.every((video, index) => video === document.querySelectorAll('video')[index] && !video.muted && !video.paused))) throw new Error('Spotlight replaced videos or interrupted audio');
+  await host.screenshot({ path: resolve(output, 'viewer-spotlight.png'), fullPage: true });
+  await host.getByRole('button', { name: 'Organizar livremente', exact: true }).click();
+  await host.screenshot({ path: resolve(output, 'viewer-free-layout.png'), fullPage: true });
+  await host.getByRole('button', { name: 'Grade', exact: true }).click();
+  if (!await host.evaluate(() => window.__testVideos.every((video, index) => video === document.querySelectorAll('video')[index] && !video.muted && !video.paused) && window.__testVideos[0].volume === .35)) throw new Error('Changing layout reset video playback or volume');
+  await host.getByRole('button', { name: 'Voltar aos controles', exact: true }).click();
+  console.log('PASS: full-height viewer, toolbar panels, measured incoming FPS, double-click focus, corner/keyboard resize and uninterrupted multi-audio');
   await share(host, 'Tela host');
   const observerContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const observer = await observerContext.newPage(); observer.on('pageerror', error => errors.push(error.message));
+  let alternateRequests = 0;
+  await observer.route('**/api/turn-credentials', route => { alternateRequests++; return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    // Synthetic unreachable relay: this tests opt-in/configuration while real media stays direct. No paid TURN is used.
+    iceServers: [{ urls: 'turn:relay.invalid:3478', username: 'test-user', credential: 'test-credential' }], expiresAt: Date.now() + 600000,
+  }) }); });
   await observer.goto(`${base}/?room=${roomCode}`); await fixture(observer);
   await observer.getByLabel('Seu nome', { exact: true }).fill('Observador');
+  await observer.getByLabel('Código ou link da sala').fill('XNX-NONEXISTENT-FALLBACK-QA');
   await observer.getByRole('button', { name: 'Entrar na sala', exact: true }).click();
+  await observer.getByRole('status').filter({ hasText: 'não foi encontrada nesta versão' }).waitFor({ timeout: 15000 });
+  if (alternateRequests) throw new Error('Normal observer connection requested TURN');
+  await observer.getByLabel('Código ou link da sala').fill(roomCode);
+  await host.evaluate(() => { window.__beforeAlternative = [...document.querySelectorAll('video')]; });
+  await observer.getByRole('button', { name: 'Tentar conexão alternativa', exact: true }).click();
+  await observer.getByLabel('Código de acesso à conexão alternativa', { exact: true }).fill('synthetic-private-access-code-12345');
+  await observer.getByRole('button', { name: 'Conectar com alternativa', exact: true }).click();
   await observer.getByRole('button', { name: 'Sair', exact: true }).waitFor({ timeout: 25000 });
+  await observer.getByText('Alternativa disponível neste participante', { exact: true }).waitFor();
+  if (alternateRequests !== 1) throw new Error('Alternative did not remain opt-in');
+  if (!await host.evaluate(() => window.__beforeAlternative.every(video => video.isConnected && !video.paused))) throw new Error('Alternative interrupted another participant');
+  if (await observer.evaluate(() => Object.values(localStorage).some(value => value.includes('synthetic-private-access-code')))) throw new Error('Access code was persisted');
+  await observer.getByRole('button', { name: 'Renovar acesso', exact: true }).click();
+  await observer.getByRole('button', { name: 'Confirmar renovação', exact: true }).click();
+  await observer.getByText('Acesso renovado.', { exact: true }).waitFor();
+  if (alternateRequests !== 2) throw new Error('Explicit renewal did not contact broker exactly once');
+  console.log('PASS: TURN stays off by default, disabled broker preserves direct retry, opt-in and renewal preserve other participants; no real relay service used');
   await observer.getByRole('button', { name: 'Assistir Teste convidado: Tela um', exact: true }).click();
   await observer.waitForFunction(() => [...document.querySelectorAll('video')].some(v => v.readyState >= 2));
   await share(observer, 'Tela observador');
@@ -114,6 +244,20 @@ try {
     await newcomer.getByRole('button', { name: 'Assistir Teste convidado: Webcam', exact: true }).click();
     await newcomer.waitForFunction(() => [...document.querySelectorAll('video')].some(v => v.readyState >= 2));
   }
+  await host.reload();
+  await host.getByLabel('Seu nome', { exact: true }).fill('Layout restore');
+  await host.getByLabel('Código ou link da sala').fill(`${roomCode}-LAYOUT`);
+  await host.getByRole('button', { name: 'Criar sala com este código', exact: true }).click();
+  await host.getByRole('button', { name: 'Sair', exact: true }).waitFor({ timeout: 25000 });
+  if (await host.getByRole('button', { name: 'Organizar livremente', exact: true }).getAttribute('aria-pressed') !== 'true') throw new Error('Saved layout mode was not restored after reload');
+  await fixture(host); await share(host, 'Restored source');
+  const restoredRect = await host.locator('.room-floating-tile').boundingBox();
+  await host.setViewportSize({ width: 390, height: 844 });
+  await host.waitForFunction(() => { const r = document.querySelector('.room-floating-tile').getBoundingClientRect(); const b = document.querySelector('.room-grid').getBoundingClientRect(); return r.left >= b.left - 1 && r.right <= b.right + 1 && r.bottom <= b.bottom + 1; });
+  if (!restoredRect) throw new Error('Saved layout did not restore an actual tile');
+  await host.getByRole('button', { name: 'Restaurar padrão', exact: true }).click();
+  if (await host.getByRole('button', { name: 'Grade', exact: true }).getAttribute('aria-pressed') !== 'true') throw new Error('Reset did not restore the grid');
+  console.log('PASS: saved anonymous layout survives reload, fits a mobile board, resets and keeps spotlight media/audio intact');
   if (errors.length) throw new Error(errors.join('\n'));
   console.log('PASS: abrupt browser closure, automatic coordinator election and zero browser exceptions');
 } finally { await browser.close(); }

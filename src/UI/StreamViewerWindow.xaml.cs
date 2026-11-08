@@ -19,6 +19,7 @@ namespace Xennex.UI
         public StreamViewerWindow(string roomId, string title, StreamService streamService, object apiBridge = null)
         {
             InitializeComponent();
+            Icon = AppIcon.LoadWindowIcon();
             _roomId = roomId;
             _title = string.IsNullOrWhiteSpace(title) ? $"Stream - {roomId}" : title;
             _streamService = streamService;
@@ -64,18 +65,11 @@ namespace Xennex.UI
                     webView.CoreWebView2.AddHostObjectToScript("api", _apiBridge);
                 }
 
-                webView.CoreWebView2.PermissionRequested += (s, ev) =>
-                {
-                    if (ev.PermissionKind == CoreWebView2PermissionKind.Camera ||
-                        ev.PermissionKind == CoreWebView2PermissionKind.Microphone ||
-                        (int)ev.PermissionKind == 14)
-                    {
-                        ev.State = CoreWebView2PermissionState.Allow;
-                    }
-                };
-
+                Xennex.Interop.WebViewSecurity.Configure(webView.CoreWebView2);
                 webView.CoreWebView2.WebMessageReceived += (s, args) => {
-                    string message = args.TryGetWebMessageAsString();
+                    if (!Xennex.Services.Security.LocalRequestPolicy.IsAppDocument(args.Source)) return;
+                    string message;
+                    try { message = args.TryGetWebMessageAsString(); } catch (ArgumentException) { return; }
                     if (message != null && message.StartsWith("capture-owner:")) _captureOwner = message.Substring("capture-owner:".Length);
                 };
 
@@ -83,7 +77,7 @@ namespace Xennex.UI
                 string baseDir = Path.GetDirectoryName(exePath);
                 string wwwrootDir = Path.Combine(baseDir, "wwwroot");
 
-                webView.CoreWebView2.SetVirtualHostNameToFolderMapping("appassets", wwwrootDir, CoreWebView2HostResourceAccessKind.Allow);
+                webView.CoreWebView2.SetVirtualHostNameToFolderMapping("appassets", wwwrootDir, CoreWebView2HostResourceAccessKind.Deny);
 
                 string safeRoom = Uri.EscapeDataString(_roomId);
                 string safeTitle = Uri.EscapeDataString(_title);

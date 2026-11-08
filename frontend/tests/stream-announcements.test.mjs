@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
+const directory = await mkdtemp(resolve('node_modules/.stream-announcements-'));
+try {
+  const file = resolve(directory, 'announcements.mjs');
+  await writeFile(file, ts.transpileModule(await readFile('src/features/stream/streamAnnouncements.ts', 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
+  const { StreamAnnouncements } = await import(pathToFileURL(file));
+  const tracker = new StreamAnnouncements();
+  const screen = (id, title = id) => ({ id, title, kind: 'screen' });
+  const person = (id, publications = [], name = id) => ({ peerId: id, name, publications });
+  const self = person('self'), old = person('friend', [screen('existing')]);
+  assert.deepEqual(tracker.update('session', [self, old], 'self', []), [], 'Joining an already-streaming room establishes baseline');
+  const next = person('friend', [...old.publications, screen('new')]);
+  assert.deepEqual(tracker.update('session', [self, next], 'self', []).map(v => v.publicationId), ['new']);
+  assert.equal(tracker.update('session', [self, next], 'self', []).length, 1, 'Repeated presence cannot duplicate notification');
+  const renamed = person('friend', [screen('existing'), screen('new', 'Updated title')], 'Renamed friend');
+  const note = tracker.update('session', [self, renamed], 'self', []);
+  assert.equal(note.length, 1); assert.equal(note[0].name, 'Renamed friend'); assert.equal(note[0].title, 'Updated title');
+  assert.deepEqual(tracker.update('session', [self, renamed], 'self', ['new']), [], 'Watching acknowledges new screen');
+  assert.deepEqual(tracker.update('session', [self, renamed], 'self', []), [], 'Stopping watching does not announce same stream again');
+  tracker.update('session', [self], 'self', []);
+  assert.deepEqual(tracker.update('session', [self, renamed], 'self', []), [], 'Reappearance after migration does not repeat the same ID');
+  const another = person('friend', [screen('another')]);
+  assert.equal(tracker.update('session', [self, another], 'self', []).length, 1, 'A genuinely new source is announced');
+  assert.deepEqual(tracker.update('session', [self], 'self', []), [], 'Ended streams remove badges');
+  const own = person('self', [screen('own-screen')]);
+  assert.deepEqual(tracker.update('session', [own, person('friend', [{ id: 'cam', title: 'Camera', kind: 'camera' }])], 'self', []), [], 'Own capture and camera do not trigger screen-sharing notice');
+  assert.deepEqual(tracker.update('new-session', [self, next], 'self', []), [], 'Room/session change resets baseline');
+  const newer = person('friend', [...next.publications, screen('newer')]);
+  assert.equal(tracker.update('new-session', [self, newer], 'self', []).length, 1);
+  tracker.reset();
+  assert.deepEqual(tracker.update('new-session', [self, newer], 'self', []), [], 'Leave/reset clears previous unread state');
+  console.log('PASS silent screen announcements: baseline, new source, heartbeat/rename deduplication, watch/stop, migration, own/camera exclusion and session reset.');
+} finally { await rm(directory, { recursive: true, force: true }); }

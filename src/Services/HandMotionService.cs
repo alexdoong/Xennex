@@ -1,313 +1,277 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Xennex.Services.Gestures;
 
 namespace Xennex.Services
 {
+    /// <summary>Supervises the camera worker. Only validated profiles and JSON commands cross the boundary.</summary>
     public class HandMotionService
     {
-        private Process handMotionProcess = null;
+        private readonly object sync = new();
+        private readonly GestureProfileStore profiles = new(Path.Combine(AppContext.BaseDirectory, "Data"));
+        private Process process;
+        private string recordingId;
+        private string recordingToken;
+        private int revision;
+        private JsonObject state = new() { ["message"] = "Câmera desligada.", ["armed"] = false };
         public event Action<string> OnLogReceived;
         public event Action OnStatusChanged;
+        public bool IsRunning { get { lock (sync) return Running(); } }
+        private bool Running() => process != null && !process.HasExited;
 
-        public bool IsRunning => handMotionProcess != null && !handMotionProcess.HasExited;
-
-        private void Log(string msg)
+        public string GetConfig() => profiles.Read().ToJsonString();
+        public string GetStatus()
         {
-            OnLogReceived?.Invoke(msg);
-            try { string exe = Process.GetCurrentProcess().MainModule.FileName; string dir = Path.GetDirectoryName(exe); File.AppendAllText(Path.Combine(dir, "Data", "hand_motion_service.log"), DateTime.Now.ToString("s") + " - " + msg + Environment.NewLine); } catch {}
+            lock (sync)
+            {
+                var snapshot = (JsonObject)state.DeepClone();
+                snapshot["running"] = Running();
+                if (!Running()) { snapshot["armed"] = false; snapshot["recording"] = false; snapshot["points"] = null; }
+                snapshot["revision"] = revision;
+                return snapshot.ToJsonString();
+            }
         }
-
-        public void Start(int cameraIndex = 0)
+        public void SaveConfig(string json)
         {
-            if (handMotionProcess != null && !handMotionProcess.HasExited)
+            lock (sync)
             {
-                Log("[HAND MOTION] Already running.");
-                return;
+                PauseForChange();
+                profiles.Save(json);
+                revision++;
+                Send(new { type = "reload" });
+                state["message"] = "Configuração salva. Controle pausado.";
             }
-            
-            // Assuming python is installed and in PATH. The script is in the scripts folder.
-            // baseDir removed
-            // Depending on how it's launched, it might be in a different path.
-            // Let's resolve the actual directory
-            string exePath = Process.GetCurrentProcess().MainModule.FileName;
-            string rootDir = Path.GetDirectoryName(exePath);
-            
-            // Try looking for the scripts folder
-            string scriptPath = Path.Combine(rootDir, "scripts", "hand_motion.py");
-            if (!File.Exists(scriptPath))
+        }
+        public void ClearSamples(string id)
+        {
+            lock (sync)
             {
-                // Try looking up a few directories in case we are running from bin/Debug/...
-                scriptPath = Path.GetFullPath(Path.Combine(rootDir, "..", "..", "..", "scripts", "hand_motion.py"));
-                if (!File.Exists(scriptPath))
-                {
-                    Log("[HAND MOTION ERR] hand_motion.py not found at " + scriptPath);
-                    return;
-                }
+                PauseForChange();
+                profiles.ClearSamples(id);
+                revision++;
+                Send(new { type = "reload" });
             }
-
-            // Find python executable
-            string pythonExe = "python";
-            string[] possiblePaths = new[]
+        }
+        private void PauseForChange()
+        {
+            recordingId = null;
+            recordingToken = null;
+            state["armed"] = false;
+            state["recording"] = false;
+            Send(new { type = "arm", enabled = false });
+            Send(new { type = "cancel" });
+        }
+        public void SetControl(bool enabled)
+        {
+            lock (sync)
             {
-                "py",
-                Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\AppData\Local\Programs\Python\Python312\python.exe"),
-                Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\AppData\Local\Programs\Python\Python311\python.exe"),
-                Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\AppData\Local\Programs\Python\Python310\python.exe"),
-                Environment.ExpandEnvironmentVariables(@"%LOCALAPPDATA%\Programs\Python\Python311\python.exe"),
-                "python"
-            };
-            
-            foreach (var path in possiblePaths)
-            {
-                try
-                {
-                    var testProc = Process.Start(new ProcessStartInfo
-                    {
-                        FileName = path,
-                        Arguments = "--version",
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    });
-                    
-                    if (testProc.WaitForExit(500))
-                    {
-                        pythonExe = path;
-                        break;
-                    }
-                    else
-                    {
-                        try { testProc.Kill(); } catch { }
-                    }
-                }
-                catch { }
+                if (!Running()) throw new InvalidOperationException("Inicie a câmera primeiro.");
+                if (recordingId != null && enabled) throw new InvalidOperationException("Aguarde a gravação.");
+                Send(new { type = "arm", enabled });
             }
-
+        }
+        public void RecordSample(string id)
+        {
+            lock (sync)
+            {
+                if (!Running()) throw new InvalidOperationException("Inicie a câmera primeiro.");
+                var gesture = profiles.Read()["gestures"].AsArray().FirstOrDefault(g => (string)g["id"] == id);
+                if (gesture == null || (string)gesture["source"] is not ("pose" or "motion"))
+                    throw new InvalidOperationException("Escolha uma pose ou movimento personalizado.");
+                if (gesture["samples"].AsArray().Count >= 8) throw new InvalidOperationException("Limite de oito amostras.");
+                recordingId = id;
+                recordingToken = Guid.NewGuid().ToString("N");
+                state["armed"] = false;
+                state["recording"] = true;
+                state["stage"] = "countdown";
+                state["remaining"] = 3;
+                Send(new { type = "record", id, token = recordingToken });
+            }
+        }
+        public void CancelRecording()
+        {
+            lock (sync)
+            {
+                recordingId = null;
+                recordingToken = null;
+                state["recording"] = false;
+                Send(new { type = "cancel" });
+            }
+        }
+        private void Send(object command)
+        {
+            if (!Running()) return;
             try
             {
-                handMotionProcess = new Process();
-                handMotionProcess.StartInfo.FileName = pythonExe;
-                handMotionProcess.StartInfo.Arguments = $"-u \"{scriptPath}\" --camera {cameraIndex}";
-                handMotionProcess.StartInfo.UseShellExecute = false;
-                handMotionProcess.StartInfo.CreateNoWindow = true;
-                handMotionProcess.StartInfo.RedirectStandardOutput = true;
-                handMotionProcess.StartInfo.RedirectStandardError = true;
-                handMotionProcess.StartInfo.RedirectStandardInput = true;
-                handMotionProcess.EnableRaisingEvents = true;
-                
-                handMotionProcess.OutputDataReceived += (s, ev) => { if (ev.Data != null) Log("[HAND MOTION] " + ev.Data); };
-                handMotionProcess.ErrorDataReceived += (s, ev) => { if (ev.Data != null) Log("[HAND MOTION ERR] " + ev.Data); };
-                
-                handMotionProcess.Exited += (s, ev) =>
-                {
-                    Log("[HAND MOTION] Process ended.");
-                    CleanupProcess();
-                };
-
-                handMotionProcess.Start();
-                handMotionProcess.BeginOutputReadLine();
-                handMotionProcess.BeginErrorReadLine();
-                Log($"[HAND MOTION] Started (PID {handMotionProcess.Id}).");
-                OnStatusChanged?.Invoke();
+                process.StandardInput.WriteLine(JsonSerializer.Serialize(command));
+                process.StandardInput.Flush();
             }
-            catch (Exception ex)
+            catch (Exception error) when (error is IOException or InvalidOperationException)
             {
-                File.WriteAllText(Path.Combine(rootDir, "hand_motion_csharp_error.txt"), ex.ToString());
-                Log("[HAND MOTION ERR] " + ex.Message);
-                CleanupProcess();
+                state["armed"] = false;
+                state["message"] = "A comunicação com Gestures foi interrompida. Reinicie a câmera.";
+                AppLog.Error("Gestures.Send", error);
+                throw new InvalidOperationException((string)state["message"], error);
             }
         }
-
-        private void CleanupProcess()
+        public void Start(int cameraIndex = 0)
         {
-            if (handMotionProcess != null)
+            lock (sync)
             {
-                try { handMotionProcess.Dispose(); } catch { }
-                handMotionProcess = null;
+                if (Running()) return;
+                try
+                {
+                    profiles.Read();
+                    string root = AppContext.BaseDirectory;
+                    string script = Path.Combine(root, "scripts", "hand_motion.py");
+                    if (!File.Exists(script)) throw new FileNotFoundException("Scripts de Gestures ausentes. Recompile o aplicativo.");
+                    // An isolated environment avoids incompatible global OpenCV/MediaPipe installations.
+                    string python = Environment.GetEnvironmentVariable("XENNEX_GESTURE_PYTHON");
+                    if (string.IsNullOrWhiteSpace(python)) python = Path.Combine(root, ".venv", "Scripts", "python.exe");
+                    string bundled = Path.Combine(root, "scripts", "Xennex.GesturesWorker.exe");
+                    bool useBundle = File.Exists(bundled) && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("XENNEX_GESTURE_PYTHON"));
+                    if (!useBundle && !File.Exists(python))
+                        throw new FileNotFoundException("Prepare Gestures executando scripts/setup_gestures.ps1 na pasta do app (Python 3.11).");
+                    process?.Dispose();
+                    var worker = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = useBundle ? bundled : python, WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true,
+                            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+                            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
+                        },
+                        EnableRaisingEvents = true
+                    };
+                    if (!useBundle) { worker.StartInfo.ArgumentList.Add("-u"); worker.StartInfo.ArgumentList.Add(script); }
+                    foreach (string argument in new[] { "--camera", Math.Max(0, cameraIndex).ToString(), "--config", profiles.FilePath })
+                        worker.StartInfo.ArgumentList.Add(argument);
+                    worker.OutputDataReceived += (_, e) => Receive(worker, e.Data);
+                    worker.ErrorDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) OnLogReceived?.Invoke("[Gestures] " + e.Data); };
+                    worker.Exited += (_, _) =>
+                    {
+                        lock (sync)
+                        {
+                            if (process != worker) return;
+                            state["armed"] = false;
+                            state["recording"] = false;
+                            state["points"] = null;
+                            recordingId = null;
+                            recordingToken = null;
+                        }
+                        OnStatusChanged?.Invoke();
+                    };
+                    state = new JsonObject { ["message"] = "Iniciando câmera…", ["armed"] = false, ["recording"] = false };
+                    process = worker;
+                    worker.Start();
+                    worker.BeginOutputReadLine();
+                    worker.BeginErrorReadLine();
+                }
+                catch (Exception error)
+                {
+                    process?.Dispose();
+                    process = null;
+                    state["message"] = error.Message;
+                    state["armed"] = false;
+                    AppLog.Error("Gestures.Start", error);
+                }
             }
             OnStatusChanged?.Invoke();
         }
-
-        public void RecordGesture(string action)
+        private void Receive(Process worker, string line)
         {
-            if (IsRunning && handMotionProcess != null)
+            if (string.IsNullOrWhiteSpace(line)) return;
+            lock (sync)
             {
+                if (process != worker) return;
                 try
                 {
-                    handMotionProcess.StandardInput.WriteLine($"RECORD_GESTURE:{action}");
-                    handMotionProcess.StandardInput.Flush();
-                    Log($"[HAND MOTION] Sent RECORD_GESTURE command for {action}");
-                }
-                catch (Exception ex)
-                {
-                    Log($"[HAND MOTION ERR] Failed to send RECORD_GESTURE: {ex.Message}");
-                }
-            }
-        }
-
-        public void StartRecordingGesture(string action)
-        {
-            if (IsRunning && handMotionProcess != null)
-            {
-                try
-                {
-                    handMotionProcess.StandardInput.WriteLine($"RECORD_MOTION_START:{action}");
-                    handMotionProcess.StandardInput.Flush();
-                    Log($"[HAND MOTION] Sent RECORD_MOTION_START command for {action}");
-                }
-                catch (Exception ex)
-                {
-                    Log($"[HAND MOTION ERR] Failed to send RECORD_MOTION_START: {ex.Message}");
-                }
-            }
-        }
-
-        public void StopRecordingGesture()
-        {
-            if (IsRunning && handMotionProcess != null)
-            {
-                try
-                {
-                    handMotionProcess.StandardInput.WriteLine("RECORD_MOTION_STOP");
-                    handMotionProcess.StandardInput.Flush();
-                    Log("[HAND MOTION] Sent RECORD_MOTION_STOP command");
-                }
-                catch (Exception ex)
-                {
-                    Log($"[HAND MOTION ERR] Failed to send RECORD_MOTION_STOP: {ex.Message}");
-                }
-            }
-        }
-
-        public string[] GetSavedGestures()
-        {
-            try
-            {
-                string exePath = Process.GetCurrentProcess().MainModule.FileName;
-                string rootDir = Path.GetDirectoryName(exePath);
-                string jsonPath = Path.Combine(rootDir, "Data", "gestures.json");
-                if (!File.Exists(jsonPath))
-                    jsonPath = Path.GetFullPath(Path.Combine(rootDir, "..", "..", "..", "Data", "gestures.json"));
-                
-                if (File.Exists(jsonPath))
-                {
-                    var json = File.ReadAllText(jsonPath);
-                    var doc = System.Text.Json.JsonDocument.Parse(json);
-                    var keys = new System.Collections.Generic.List<string>();
-                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    var message = JsonNode.Parse(line);
+                    switch ((string)message?["type"])
                     {
-                        keys.Add(prop.Name);
+                        case "frame":
+                            foreach (string key in new[] { "points", "hand", "armed", "match", "recording", "metrics" })
+                                state[key] = message[key]?.DeepClone();
+                            break;
+                        case "status":
+                            state["message"] = message["message"]?.DeepClone();
+                            state["armed"] = message["armed"]?.DeepClone();
+                            break;
+                        case "recording":
+                            state["stage"] = message["stage"]?.DeepClone();
+                            state["remaining"] = message["remaining"]?.DeepClone();
+                            break;
+                        case "recorded":
+                            if ((string)message["id"] != recordingId || (string)message["token"] != recordingToken) break;
+                            profiles.AddSample(recordingId, message["sample"]);
+                            recordingId = null;
+                            recordingToken = null;
+                            revision++;
+                            state["recording"] = false;
+                            state["message"] = "Amostra salva. Repita em posições semelhantes para melhorar o reconhecimento.";
+                            Send(new { type = "reload" });
+                            break;
+                        case "recognized":
+                            state["match"] = message["name"]?.DeepClone();
+                            state["executed"] = message["executed"]?.DeepClone();
+                            break;
+                        case "error":
+                            recordingId = null;
+                            recordingToken = null;
+                            state["recording"] = false;
+                            state["armed"] = false;
+                            state["message"] = message["message"]?.DeepClone();
+                            OnLogReceived?.Invoke("[Gestures] " + (string)message["message"]);
+                            break;
+                        case "stopped":
+                            state["armed"] = false;
+                            state["recording"] = false;
+                            state["points"] = null;
+                            break;
                     }
-                    return keys.ToArray();
                 }
-            }
-            catch (Exception ex)
-            {
-                Log($"[HAND MOTION ERR] Failed to read gestures: {ex.Message}");
-            }
-            return new string[0];
-        }
-
-        public void DeleteGesture(string name)
-        {
-            try
-            {
-                if (IsRunning && handMotionProcess != null)
+                catch (Exception error)
                 {
-                    handMotionProcess.StandardInput.WriteLine($"DELETE_GESTURE:{name}");
-                    handMotionProcess.StandardInput.Flush();
-                    Log($"[HAND MOTION] Sent DELETE_GESTURE command for {name}");
+                    recordingId = null;
+                    recordingToken = null;
+                    state["recording"] = false;
+                    state["armed"] = false;
+                    state["message"] = error.Message;
+                    try { Send(new { type = "arm", enabled = false }); } catch (InvalidOperationException) { }
+                    AppLog.Error("Gestures.WorkerMessage", error);
                 }
-                else
-                {
-                    Log("[HAND MOTION ERR] Camera must be running to delete gestures.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"[HAND MOTION ERR] Failed to delete gesture: {ex.Message}");
             }
         }
-
-        public string GetSwipeConfig()
-        {
-            try
-            {
-                string exePath = Process.GetCurrentProcess().MainModule.FileName;
-                string rootDir = Path.GetDirectoryName(exePath);
-                string jsonPath = Path.Combine(rootDir, "Data", "swipe_config.json");
-                if (!File.Exists(jsonPath))
-                    jsonPath = Path.GetFullPath(Path.Combine(rootDir, "..", "..", "..", "Data", "swipe_config.json"));
-                
-                if (File.Exists(jsonPath))
-                {
-                    return File.ReadAllText(jsonPath);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"[HAND MOTION ERR] Failed to read swipe config: {ex.Message}");
-            }
-            return "{}";
-        }
-
-        public void SaveSwipeConfig(string json)
-        {
-            try
-            {
-                string exePath = Process.GetCurrentProcess().MainModule.FileName;
-                string rootDir = Path.GetDirectoryName(exePath);
-                string jsonPath = Path.Combine(rootDir, "Data", "swipe_config.json");
-                if (!File.Exists(jsonPath))
-                {
-                    string altPath = Path.GetFullPath(Path.Combine(rootDir, "..", "..", "..", "Data"));
-                    if (Directory.Exists(altPath)) jsonPath = Path.Combine(altPath, "swipe_config.json");
-                }
-                
-                File.WriteAllText(jsonPath, json);
-                
-                if (IsRunning && handMotionProcess != null)
-                {
-                    handMotionProcess.StandardInput.WriteLine("RELOAD_SWIPES");
-                    handMotionProcess.StandardInput.Flush();
-                    Log("[HAND MOTION] Sent RELOAD_SWIPES command");
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"[HAND MOTION ERR] Failed to save swipe config: {ex.Message}");
-            }
-        }
-
         public void Stop()
         {
-            if (handMotionProcess == null)
+            Process worker;
+            lock (sync)
             {
-                Log("[HAND MOTION] Not running.");
-                return;
+                worker = process;
+                if (!Running()) return;
+                recordingId = null;
+                recordingToken = null;
+                try { Send(new { type = "stop" }); } catch (InvalidOperationException) { }
             }
-
-            Log("[HAND MOTION] Sending stop signal…");
-            try
+            // Worker watchdog releases input even if a camera read blocks. Allow it to run before termination.
+            try { if (!worker.WaitForExit(2000)) worker.Kill(true); }
+            catch (Exception error) { AppLog.Error("Gestures.Stop", error); }
+            lock (sync)
             {
-                if (!handMotionProcess.HasExited)
+                if (process == worker)
                 {
-                    handMotionProcess.Kill();
-                    Log("[HAND MOTION] Force killed.");
+                    state["armed"] = false;
+                    state["recording"] = false;
+                    state["points"] = null;
+                    state["message"] = "Câmera desligada.";
                 }
             }
-            catch (Exception ex)
-            {
-                Log("[HAND MOTION ERR] " + ex.Message);
-            }
-            finally
-            {
-                CleanupProcess();
-            }
+            OnStatusChanged?.Invoke();
         }
     }
 }
-
-
-

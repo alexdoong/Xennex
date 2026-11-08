@@ -1,5 +1,10 @@
 import type { DataConnection } from 'peerjs';
+import { RoomWorkspaceState } from './RoomWorkspaceState';
+import { WORKSPACE_EXTENSION, type WorkspaceSnapshot } from './workspaceProtocol';
 import { MAX_PARTICIPANTS, MAX_WATCHING, parseClientMessage, type Participant, type Publication, type ServerMessage } from './protocol';
+
+export const ROOM_NEGOTIATION_TIMEOUT_MS = 25000;
+export const ROOM_JOIN_TIMEOUT_MS = 10000;
 
 /** Replaceable control plane. Media never passes through the coordinator. */
 export class RoomCoordinator {
@@ -10,8 +15,11 @@ export class RoomCoordinator {
   private pending = new Set<DataConnection>();
   private closed = false;
   private owner: string;
-  constructor(owner: string, seed: Participant[]) {
+  private workspace: RoomWorkspaceState;
+  private workspaceMembers = new Set<string>();
+  constructor(owner: string, seed: Participant[], workspaceSeed?: WorkspaceSnapshot | null) {
     this.owner = owner;
+    this.workspace = new RoomWorkspaceState(workspaceSeed);
     for (const participant of seed) { this.roster.set(participant.peerId, participant); this.seen.set(participant.peerId, Date.now()); }
   }
   private send(connection: DataConnection | undefined, message: ServerMessage) {
@@ -19,7 +27,7 @@ export class RoomCoordinator {
   }
   private broadcast() {
     if (!this.roster.has(this.owner)) return;
-    const message: ServerMessage = { type: 'presence', participants: [...this.roster.values()], coordinator: this.owner };
+    const message: ServerMessage = { type: 'presence', participants: [...this.roster.values()], coordinator: this.owner, extensions: [WORKSPACE_EXTENSION] };
     this.members.forEach(connection => this.send(connection, message));
   }
   private validPublications(id: string, publications: Publication[]) {
@@ -28,26 +36,47 @@ export class RoomCoordinator {
   accept(connection: DataConnection) {
     if (this.closed) { connection.close(); return; }
     this.pending.add(connection);
-    const timer = setTimeout(() => { if (this.members.get(connection.peer) !== connection) connection.close(); }, 10000);
+    let finished = false;
+    const expire = () => { if (!finished) connection.close(); };
+    let timer = setTimeout(expire, ROOM_NEGOTIATION_TIMEOUT_MS);
+    const opened = () => {
+      if (finished) return;
+      clearTimeout(timer);
+      timer = setTimeout(expire, ROOM_JOIN_TIMEOUT_MS);
+    };
+    connection.on('open', opened);
+    if (connection.open) opened();
     connection.on('data', value => {
       if (this.closed) return;
       const message = parseClientMessage(value); if (!message) return;
       const id = connection.peer;
       if (message.type === 'join') {
+        if (finished && this.members.get(id) === connection) return;
         if (!this.roster.has(id) && this.roster.size >= MAX_PARTICIPANTS) {
           this.send(connection, { type: 'error', message: `Sala cheia (${MAX_PARTICIPANTS} participantes).` });
           setTimeout(() => connection.close(), 200); return;
         }
         if (!this.validPublications(id, message.publications)) return;
-        clearTimeout(timer); this.pending.delete(connection);
+        finished = true; clearTimeout(timer); connection.off('open', opened); this.pending.delete(connection);
         const previous = this.members.get(id); this.members.set(id, connection); if (previous !== connection) previous?.close();
         this.roster.set(id, { peerId: id, name: message.name, publications: message.publications });
-        this.seen.set(id, Date.now()); this.broadcast(); return;
+        const supportsWorkspace = message.extensions?.includes(WORKSPACE_EXTENSION);
+        if (supportsWorkspace) this.workspaceMembers.add(id); else this.workspaceMembers.delete(id);
+        this.seen.set(id, Date.now()); this.broadcast();
+        if (supportsWorkspace) this.send(connection, this.workspace.snapshot());
+        return;
       }
       if (this.members.get(id) !== connection) return;
       this.seen.set(id, Date.now());
       const participant = this.roster.get(id)!;
       switch (message.type) {
+        case 'workspace-operation': case 'workspace-sync': {
+          if (!this.workspaceMembers.has(id)) return;
+          const result = this.workspace.handle(participant, message);
+          if (result.event) for (const member of this.workspaceMembers) this.send(this.members.get(member), result.event);
+          result.direct.forEach(reply => this.send(connection, reply));
+          break;
+        }
         case 'name': this.roster.set(id, { ...participant, name: message.name }); this.broadcast(); break;
         case 'sharing':
           if (!this.validPublications(id, message.publications)) return;
@@ -71,12 +100,13 @@ export class RoomCoordinator {
       }
     });
     const lost = () => {
-      clearTimeout(timer); this.pending.delete(connection);
+      finished = true; clearTimeout(timer); connection.off('open', opened); this.pending.delete(connection);
       if (this.members.get(connection.peer) === connection) this.remove(connection.peer);
     };
     connection.on('close', lost); connection.on('error', lost);
   }
   private remove(id: string) {
+    this.workspaceMembers.delete(id); this.workspace.remove(id);
     const participant = this.roster.get(id);
     const connection = this.members.get(id); this.members.delete(id); this.roster.delete(id); this.seen.delete(id); connection?.close();
     for (const publication of participant?.publications || []) this.watches.delete(publication.id);
@@ -93,5 +123,6 @@ export class RoomCoordinator {
     if (notify) this.members.forEach(connection => this.send(connection, { type: 'migrate' }));
     this.pending.forEach(connection => connection.close()); this.pending.clear();
     this.members.clear(); this.roster.clear(); this.seen.clear(); this.watches.clear();
+    this.workspaceMembers.clear(); this.workspace.clear();
   }
 }

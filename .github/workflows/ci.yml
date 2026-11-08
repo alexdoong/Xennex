@@ -1,0 +1,46 @@
+name: Build and regression tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build app frontend
+        working-directory: frontend
+        run: npm run build
+      - name: Build browser frontend
+        working-directory: frontend
+        run: npm run build:web
+      - name: Streaming state machines and capture regression tests
+        working-directory: frontend
+        run: npm test
+      - name: Native services and security regression tests
+        shell: pwsh
+        run: ./scripts/tests/test_ci.ps1
+      - name: Build Windows app
+        run: dotnet build Xennex.csproj -c Release
+      - name: Build capture worker
+        run: dotnet build src/CaptureWorker/Xennex.CaptureWorker.csproj -c Release

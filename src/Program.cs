@@ -1,6 +1,4 @@
 using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Windows;
 using Xennex.UI;
 using Xennex.Services;
@@ -9,26 +7,15 @@ namespace Xennex
 {
     public class Program
     {
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern int RegisterWindowMessage(string lpString);
-
-        [DllImport("user32.dll")]
-        private static extern bool PostMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
-
-        private const int HWND_BROADCAST = 0xffff;
-
         [STAThread]
         public static void Main()
         {
             try
             {
-                Process current = Process.GetCurrentProcess();
-                Process[] processes = Process.GetProcessesByName(current.ProcessName);
-
-                if (processes.Length > 1)
+                using var instance = new SingleInstanceCoordinator();
+                if (!instance.IsPrimary)
                 {
-                    int msg = RegisterWindowMessage("XENNEX_RESTORE_INSTANCE_MSG");
-                    PostMessage((IntPtr)HWND_BROADCAST, msg, IntPtr.Zero, IntPtr.Zero);
+                    instance.SignalPrimary();
                     return;
                 }
 
@@ -40,10 +27,13 @@ namespace Xennex
                 AppDomain.CurrentDomain.UnhandledException += (s, ev) => {
                     AppLog.Error("Unhandled", ev.ExceptionObject as Exception);
                 };
-                app.Run(new MainWindow());
+                var window = new MainWindow();
+                window.Loaded += (s, e) => instance.StartListening(window.Dispatcher, window.RestoreFromTray);
+                app.Run(window);
             }
             catch (Exception ex)
             {
+                AppLog.Error("Startup", ex);
                 MessageBox.Show($"Erro fatal ao iniciar Xennex: {ex.Message}", "Xennex", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

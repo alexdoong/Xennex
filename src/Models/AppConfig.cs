@@ -6,7 +6,11 @@ namespace Xennex
         public bool CloseToTray { get; set; } = true;
         public bool AutoStart { get; set; } = false;
         public int SidebarMonitorIndex { get; set; } = 0;
-        public string SidebarPosition { get; set; } = "Right";
+        public string SidebarPosition { get; set; } = "MiddleRight";
+        public string SidebarCollapseEdge { get; set; } = "Auto";
+        public int SidebarAnimationFps { get; set; } = 0; // 0 follows WPF render cadence
+        public int SidebarInset { get; set; } = 0;
+        public int SidebarVerticalPercent { get; set; } = -1; // -1 uses the selected preset
         public bool HideSidebarPullTab { get; set; } = false;
         public int HandMotionCameraIndex { get; set; } = 0;
         

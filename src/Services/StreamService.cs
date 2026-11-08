@@ -91,6 +91,9 @@ namespace Xennex.Services
             _nativeCapture.StartNativeCapture(hwnd, pid, fps, resolution);
         public void StopNativeCapture() => _nativeCapture.StopNativeCapture();
         public bool IsNativeCaptureRunning() => _nativeCapture.IsNativeCaptureRunning();
+        public string GetCaptureMonitors() => _nativeCapture.GetCaptureMonitors();
+        public bool StartDesktopCapture(string display, int fps, string resolution) => _nativeCapture.StartDesktopCapture(display, fps, resolution);
+        public bool StartGameCapture(long hwnd, int pid, int fps, string resolution) => _nativeCapture.StartGameCapture(hwnd, pid, fps, resolution);
 
         public void CloseAllViewers()
         {

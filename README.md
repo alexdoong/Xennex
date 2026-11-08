@@ -1,5 +1,7 @@
 # Xennex
 
+[Mudanças desde a versão 0.2.3](CHANGELOG.md) · [Validação local](docs/TESTING.md)
+
 > **HUD Gamer, Central de Utilitários e Transmissão de Alta Performance para Windows**  
 > Desenvolvido em **.NET 8 (WPF / WebView2)** com interface moderna em **React + TypeScript**.
 
@@ -24,10 +26,12 @@ O **Xennex** é um aplicativo de ambiente pessoal (HUD overlay) projetado para j
 - **Motor GPU WGC Dedicado**: Aceleração via Windows Graphics Capture com processo isolado (`Xennex.CaptureWorker.exe`).
 - **HUD Dinâmico**: Os controles flutuantes da transmissão ocultam automaticamente após inatividade do mouse e reaparecem instantaneamente ao movê-lo.
 
-### 2. ✋ Hand Motion Tracking (Controle por Gestos)
-- Rastreamento de mãos em tempo real via câmera para disparo de atalhos e macros virtuais sem precisar tirar a mão dos controles.
-- Integração modular com pipeline de visão computacional em segundo plano.
-
+### 2. ✋ Gestures (Controle por Gestos)
+- Cursor, cliques, rolagem, swipes com atalhos e arraste de janelas por pinch.
+- Registro de poses e movimentos com memória local dos pontos da mão.
+- Modo de teste, pausa por Esc e liberação do arraste ao perder a mão.
+- Motor de câmera incluído no pacote, sem instalar Python no PC do usuário.
+- [Guia de uso, arquitetura e limites](docs/GESTURES.md).
 ### 3. 🎮 Wacom Tablet & REAL Audio Latency Controller
 - Controle rápido de ativação/desativação dos drivers e serviços de hardware de mesas digitalizadoras Wacom.
 - Gerenciamento integrado do motor de redução de latência de áudio (`REAL.exe`) sem deixar janelas pretas de terminal abertas.
@@ -43,9 +47,25 @@ O **Xennex** é um aplicativo de ambiente pessoal (HUD overlay) projetado para j
 ### 6. 🔄 Atualizador Automático & Assinatura Digital
 - Verificação de novas versões integrada ao GitHub Releases com download em stream direto.
 - Atualização em segundo plano que preserva dados locais de configuração (`Data/`) e skins criadas pelo usuário.
-- Binários assinados digitalmente com a identidade oficial de **`alexdoong`**.
+- Binários assinados com o certificado autoassinado de **`alexdoong`**. A assinatura verifica integridade e continuidade da chave; não é certificação por uma autoridade pública nem garantia contra malware.
 
 ---
+
+### 7. 📊 Jogos — Espaço Visual e Histórico
+- Modelos de jogo editáveis, habilidades livres, métricas e condições de cenário.
+- Sequências de ações com tempo e resultados; gráficos agrupados por build, equipe ou outro contexto.
+- Capas e personagens com imagens próprias, categorias e enquadramento.
+- Quadros de estratégia com cartões arrastáveis, conexões, zoom e duplicação de planos.
+- Biblioteca de jogos personalizados e sessões com notas, contexto, patch e métricas.
+- Histórico por período, gráfico de observações e comparação de dois registros.
+- Exportação e importação como cópia, com armazenamento local e backup.
+- [Arquitetura e próximas etapas](docs/GAME_ANALYTICS.md).
+- [Futura integração do hub de rotina e vida](docs/FUTURE_LIFE_HUB.md).
+
+### 8. 🖼️ Biblioteca de Artes
+- Galeria e explorador do mesmo acervo local, com busca, tags, coleções, favoritos e comparação de imagens.
+- Índice SQLite e miniaturas sem mover os originais; operações de arquivo com prévia e confirmação.
+- [Como usar, limites atuais e testes](docs/ASSET_LIBRARY.md).
 
 ## 💻 Requisitos do Sistema
 
@@ -58,6 +78,7 @@ O **Xennex** é um aplicativo de ambiente pessoal (HUD overlay) projetado para j
 - **.NET 8.0 SDK** (x64)
 - **Node.js** v18+ e **npm**
 - **PowerShell** 5.1+
+- **Python 3.11 x64** para desenvolver/empacotar Gestures; prepare o ambiente com scripts/setup_gestures.ps1.
 
 ---
 
@@ -67,7 +88,7 @@ O **Xennex** é um aplicativo de ambiente pessoal (HUD overlay) projetado para j
 2. Baixe o pacote mais recente: `Xennex-vX.Y.Z-win64.zip`.
 3. Extraia o arquivo ZIP para uma pasta de sua preferência (ex: `C:\Programas\Xennex`).
 4. Execute o **`Xennex.exe`**.
-5. *(Opcional)* Para validar o fornecedor oficial e evitar alertas do Windows SmartScreen, clique com o botão direito em `instalar_certificado_alexdoong.cmd` e execute como Administrador.
+5. Não é necessário instalar o certificado no Windows para usar o app ou o novo atualizador. O script opcional `instalar_certificado_alexdoong.cmd` adiciona uma raiz confiável **do usuário atual**, ampliando a confiança em outros arquivos assinados por essa chave. Isso não garante ausência de alertas do SmartScreen nem dispensa o antivírus. Não precisa de Administrador. Veja [segurança e validação](docs/SECURITY_REVIEW.md).
 
 ---
 
@@ -126,3 +147,13 @@ O que aquele primeiro código fazia:
 
 Hoje o Xennex evoluiu para uma arquitetura moderna em .NET 8 WPF com interface reativa em React, mas essa raiz de automação prática e foco em produtividade permanece no DNA do projeto.
 </details>
+
+### IA local (base inicial)
+
+Aba com conversas persistentes, respostas progressivas, exportação e fila com
+orçamento de RAM/VRAM. Ollama tem detecção/inicialização pelo app, seleção visual
+de modelos, contexto e estimativa de memória por modelo. Outros motores continuam
+pela API compatível com configuração manual. Margem inicial: 25%.
+Sem downloads automáticos ou serviços pagos. Consulte o [guia de uso](docs/LOCAL_AI.md).
+Especialistas cooperativos, ferramentas e áudio fazem parte do
+[plano de integração](docs/LOCAL_AI_PLAN.md).

@@ -1,5 +1,10 @@
 /* Keep this order: later modules contain overrides of earlier rules. */
 @import './styles/base.css';
+@import './styles/gestures.css';
+@import './styles/games.css';
+@import './styles/games-visual.css';
+@import './styles/games-definition.css';
+@import './styles/assets.css';
 @import './styles/skin-editor.css';
 @import './styles/stream-viewer.css';
 @import './styles/stream-host.css';
@@ -10,3 +15,8 @@
 @import './styles/stream-picker.css';
 @import './styles/window-resize.css';
 @import './styles/notifications.css';
+@import './styles/local-ai.css';
+@import './styles/skin-theme.css';
+@import './styles/skin-layout.css';
+@import './styles/skin-surfaces.css';
+@import './styles/compact-panel.css';

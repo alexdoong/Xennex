@@ -1,0 +1,33 @@
+/* Skin tokens are scoped to app surfaces; the editor keeps its own readable palette. */
+:root {
+  --panel-background:rgba(18,24,38,.95); --panel-blur:16px; --panel-padding:24px;
+  --button-radius:12px; --button-text:#fff; --surface-shadow:0 10px 30px rgba(0,0,0,.5);
+  --input-background:#10131c; --content-scale:1; --content-padding:24px;
+  --sidebar-width:68px; --sidebar-radius:20px; --window-radius:20px; --bar-blur:0px;
+  --scrollbar-width:6px; --scrollbar-color:#777986;
+  --card-background:rgba(255,255,255,.05); --card-border:1px solid rgba(255,255,255,.08);
+  --card-radius:16px; --card-padding:24px; --card-gap:24px;
+  --glass-rim:rgba(255,255,255,.2275); --glass-sheen:rgba(255,255,255,.063); --glass-shade:rgba(15,19,26,.105);
+}
+.app-container .glass-panel { background:var(--panel-background); backdrop-filter:blur(var(--panel-blur)); border:var(--border); padding:var(--panel-padding); box-shadow:var(--surface-shadow); }
+.app-container .glass-panel-inner { background:var(--card-background); border:var(--card-border); border-radius:var(--card-radius); padding:var(--card-padding); margin-bottom:var(--card-gap); }
+.app-container .btn { border-radius:var(--button-radius); }
+.app-container .btn.primary { color:var(--button-text); }
+.app-container .modern-input { background:var(--input-background); color:var(--text-primary); border:var(--border); }
+.app-container .modern-input:focus { border-color:var(--primary); }
+.app-container .main-window { border-radius:var(--window-radius); border:var(--border); box-shadow:var(--surface-shadow); }
+.app-container:not(.sidebar-mode) .main-window:not(.expanded) { left:calc(var(--sidebar-width) + 32px); }
+.app-container:not(.sidebar-mode) .left-sidebar { width:var(--sidebar-width); border-radius:var(--sidebar-radius); }
+.app-container .left-sidebar, .app-container .floating-titlebar { border:var(--border); box-shadow:var(--surface-shadow); backdrop-filter:blur(var(--bar-blur)); }
+.app-container:not(.sidebar-mode) .content-wrapper { padding:var(--content-padding); zoom:var(--content-scale); }
+.app-container ::-webkit-scrollbar { width:var(--scrollbar-width); height:var(--scrollbar-width); }
+.app-container ::-webkit-scrollbar-thumb { background:var(--scrollbar-color); }
+.app-container .tab-btn.active { background:color-mix(in srgb,var(--primary) 18%,transparent); }
+.skin-background-overlay { position:absolute; inset:0; z-index:2; pointer-events:none; }
+:root[data-reduced-motion="true"] .app-container *,
+:root[data-reduced-motion="true"] .app-container *::before,
+:root[data-reduced-motion="true"] .app-container *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+.app-container .content-wrapper :is(input[type="text"],input[type="number"],input[type="url"],input:not([type]),textarea,select) { background:var(--input-background); color:var(--text-primary); }
+.app-container .content-wrapper :is(input,textarea)::placeholder { color:var(--text-secondary); opacity:.75; }
+.app-container .tabs { min-height:0; overflow-y:auto; flex-shrink:1; }
+.app-container .tabs>.tab-btn { flex-shrink:0; }

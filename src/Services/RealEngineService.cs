@@ -107,7 +107,7 @@ namespace Xennex.Services
                 return;
             }
 
-            Log("[REAL] Sending stop signalâ€¦");
+            Log("[REAL] Sending stop signal...");
             try
             {
                 if (!realProcess.HasExited)

@@ -91,10 +91,15 @@ publish_temp_package/
 # Variacoes de arquivos de ambiente
 .env.*
 !.env.example
+.dev.vars*
+.wrangler/
 
 # Arquivos de certificado que podem conter chaves privadas
 *.pfx
 *.p12
+
+# Indices locais de ferramentas (podem conter trechos do projeto)
+/.cache/
 
 # Ambiente e cache Python
 .venv/
@@ -107,3 +112,16 @@ cloudflare_pages/dist/
 # Copias geradas pelo empacotador na raiz (as fontes ficam em scripts/)
 /alexdoong.cer
 /instalar_certificado_alexdoong.cmd
+/licenses/MinHook.txt
+/licenses/Zig-runtime.txt
+/licenses/MinGW-runtime.txt
+
+# Android build outputs e caches locais
+src/Android/.gradle/
+src/Android/build/
+src/Android/app/build/
+src/Android/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore

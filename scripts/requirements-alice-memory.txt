@@ -1,0 +1,4 @@
+# Isolated optional laboratory. Install in a dedicated venv; not the Gestures runtime.
+# CPU build was validated with torch 2.4.1+cpu. No pretrained weights are required.
+torch>=2.4,<3
+Pillow>=10,<13

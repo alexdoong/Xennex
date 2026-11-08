@@ -5,7 +5,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
     <AssemblyName>Xennex</AssemblyName>
-    <Version>0.2.3</Version>
+    <Version>0.2.4</Version>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
     <InformationalVersion>$(Version)</InformationalVersion>
@@ -21,6 +21,9 @@
     <Compile Remove="Backup\**" />
     <Compile Remove="scripts\**" />
     <Compile Remove="src\CaptureWorker\**" />
+    <Compile Remove="src\Android\**" />
+    <EmbeddedResource Remove="src\Android\**" />
+    <None Remove="src\Android\**" />
     <EmbeddedResource Remove="Backup\**" />
     <None Remove="Backup\**" />
   </ItemGroup>
@@ -28,13 +31,20 @@
 
 
   <ItemGroup>
+    <InternalsVisibleTo Include="VrTests" />
+    <None Update="src/Interop/Vr/Valve/LICENSE.txt" Link="licenses/OpenVR.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2592.51" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="scripts\hand_motion.py">
+    <None Update="scripts\alice_memory\**\*.py;scripts\requirements-alice-memory.txt;scripts\requirements-alice-perception.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Update="scripts\hand_motion.py;scripts\gestures\**\*.py;scripts\requirements-gestures.txt;scripts\setup_gestures.ps1">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="REAL.exe" Condition="Exists('REAL.exe')">
@@ -47,5 +57,8 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="src\Services\Updates\install_update.ps1" LogicalName="Xennex.InstallUpdate.ps1" />
+    <EmbeddedResource Include="scripts/lib/AuthenticodeVerification.cs" LogicalName="Xennex.AuthenticodeVerification.cs" />
+    <EmbeddedResource Include="assets/publisher-thumbprint.txt" LogicalName="Xennex.PublisherThumbprint" />
+    <EmbeddedResource Include="src/Interop/Vr/Valve/LICENSE.txt" LogicalName="Xennex.OpenVR.License" />
   </ItemGroup>
 </Project>

@@ -55,7 +55,13 @@ function Assert-XennexPackage {
     param([string]$Directory)
     Assert-XennexFrontend (Join-Path $Directory 'wwwroot')
     foreach ($name in @('Xennex.exe', 'Xennex.CaptureWorker.exe', 'WebView2Loader.dll',
-        'alexdoong.cer', 'instalar_certificado_alexdoong.cmd', 'scripts/hand_motion.py')) {
+        'GameCapture/Xennex.GameHook32.dll', 'GameCapture/Xennex.GameHook64.dll', 'GameCapture/Xennex.GameInjector32.exe', 'GameCapture/Xennex.GameInjector64.exe', 'licenses/MinHook.txt',
+        'licenses/Zig-runtime.txt', 'licenses/MinGW-runtime.txt',
+        'alexdoong.cer', 'instalar_certificado_alexdoong.cmd', 'scripts/hand_motion.py', 'scripts/Xennex.GesturesWorker.exe', 'scripts/setup_gestures.ps1', 'scripts/requirements-gestures.txt',
+        'scripts/gestures/capture.py', 'scripts/gestures/smoothing.py', 'scripts/gestures/action_errors.py',
+        'scripts/gestures/__init__.py', 'scripts/gestures/features.py', 'scripts/gestures/recognition.py',
+        'scripts/gestures/recording.py', 'scripts/gestures/control.py', 'scripts/gestures/tracking.py',
+        'scripts/gestures/windows_actions.py', 'scripts/gestures/runtime.py')) {
         $path = Join-Path $Directory $name
         if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
             throw "Arquivo obrigatorio ausente ou vazio: $name"

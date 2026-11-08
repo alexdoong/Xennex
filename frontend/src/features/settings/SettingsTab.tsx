@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import type { SkinConfig, UpdateCheckResult } from '../../webview';
-import SkinEditorModal from '../skins/SkinEditorModal';
 import { Palette, Plus, FolderOpen, RotateCcw, X, Check, RefreshCw, Download, ExternalLink, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface SettingsTabProps {
   sidebarMode: boolean;
+  sidebarPosition: string;
+  activeSkinName: string;
+  skinConfig: SkinConfig | null;
+  skinEditorName: string | null;
+  onEditSkin: (name: string) => void;
   autoHideSidebar: boolean;
   setAutoHideSidebar: (val: boolean) => void;
   autoHideTitlebar: boolean;
@@ -15,7 +19,7 @@ interface SettingsTabProps {
 }
 
 const SettingsTab: React.FC<SettingsTabProps> = ({ 
-  sidebarMode, 
+  sidebarMode, sidebarPosition, activeSkinName, skinConfig, skinEditorName, onEditSkin,
   autoHideSidebar,
   setAutoHideSidebar,
   autoHideTitlebar,
@@ -24,12 +28,10 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   setCloseToTray,
   onSkinUpdated
 }) => {
-  const [sidebarPosition, setSidebarPosition] = useState('MiddleRight');
   const [availableSkins, setAvailableSkins] = useState<string[]>([]);
   const [activeSkin, setActiveSkin] = useState<string>('default');
 
   // Skin Editor & Creation Modals
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isNewSkinModalOpen, setIsNewSkinModalOpen] = useState(false);
   const [newSkinNameInput, setNewSkinNameInput] = useState('');
   const [skinErrorMsg, setSkinErrorMsg] = useState('');
@@ -41,12 +43,12 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [updateMessage, setUpdateMessage] = useState('');
 
   const api = window.chrome?.webview?.hostObjects?.api;
+  const sectionOrder = (id: string) => skinConfig?.settingsSectionOrder.indexOf(id) ?? 0;
 
   useEffect(() => {
     const loadSettings = async () => {
       if (api) {
         // closeToTray passed as prop
-        setSidebarPosition(await api.GetSidebarPosition());
         const skins = await api.GetAvailableSkins();
         setAvailableSkins(skins);
         const currentActive = await api.GetActiveSkin();
@@ -56,8 +58,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         }
       }
     };
-    loadSettings();
-  }, []);
+    loadSettings().catch(error => setSkinErrorMsg(String(error)));
+  }, [activeSkinName]);
 
   const handleCloseToTray = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.checked;
@@ -78,41 +80,26 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   };
 
   const handleSkinChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setActiveSkin(val);
-    if (api) {
-      await api.SetActiveSkin(val);
-      const json = await api.GetSkinConfig(val);
-      if (json && onSkinUpdated) {
-        try {
-          const parsed = JSON.parse(json);
-          onSkinUpdated(parsed);
-        } catch (err) {
-          console.error('Failed to parse skin config:', err);
-        }
-      }
-    }
+    const value = e.target.value;
+    if (!api) return;
+    try {
+      const parsed = JSON.parse(await api.GetSkinConfig(value));
+      await api.SetActiveSkin(value);
+      setActiveSkin(value); onSkinUpdated?.(parsed); setSkinErrorMsg('');
+    } catch (error) { setSkinErrorMsg(String(error)); }
   };
 
-  const handleOpenSkinFolder = () => {
-    api?.OpenSkinFolder();
+  const handleOpenSkinFolder = async () => {
+    try { await api?.OpenSkinFolder(); }
+    catch (error) { setSkinErrorMsg(String(error)); }
   };
 
   const handleReloadSkin = async () => {
-    if (api && onSkinUpdated) {
-      const json = await api.GetSkinConfig(activeSkin);
-      if (json) {
-        try {
-          const parsed = JSON.parse(json);
-          onSkinUpdated(parsed);
-        } catch (err) {
-          console.error('Reload skin error:', err);
-        }
-      }
-    }
+    if (!api) return;
+    try { onSkinUpdated?.(JSON.parse(await api.GetSkinConfig(activeSkin))); setSkinErrorMsg(''); }
+    catch (error) { setSkinErrorMsg(String(error)); }
   };
 
-  
   const handleCheckUpdate = async () => {
     if (!api || !api.CheckForUpdates) return;
     setUpdateStatus('checking');
@@ -174,7 +161,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         setNewSkinNameInput('');
         setSkinErrorMsg('');
         // Open the editor immediately for the new skin
-        setIsEditorOpen(true);
+        onSkinUpdated?.(JSON.parse(await api.GetSkinConfig(trimmed)));
+        onEditSkin(trimmed);
       } else {
         setSkinErrorMsg('Não foi possível criar a skin. Verifique o nome informado.');
       }
@@ -184,30 +172,24 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
-  const handleSidebarPosition = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleSidebarPosition = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
-    setSidebarPosition(val);
-    api?.SetSidebarPosition(val);
-    
-    if (window.updateSidebarPosition) {
-        window.updateSidebarPosition(val);
-    }
+    try {
+      await api?.SetSidebarPosition(val);
+      window.updateSidebarPosition?.(val);
+    } catch { setSkinErrorMsg('Não foi possível alterar a posição do painel.'); }
   };
 
   const toggleSidebarMode = () => {
-    if (api) {
-      api.ToggleSidebar();
-    } else if (window.chrome?.webview) {
-      window.chrome.webview.postMessage(sidebarMode ? 'exitSidebar' : 'enterSidebar');
-    }
+    window.chrome?.webview?.postMessage(sidebarMode ? 'exitSidebar' : 'enterSidebar');
   };
 
   return (
     <div className="tab-content" id="settings-tab">
-      <div className="glass-panel">
-        <h2 style={{ marginBottom: '24px' }}>System Settings</h2>
+      <div className={`glass-panel settings-shell settings-cols-${skinConfig?.settingsColumns === 2 ? 2 : 1}`}>
+        <h2>System Settings</h2>
         
-        <div className="glass-panel-inner">
+        <div className="glass-panel-inner settings-block" data-section="behavior" style={{order:sectionOrder('behavior')}}>
           <h3 style={{ fontSize: '16px', marginBottom: '16px', color: 'var(--primary)' }}>Application Behavior</h3>
           
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -222,7 +204,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           </div>
         </div>
 
-        <div className="glass-panel-inner">
+        <div className="glass-panel-inner settings-block" data-section="layout" style={{order:sectionOrder('layout')}}>
           <h3 style={{ fontSize: '16px', marginBottom: '16px', color: 'var(--primary)' }}>UI & Layout</h3>
           
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -249,41 +231,41 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
             <div>
-              <span style={{ display: 'block', fontSize: '14px', fontWeight: 500 }}>Compact Mode (Widget)</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Shrink app to a side widget that auto-hides off-screen</span>
+              <span style={{ display: 'block', fontSize: '14px', fontWeight: 500 }}>Painel compacto</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Atalhos na borda da tela. Abra cada espaço na janela completa.</span>
             </div>
             <button className="btn primary" onClick={toggleSidebarMode}>
-              {sidebarMode ? 'Exit Compact Mode' : 'Enter Compact Mode'}
+              {sidebarMode ? 'Expandir janela' : 'Abrir painel compacto'}
             </button>
           </div>
           
-          {sidebarMode && (
-            <>
+          <>
+
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                 <div>
-                  <span style={{ display: 'block', fontSize: '14px', fontWeight: 500 }}>Widget Position</span>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Screen edge for compact mode</span>
+                  <span style={{ display: 'block', fontSize: '14px', fontWeight: 500 }}>Posição do painel</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Borda usada pelo painel compacto</span>
                 </div>
-                <select className="modern-input" style={{ width: '150px' }} value={sidebarPosition} onChange={handleSidebarPosition}>
+                <select aria-label="Posição do painel" className="modern-input" style={{ width: '150px' }} value={sidebarPosition} onChange={handleSidebarPosition}>
                   <option value="MiddleRight">Meio Direito (Middle Right)</option>
                   <option value="TopLeft">Topo Esquerdo (Top Left)</option>
                   <option value="MiddleLeft">Meio Esquerdo (Middle Left)</option>
                 </select>
               </div>
-            </>
-          )}
+          </>
         </div>
 
         {/* Skin Engine Section */}
-        <div className="glass-panel-inner" style={{ marginTop: '24px' }}>
+        <div className="glass-panel-inner settings-block" data-section="skins" style={{order:sectionOrder('skins')}}>
           <h3 style={{ fontSize: '16px', marginBottom: '16px', color: 'var(--primary)' }}>Skin Engine & Customização</h3>
+          {skinErrorMsg && !isNewSkinModalOpen && <p role="alert">{skinErrorMsg}</p>}
           
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
             <div>
               <span style={{ display: 'block', fontSize: '14px', fontWeight: 500 }}>Skin Ativa</span>
               <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Escolha o tema e estilo visual da interface</span>
             </div>
-            <select className="modern-input" style={{ width: '180px' }} value={activeSkin} onChange={handleSkinChange}>
+            <select className="modern-input" style={{ width: '180px' }} value={activeSkin} disabled={skinEditorName !== null} onChange={handleSkinChange}>
               {availableSkins.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
@@ -291,7 +273,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
             <button 
               className="btn primary" 
-              onClick={() => setIsEditorOpen(true)}
+              onClick={() => onEditSkin(activeSkin)}
               style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
               <Palette size={16} />
@@ -300,6 +282,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
             <button 
               className="btn" 
+              disabled={skinEditorName !== null}
               onClick={() => {
                 setNewSkinNameInput('');
                 setSkinErrorMsg('');
@@ -322,7 +305,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
             <button 
               className="btn" 
-              onClick={handleReloadSkin}
+              disabled={skinEditorName !== null} onClick={handleReloadSkin}
               style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
               <RotateCcw size={16} />
@@ -333,7 +316,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
 
         {/* Version & Updates Card */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="glass-panel settings-block settings-about" data-section="about" style={{ order:sectionOrder('about'), display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{
@@ -494,20 +477,6 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
 
       </div>
-
-      {/* Skin Editor Visual Modal */}
-      {isEditorOpen && (
-        <SkinEditorModal
-          skinName={activeSkin}
-          isOpen={isEditorOpen}
-          onClose={() => setIsEditorOpen(false)}
-          onSaved={(updatedConfig) => {
-            if (onSkinUpdated) {
-              onSkinUpdated(updatedConfig);
-            }
-          }}
-        />
-      )}
 
       {/* New Skin Dialog Modal */}
       {isNewSkinModalOpen && (

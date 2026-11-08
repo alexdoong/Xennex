@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems><OutputPath>../../../bin/GameAnalyticsTests/</OutputPath></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../../src/Models/GameAnalytics/*.cs" Link="Models/%(Filename)%(Extension)" />
+    <Compile Include="../../../src/Services/GameAnalytics/*.cs" Link="Services/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
