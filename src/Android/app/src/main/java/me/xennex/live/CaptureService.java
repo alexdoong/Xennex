@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.util.Log;
 
 public final class CaptureService extends Service {
     private static final String CHANNEL_ID = "capture";
@@ -116,6 +117,7 @@ public final class CaptureService extends Service {
             );
             room.start();
         } catch (RuntimeException error) {
+            Log.e("XennexCapture", "Falha ao iniciar sessao: " + error.getClass().getSimpleName());
             finish("Não foi possível preparar a transmissão. Abra o app e tente novamente.");
         }
     }

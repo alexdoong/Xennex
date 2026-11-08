@@ -2,7 +2,6 @@ package me.xennex.live;
 
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.media.projection.MediaProjection;
 import android.os.Build;
@@ -10,7 +9,6 @@ import android.os.Handler;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
-import android.view.WindowManager;
 import org.webrtc.DefaultVideoDecoderFactory;
 import org.webrtc.DefaultVideoEncoderFactory;
 import org.webrtc.EglBase;
@@ -111,24 +109,19 @@ final class AndroidCapture implements AutoCloseable {
         displays.registerDisplayListener(displayListener, owner);
     }
 
-    private static int[] readScreenBounds(Context context, Display explicitDisplay) {
-        WindowManager wm = context.getSystemService(WindowManager.class);
-        if (Build.VERSION.SDK_INT >= 30 && wm != null) {
-            Rect bounds = wm.getMaximumWindowMetrics().getBounds();
-            return new int[]{bounds.width(), bounds.height()};
-        }
-        return readLegacyDisplayMetrics(wm, explicitDisplay);
-    }
-
     @SuppressWarnings("deprecation")
-    private static int[] readLegacyDisplayMetrics(WindowManager wm, Display explicitDisplay) {
-        Display display = explicitDisplay != null ? explicitDisplay : (wm != null ? wm.getDefaultDisplay() : null);
-        if (display == null) {
-            return new int[]{720, 1280};
+    private static int[] readScreenBounds(Context context, Display explicitDisplay) {
+        DisplayManager dm = context.getSystemService(DisplayManager.class);
+        Display display = explicitDisplay != null ? explicitDisplay : (dm != null ? dm.getDisplay(Display.DEFAULT_DISPLAY) : null);
+        if (display != null) {
+            DisplayMetrics metrics = new DisplayMetrics();
+            display.getRealMetrics(metrics);
+            if (metrics.widthPixels > 0 && metrics.heightPixels > 0) {
+                return new int[]{metrics.widthPixels, metrics.heightPixels};
+            }
         }
-        DisplayMetrics metrics = new DisplayMetrics();
-        display.getRealMetrics(metrics);
-        return new int[]{metrics.widthPixels, metrics.heightPixels};
+        DisplayMetrics fallback = context.getResources().getDisplayMetrics();
+        return new int[]{Math.max(1, fallback.widthPixels), Math.max(1, fallback.heightPixels)};
     }
 
     private void resize(int width, int height) {

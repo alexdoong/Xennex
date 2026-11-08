@@ -1,11 +1,15 @@
 package me.xennex.live;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.graphics.Insets;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
@@ -13,19 +17,26 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputFilter;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 public final class MainActivity extends Activity {
     private static final int CAPTURE_REQUEST = 10;
     private static final int NOTIFICATION_REQUEST = 11;
+    private static final String LIVE_BASE_URL = "https://xennex-live.alexdoong11.workers.dev/";
     private static final String[] LICENSE_LABELS = {"WebRTC", "WebRTC SDK", "OkHttp / Okio / Kotlin"};
     private static final String[] LICENSE_FILES = {"WEBRTC.md", "WEBRTC-SDK.txt", "OKHTTP.txt"};
 
@@ -33,6 +44,9 @@ public final class MainActivity extends Activity {
     private EditText name;
     private TextView status;
     private Button start;
+    private Button stop;
+    private LinearLayout formDrawer;
+    private WebView roomWebView;
     private String pendingRoom = "";
     private String pendingName = "";
 
@@ -42,6 +56,7 @@ public final class MainActivity extends Activity {
         public void run() {
             status.setText(CaptureService.status);
             start.setEnabled(!CaptureService.running);
+            stop.setVisibility(CaptureService.running ? View.VISIBLE : View.GONE);
             ui.postDelayed(this, 500);
         }
     };
@@ -49,8 +64,9 @@ public final class MainActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
-        ScrollView scroll = buildContentView();
-        setContentView(scroll);
+        getWindow().getDecorView().setBackgroundColor(Color.parseColor("#0C0814"));
+        LinearLayout root = buildContentView();
+        setContentView(root);
 
         if (state != null) {
             room.setText(state.getString("room", ""));
@@ -61,6 +77,7 @@ public final class MainActivity extends Activity {
             prefill(getIntent());
         }
 
+        loadInitialRoomPage();
         requestNotificationPermissionIfNeeded();
     }
 
@@ -70,62 +87,273 @@ public final class MainActivity extends Activity {
         setIntent(intent);
         if (!CaptureService.running) {
             prefill(intent);
+            loadInitialRoomPage();
         }
     }
 
-    private ScrollView buildContentView() {
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        int padding = (int) (20 * getResources().getDisplayMetrics().density);
-        layout.setPadding(padding, padding, padding, padding);
+    private LinearLayout buildContentView() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#0C0814"));
 
-        TextView title = new TextView(this);
-        title.setText(R.string.app_title);
-        title.setTextSize(24);
-        layout.addView(title);
+        root.addView(buildTopControlBar(), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
 
-        TextView help = new TextView(this);
-        help.setText(R.string.intro);
-        layout.addView(help);
+        formDrawer = buildManualDrawer();
+        root.addView(formDrawer, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
 
-        room = new EditText(this);
-        room.setHint(R.string.room_hint);
-        room.setSingleLine(true);
-        room.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2048)});
-        layout.addView(room);
+        roomWebView = buildRoomWebView();
+        LinearLayout.LayoutParams webParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            0,
+            1f
+        );
+        root.addView(roomWebView, webParams);
 
-        name = new EditText(this);
-        name.setHint(R.string.name_hint);
-        name.setSingleLine(true);
-        name.setFilters(new InputFilter[]{new InputFilter.LengthFilter(40)});
-        layout.addView(name);
-
-        start = new Button(this);
-        start.setText(R.string.start_capture);
-        start.setOnClickListener(view -> requestCapture());
-        layout.addView(start);
-
-        Button stop = new Button(this);
-        stop.setText(R.string.stop_capture);
-        stop.setOnClickListener(view -> stopService(new Intent(this, CaptureService.class)));
-        layout.addView(stop);
-
-        status = new TextView(this);
-        status.setTextIsSelectable(true);
-        layout.addView(status);
-
-        Button licenses = new Button(this);
-        licenses.setText(R.string.licenses);
-        licenses.setOnClickListener(view -> showLicensesDialog());
-        layout.addView(licenses);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(layout);
-        scroll.setOnApplyWindowInsetsListener((view, insets) -> {
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
             applySystemBarInsets(view, insets);
             return insets;
         });
-        return scroll;
+        return root;
+    }
+
+    private LinearLayout buildTopControlBar() {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.VERTICAL);
+        bar.setBackgroundColor(Color.parseColor("#140E24"));
+        int padH = dp(14);
+        int padV = dp(10);
+        bar.setPadding(padH, padV, padH, padV);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView title = new TextView(this);
+        title.setText(R.string.app_title);
+        title.setTextColor(Color.parseColor("#F3ECFF"));
+        title.setTextSize(16);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        row.addView(title, titleParams);
+
+        Button toggleDrawer = createPillButton("Sala", "#23193D", "#DAC8FF");
+        toggleDrawer.setOnClickListener(v -> {
+            boolean visible = formDrawer.getVisibility() == View.VISIBLE;
+            formDrawer.setVisibility(visible ? View.GONE : View.VISIBLE);
+        });
+        row.addView(toggleDrawer, marginEnd(dp(6)));
+
+        start = createPillButton(getString(R.string.start_capture), "#8B5CF6", "#FFFFFF");
+        start.setOnClickListener(view -> syncFromWebViewAndRequestCapture());
+        row.addView(start, marginEnd(dp(6)));
+
+        stop = createPillButton(getString(R.string.stop_capture), "#DC2626", "#FFFFFF");
+        stop.setVisibility(View.GONE);
+        stop.setOnClickListener(view -> stopService(new Intent(this, CaptureService.class)));
+        row.addView(stop);
+
+        bar.addView(row);
+
+        status = new TextView(this);
+        status.setTextColor(Color.parseColor("#B9A6DC"));
+        status.setTextSize(12);
+        status.setPadding(0, dp(4), 0, 0);
+        status.setTextIsSelectable(true);
+        bar.addView(status);
+
+        return bar;
+    }
+
+    private LinearLayout buildManualDrawer() {
+        LinearLayout drawer = new LinearLayout(this);
+        drawer.setOrientation(LinearLayout.VERTICAL);
+        drawer.setBackgroundColor(Color.parseColor("#1A1230"));
+        int pad = dp(12);
+        drawer.setPadding(pad, pad, pad, pad);
+        drawer.setVisibility(View.GONE);
+
+        TextView help = new TextView(this);
+        help.setText(R.string.intro);
+        help.setTextColor(Color.parseColor("#CDBCEB"));
+        help.setTextSize(12);
+        drawer.addView(help);
+
+        room = createStyledInput(R.string.room_hint, 2048);
+        drawer.addView(room, topMargin(dp(8)));
+
+        name = createStyledInput(R.string.name_hint, 40);
+        drawer.addView(name, topMargin(dp(8)));
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.END);
+
+        Button openRoom = createPillButton("Abrir sala na tela", "#2B1E4A", "#EFE7FF");
+        openRoom.setOnClickListener(v -> {
+            String normalized = RoomAddress.normalize(room.getText().toString());
+            if (!normalized.isEmpty()) {
+                roomWebView.loadUrl(LIVE_BASE_URL + "?room=" + Uri.encode(normalized));
+                drawer.setVisibility(View.GONE);
+            }
+        });
+        actions.addView(openRoom, marginEnd(dp(8)));
+
+        Button licenses = createPillButton(getString(R.string.licenses), "#23193D", "#B9A6DC");
+        licenses.setOnClickListener(view -> showLicensesDialog());
+        actions.addView(licenses);
+
+        drawer.addView(actions, topMargin(dp(8)));
+        return drawer;
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private WebView buildRoomWebView() {
+        WebView web = new WebView(this);
+        web.setBackgroundColor(Color.parseColor("#0C0814"));
+        WebSettings settings = web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setDatabaseEnabled(true);
+
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                request.grant(request.getResources());
+            }
+        });
+
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if (uri != null && "xennex-live".equals(uri.getScheme())) {
+                    handleDeepLinkUri(uri);
+                    requestCapture();
+                    return true;
+                }
+                return false;
+            }
+        });
+        return web;
+    }
+
+    private void loadInitialRoomPage() {
+        if (roomWebView == null) {
+            return;
+        }
+        String currentRoom = RoomAddress.normalize(room.getText().toString());
+        String targetUrl = currentRoom.isEmpty()
+            ? LIVE_BASE_URL
+            : LIVE_BASE_URL + "?room=" + Uri.encode(currentRoom);
+        roomWebView.loadUrl(targetUrl);
+    }
+
+    private void syncFromWebViewAndRequestCapture() {
+        if (roomWebView == null) {
+            requestCapture();
+            return;
+        }
+        String script = "(function(){"
+            + "var params = new URLSearchParams(location.search);"
+            + "var r = params.get('room') || (document.querySelector('.room-toolbar strong') && document.querySelector('.room-toolbar strong').textContent) || (document.querySelector('.room-entry input') && document.querySelectorAll('.room-entry input')[1] && document.querySelectorAll('.room-entry input')[1].value) || '';"
+            + "var n = localStorage.getItem('xennex_display_name') || (document.querySelector('.room-entry input') && document.querySelector('.room-entry input').value) || '';"
+            + "return JSON.stringify({room: r, name: n});"
+            + "})()";
+        roomWebView.evaluateJavascript(script, value -> {
+            applyWebViewRoomAndName(value);
+            requestCapture();
+        });
+    }
+
+    private void applyWebViewRoomAndName(String rawJson) {
+        if (rawJson == null || rawJson.length() < 4) {
+            return;
+        }
+        try {
+            org.json.JSONTokener tokener = new org.json.JSONTokener(rawJson);
+            Object parsed = tokener.nextValue();
+            if (parsed instanceof String) {
+                parsed = new org.json.JSONObject((String) parsed);
+            }
+            if (!(parsed instanceof org.json.JSONObject)) {
+                return;
+            }
+            org.json.JSONObject obj = (org.json.JSONObject) parsed;
+            String webRoom = RoomAddress.normalize(obj.optString("room", ""));
+            String webName = obj.optString("name", "").trim();
+            if (!webRoom.isEmpty()) {
+                room.setText(webRoom);
+            }
+            if (!webName.isEmpty() && name.getText().toString().trim().isEmpty()) {
+                name.setText(webName.substring(0, Math.min(40, webName.length())));
+            }
+        } catch (org.json.JSONException ignored) {
+            // Keep existing manual fields when WebView state is unavailable.
+        }
+    }
+
+    private EditText createStyledInput(int hintRes, int maxLength) {
+        EditText input = new EditText(this);
+        input.setHint(hintRes);
+        input.setHintTextColor(Color.parseColor("#8875AD"));
+        input.setTextColor(Color.parseColor("#F3ECFF"));
+        input.setSingleLine(true);
+        input.setTextSize(14);
+        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(maxLength)});
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#110B1F"));
+        bg.setCornerRadius(dp(10));
+        bg.setStroke(dp(1), Color.parseColor("#352459"));
+        input.setBackground(bg);
+        int padH = dp(12);
+        int padV = dp(8);
+        input.setPadding(padH, padV, padH, padV);
+        return input;
+    }
+
+    private Button createPillButton(String text, String bgHex, String fgHex) {
+        Button button = new Button(this);
+        button.setText(text);
+        button.setAllCaps(false);
+        button.setTextColor(Color.parseColor(fgHex));
+        button.setTextSize(13);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor(bgHex));
+        bg.setCornerRadius(dp(18));
+        button.setBackground(bg);
+        button.setMinimumHeight(dp(36));
+        button.setMinHeight(dp(36));
+        button.setPadding(dp(14), dp(6), dp(14), dp(6));
+        return button;
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density);
+    }
+
+    private static LinearLayout.LayoutParams marginEnd(int px) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.setMarginEnd(px);
+        return params;
+    }
+
+    private static LinearLayout.LayoutParams topMargin(int px) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.topMargin = px;
+        return params;
     }
 
     private static void applySystemBarInsets(View view, WindowInsets insets) {
@@ -184,7 +412,8 @@ public final class MainActivity extends Activity {
         pendingRoom = RoomAddress.normalize(room.getText().toString());
         pendingName = name.getText().toString().trim();
         if (pendingRoom.isEmpty()) {
-            Toast.makeText(this, "Informe um código ou link válido.", Toast.LENGTH_LONG).show();
+            formDrawer.setVisibility(View.VISIBLE);
+            Toast.makeText(this, "Entre em uma sala abaixo ou digite o código da sala.", Toast.LENGTH_LONG).show();
             return;
         }
         if (pendingName.isEmpty()) {
@@ -219,6 +448,10 @@ public final class MainActivity extends Activity {
 
     private void prefill(Intent intent) {
         Uri data = intent == null ? null : intent.getData();
+        handleDeepLinkUri(data);
+    }
+
+    private void handleDeepLinkUri(Uri data) {
         if (data == null || data.toString().length() > 2048) {
             return;
         }
@@ -234,7 +467,6 @@ public final class MainActivity extends Activity {
         if (suggestedName != null) {
             name.setText(suggestedName.substring(0, Math.min(40, suggestedName.length())));
         }
-        // Opening a link only fills fields. Capture always requires an explicit tap and system consent.
     }
 
     @Override
@@ -256,5 +488,14 @@ public final class MainActivity extends Activity {
     protected void onPause() {
         ui.removeCallbacks(refresh);
         super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (roomWebView != null) {
+            roomWebView.destroy();
+            roomWebView = null;
+        }
+        super.onDestroy();
     }
 }
