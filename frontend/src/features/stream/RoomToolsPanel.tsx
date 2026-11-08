@@ -14,6 +14,7 @@ export default function RoomToolsPanel({ view, client }: { view: WorkspaceView; 
   const [chat, setChat] = useState('');
   const [task, setTask] = useState('');
   const [draft, setDraft] = useState<{ text: string; baseRevision: number; epoch: string } | null>(null);
+  const [pendingTasks, setPendingTasks] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const snapshot = view.snapshot;
@@ -52,7 +53,13 @@ export default function RoomToolsPanel({ view, client }: { view: WorkspaceView; 
         </div>
         <h3>Tarefas ({snapshot.tasks.length}/{WORKSPACE_LIMITS.tasks})</h3>
         <ul className="room-shared-tasks">{snapshot.tasks.map(item => <li key={item.id}>
-          <label><input type="checkbox" checked={item.done} disabled={disabled} onChange={event => void perform({ kind: 'task-set', id: item.id, done: event.target.checked })}/><span>{item.title}</span></label>
+          <label><input type="checkbox" checked={pendingTasks[item.id] ?? item.done} disabled={disabled} onChange={event => {
+            const next = event.target.checked;
+            setPendingTasks(current => ({ ...current, [item.id]: next }));
+            void perform({ kind: 'task-set', id: item.id, done: next }).finally(() => {
+              setPendingTasks(current => { const copy = { ...current }; delete copy[item.id]; return copy; });
+            });
+          }}/><span>{item.title}</span></label>
           <button type="button" disabled={disabled} aria-label={`Remover tarefa ${item.title}`} onClick={() => void perform({ kind: 'task-remove', id: item.id })}>Remover</button>
         </li>)}</ul>
         <form onSubmit={event => { event.preventDefault(); void perform({ kind: 'task-add', id: crypto.randomUUID(), title: task }, () => setTask('')); }}>

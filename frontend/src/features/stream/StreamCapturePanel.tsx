@@ -19,7 +19,7 @@ export default function StreamCapturePanel({ open, onClose }: { open: boolean; o
   const [title, setTitle] = useState('Minha transmissão');
   const [quality, setQuality] = useState<Quality>(DEFAULT_QUALITY);
   const [source, setSource] = useState<CaptureOptions['source']>('browser');
-  const [audio, setAudio] = useState<CaptureOptions['audio']>(api ? 'process' : 'window');
+  const [audio, setAudio] = useState<CaptureOptions['audio']>(api ? 'process' : 'system');
   const [processes, setProcesses] = useState<AudioProcess[]>([]);
   const [processId, setProcessId] = useState('');
   const [audioProcessId, setAudioProcessId] = useState('');
@@ -66,7 +66,7 @@ export default function StreamCapturePanel({ open, onClose }: { open: boolean; o
   const setSourceMode = (value: CaptureOptions['source']) => {
     setSource(value);
     if (value === 'camera') { setAudio('none'); void refreshCameras(); }
-    else if (value === 'browser') { setAudio(api && !nativeBusy ? 'process' : 'window'); if (api) void refreshProcesses(); }
+    else if (value === 'browser') { setAudio(api && !nativeBusy ? 'process' : 'system'); if (api) void refreshProcesses(); }
     else { setAudio(value === 'monitor' ? 'system' : 'process'); void refreshProcesses(); if (value === 'monitor') void refreshMonitors(); }
   };
   const share = () => {
@@ -115,10 +115,10 @@ export default function StreamCapturePanel({ open, onClose }: { open: boolean; o
         <a className="btn" href={`xennex-live://share?room=${encodeURIComponent(room.state.room)}`}>Abrir capturador Android</a>
         {' '}Requer o APK de prévia instalado. O app pedirá sua confirmação antes de capturar.
       </p>}
-      <details className="room-capture-environment"><summary>Diagnóstico de captura deste aparelho</summary>
+      {browserSupport.screen !== 'available' && <details className="room-capture-environment"><summary>Diagnóstico de captura deste aparelho</summary>
         <p className="room-helper">Copie estes dados se precisar relatar um problema. Eles não incluem imagem, nome, sala ou endereço de rede.</p>
         <textarea aria-label="Diagnóstico de captura" readOnly rows={7} value={browserCaptureReport(browserSupport)}/>
-      </details>
+      </details>}
       {source === 'window' && <p className="room-helper">Para osu! em fullscreen, experimente “Jogo OpenGL”. A captura de janela não muda para o monitor inteiro sozinha.</p>}
       {source === 'game' && <p className="room-notice">Captura direta de jogos OpenGL, como osu!, sem OBS. Escolha a janela e volte ao jogo após iniciar. Este modo carrega um módulo do Xennex no jogo e pode afetar sua compatibilidade; ele não contorna proteções. Reiniciar o jogo remove o módulo.</p>}
           {source === 'monitor' && <p className="room-notice">Este modo compartilha todo o monitor escolhido, inclusive o desktop ao dar Alt+Tab. DXGI recupera trocas de modo, mas o Windows pode bloquear o fluxo de jogos como osu! em tela cheia exclusiva. Se a imagem congelar ou a captura reiniciar repetidamente, teste o jogo em janela/sem bordas.</p>}
@@ -138,14 +138,12 @@ export default function StreamCapturePanel({ open, onClose }: { open: boolean; o
             }}>
               <option value="none">Sem áudio</option>
               {source === 'camera' && <option value="microphone">Microfone</option>}
-              {source === 'browser' && <option value="window">Somente janela ou aba (sem áudio do PC)</option>}
-              {source !== 'camera' && <option value="system">{source === 'browser' ? 'Áudio oferecido pelo navegador (inclui tela inteira)' : 'Áudio do sistema'}</option>}
-              {source === 'browser' && <option value="device">Canal de áudio dedicado (Sonar, Cabo Virtual, Mic)</option>}
+              {source !== 'camera' && <option value="system">{source === 'browser' ? 'Áudio do navegador' : 'Áudio do sistema'}</option>}
+              {source === 'browser' && <option value="window">Só áudio da janela</option>}
+              {source === 'browser' && <option value="device">Entrada de áudio</option>}
               {api && source !== 'camera' && <option value="process" disabled={nativeBusy}>Escolher janela / processo de áudio</option>}
-            </select>
-            {source === 'browser' && audio === 'window' && <small>Prioriza a aba Janela e bloqueia o áudio do PC inteiro (Discord/sistema). No Chrome, Brave ou Opera GX, marque “Compartilhar também o áudio da janela”.</small>}
-            </label>
-            {source === 'browser' && audio === 'device' && <label>Canal de entrada de áudio<div className="room-input-action"><select aria-label="Canal de entrada de áudio" value={audioDeviceId} disabled={room.capturing} onFocus={() => void refreshAudioInputs()} onChange={event => setAudioDeviceId(event.target.value)}><option value="">Canal de áudio padrão</option>{audioInputs.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `Canal de áudio ${index + 1}`}</option>)}</select><button title="Atualizar canais de áudio" disabled={room.capturing} onClick={() => void refreshAudioInputs()}><RefreshCw size={16}/></button></div><small>Modo estéreo limpo sem filtros de voz. Ideal para o canal Game do SteelSeries Sonar, Voicemeeter ou VB-Cable.</small></label>}
+            </select></label>
+            {source === 'browser' && audio === 'device' && <label>Dispositivo de áudio<div className="room-input-action"><select aria-label="Dispositivo de áudio" value={audioDeviceId} disabled={room.capturing} onFocus={() => void refreshAudioInputs()} onChange={event => setAudioDeviceId(event.target.value)}><option value="">Padrão</option>{audioInputs.map((device, index) => <option key={device.deviceId || index} value={device.deviceId}>{device.label || `Entrada ${index + 1}`}</option>)}</select><button title="Atualizar entradas de áudio" disabled={room.capturing} onClick={() => void refreshAudioInputs()}><RefreshCw size={16}/></button></div></label>}
             {source !== 'camera' && audio === 'process' && <label>Fonte independente de áudio<div className="room-input-action"><select value={audioProcessId} disabled={room.capturing} onFocus={() => { if (!processes.length) void refreshProcesses(); }} onChange={event => setAudioProcessId(event.target.value)}>
               <option value="">{source === 'window' || source === 'game' ? 'Mesma janela do vídeo' : 'Selecione o processo de áudio'}</option>
               {audioProcesses.map(p => <option key={p.Pid} value={p.Pid}>{p.Title || p.Name} — {p.Name} (PID {p.Pid}){p.HasActiveAudio ? ' · áudio ativo' : ''}</option>)}
